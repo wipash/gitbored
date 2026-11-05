@@ -144,7 +144,7 @@ test('only a live Incoming drag onto the native canvas consumes the queue, prese
   // Native HTML drag coordinates are integer CSS pixels; allow their sub-page rounding.
   expect(Math.abs(card.x - frame.props.w / 2)).toBeLessThan(2);
   expect(Math.abs(card.y - frame.props.h / 2)).toBeLessThan(2);
-  expect(card.rotation).toBeCloseTo((2 * Math.PI - frame.rotation) % (2 * Math.PI), 5);
+  expect(card.rotation + frame.rotation).toBeCloseTo(0, 5);
   expect(card.props).toMatchObject({ referenceId: candidate.referenceId, kind: candidate.kind });
   expect(writes).toEqual([{ expectedRevision: before.revision, document: after.document, incoming: after.incoming }]);
 });

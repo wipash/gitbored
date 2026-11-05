@@ -111,5 +111,24 @@ for (const theme of ['light', 'dark']) {
     await expect(page.locator(`[data-shape-id="${shape.id}"]`)).toBeVisible();
     await page.keyboard.press('ArrowRight'); await saved(page);
     await expect.poll(async () => (await read(page, board.id)).document.snapshot.store[shape.id]).toMatchObject({ x: 1, y: 0 });
+    const original = (await read(page, board.id)).document.snapshot.store[shape.id];
+    await page.getByRole('button', { name: /^Incoming \d+$/ }).focus(); await page.keyboard.press('Enter');
+    const nextAdd = page.getByRole('button', { name: 'Add to board', exact: true });
+    await nextAdd.focus(); await page.keyboard.press('Enter');
+    await expect.poll(async () => (await read(page, board.id)).incoming.queue).toEqual([]);
+    await saved(page);
+    const receiving = await read(page, board.id);
+    expect(receiving.document.snapshot.store[shape.id]).toEqual(original);
+    const nextShape = Object.values(receiving.document.snapshot.store).find((record) => record.typeName === 'shape' && record.id !== shape.id);
+    expect(nextShape).toMatchObject({ x: 0, y: 304 });
+    await page.getByRole('button', { name: /^Incoming \d+$/ }).focus(); await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+    await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
+    await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
+    await page.getByRole('button', { name: 'Send to Incoming', exact: true }).click();
+    await expect(page.locator('#incoming-panel')).toHaveCount(0);
+    await expect(page.locator('.tl-container')).toBeFocused();
+    await expect(page.locator('.tl-shape')).toHaveCount(2);
+    expect(await read(page, board.id)).toEqual(receiving);
   });
 }
