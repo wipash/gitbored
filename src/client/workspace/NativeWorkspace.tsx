@@ -25,6 +25,7 @@ export interface NativeWorkspaceProps {
   theme: 'light' | 'dark';
   onDocumentChange(document: NativeDocument): void;
   onMount?(editor: Editor): void | (() => void);
+  onNativeHistory?(editor: Editor, direction: 'undo' | 'redo'): void;
   children?: ReactNode;
 }
 
@@ -203,7 +204,12 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
     <MetadataContext value={props.metadata}>
-      <Tldraw store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions}>
+      <Tldraw store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={(name) => {
+        if (name !== 'undo' && name !== 'redo') return;
+        // The supported UI event precedes the synchronous native command. Observe its
+        // completed document in a microtask, before deferred store-listener delivery.
+        queueMicrotask(() => { const editor = editorRef.current; if (editor) latest.current.onNativeHistory?.(editor, name); });
+      }}>
         <WorkspaceCards metadata={props.metadata} />
         <div className="workspace-status" role="status">{pasteError}</div>
         {props.children}

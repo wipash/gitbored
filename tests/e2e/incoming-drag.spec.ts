@@ -135,7 +135,7 @@ test('only a live Incoming drag onto the native canvas consumes the queue, prese
   const after = await read(page, board.id);
   expect(after.revision).toBe(before.revision + 1);
   expect(after.incoming).toEqual({ ...before.incoming, queue: [] });
-  expect(after.document.snapshot.store[frame.id]).toEqual(before.document.snapshot.store[frame.id]);
+  expect(Object.values(after.document.snapshot.store).find((record) => record.id === frame.id)).toEqual(Object.values(before.document.snapshot.store).find((record) => record.id === frame.id));
   const cards = Object.values(after.document.snapshot.store).filter((record) => record.typeName === 'shape' && record.type === 'item-card');
   expect(cards).toHaveLength(1);
   const card = cards[0];

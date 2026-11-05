@@ -163,8 +163,10 @@ Further edits do not replay failed writes. Keep the tab open and explicitly
 **Retry save**, or resolve a **Conflict** using the existing board controls.
 Native undo of the first placement restores Incoming only when no other placement
 remains; redo consumes it again. Ordinary deletion and explicit duplication do not
-manufacture queue entries. The integration follows native stopping marks, not a
-separate undo stack; as with the native editor, history does not survive reload.
+manufacture queue entries. Native stopping marks separate placement operations;
+the supported SDK undo/redo UI events reconcile first-placement provenance against
+the resulting native document. There is no second undo stack or private history
+introspection; as with the native editor, history does not survive reload.
 
 Selected sources, bounded cursors, queue and seen IDs live in SQLite alongside the
 native document. Existing databases receive an additive Incoming-column migration.

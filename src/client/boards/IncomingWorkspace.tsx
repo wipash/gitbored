@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createShapeId, useEditor, type Editor } from 'tldraw';
+import { createShapeId, useEditor, type Editor, type TLShapeId } from 'tldraw';
 import type { Board } from '../../shared/boards';
 import { MAX_INCOMING_REFERENCES, type IncomingCandidate, type IncomingSource, type IncomingState } from '../../shared/incoming';
 import type { ItemMetadataState, WorkspaceMetadata } from '../../shared/items';
@@ -12,17 +12,17 @@ import { requestBoard, type BoardAuthority } from './boardRequest';
 import type { SaveCoordinator } from './saveCoordinator';
 import './incoming.css';
 
-interface PlacementHistory { candidate: IncomingCandidate; mark: string }
+interface PlacementHistory { candidate: IncomingCandidate; shapeId: TLShapeId }
 interface WorkspaceModel {
   incoming: IncomingState;
   metadata: WorkspaceMetadata;
   authority: BoardAuthority;
-  commit(update: (state: IncomingState) => IncomingState): void;
-  remember(item: SourceItem): void;
-  place(candidate: IncomingCandidate, point?: { x: number; y: number }): boolean;
-  accessLost(scope?: string): void;
-  retrySource(scope: string): void;
-  retryMetadata(): void;
+  commit: (update: (state: IncomingState) => IncomingState) => void;
+  remember: (item: SourceItem) => void;
+  place: (candidate: IncomingCandidate, point?: { x: number; y: number }) => boolean;
+  accessLost: (scope?: string) => void;
+  retrySource: (scope: string) => void;
+  retryMetadata: () => void;
 }
 function placedReferences(document: NativeDocument): Set<string> {
   const result = new Set<string>();
@@ -38,7 +38,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
   const editorRef = useRef<Editor | null>(null);
   const documentRef = useRef(board.document);
   const history = useRef(new Map<string, PlacementHistory>());
-  const [references, setReferences] = useState(() => [...new Set([...placedReferences(board.document), ...board.incoming.queue.map((candidate) => candidate.referenceId)])].sort().join(','));
+  const [references, setReferences] = useState(() => [...new Set([...placedReferences(board.document), ...board.incoming.queue.map((candidate) => candidate.referenceId)])].sort((a, b) => a.localeCompare(b)).join(','));
   const [metadata, setMetadata] = useState<WorkspaceMetadata>(() => new Map());
   const metadataRef = useRef(metadata);
   const [metadataAttempt, setMetadataAttempt] = useState(0);
@@ -51,7 +51,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     documentRef.current = document;
     current.current = next;
     setIncoming(next);
-    setReferences([...new Set([...placedReferences(document), ...next.queue.map((candidate) => candidate.referenceId)])].sort().join(','));
+    setReferences([...new Set([...placedReferences(document), ...next.queue.map((candidate) => candidate.referenceId)])].sort((a, b) => a.localeCompare(b)).join(','));
     coordinator.change(document, next);
   }, [coordinator]);
   const commit = useCallback((update: (state: IncomingState) => IncomingState) => {
@@ -59,17 +59,17 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     if (next === current.current) return;
     save(editorRef.current ? captureNativeDocument(editorRef.current) : documentRef.current, next);
   }, [save]);
-  const onDocumentChange = useCallback((document: NativeDocument) => {
-    const editor = editorRef.current;
+  const onDocumentChange = useCallback((document: NativeDocument) => { save(document, current.current); }, [save]);
+  const onNativeHistory = useCallback((editor: Editor, direction: 'undo' | 'redo') => {
+    const document = captureNativeDocument(editor);
     let next = current.current;
     const placed = placedReferences(document);
-    if (editor) for (const { candidate, mark } of history.current.values()) {
-      // Marks are owned by native history. Deletion leaves the placement mark applied;
-      // undoing that first placement removes it, unlike undo/redo of ordinary deletion.
-      const applied = editor.getMarkIdMatching(mark) !== null;
+    for (const { candidate, shapeId } of history.current.values()) {
+      const existed = documentRef.current.snapshot.store[shapeId] !== undefined;
+      const exists = document.snapshot.store[shapeId] !== undefined;
       const queued = next.queue.some((item) => item.referenceId === candidate.referenceId);
-      if (!applied && !placed.has(candidate.referenceId) && !queued) next = { ...next, queue: [...next.queue, candidate] };
-      else if (applied && placed.has(candidate.referenceId) && queued) next = { ...next, queue: next.queue.filter((item) => item.referenceId !== candidate.referenceId) };
+      if (direction === 'undo' && existed && !exists && !placed.has(candidate.referenceId) && !queued) next = { ...next, queue: [...next.queue, candidate] };
+      else if (direction === 'redo' && exists && queued) next = { ...next, queue: next.queue.filter((item) => item.referenceId !== candidate.referenceId) };
     }
     save(document, next);
   }, [save]);
@@ -93,13 +93,15 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     lastAuthority.current = authority;
     const next = new Map<string, ItemMetadataState>();
     for (const id of references ? references.split(',') : []) next.set(id, !changedAuthority && authority.ready ? metadataRef.current.get(id) ?? { status: 'loading' } : { status: 'loading' });
+    // Synchronize fetched state with the external authorization/request lifetime.
+    // oxlint-disable-next-line react/set-state-in-effect
     publishMetadata(authority.ready ? next : new Map());
     if (!authority.ready) return () => controller.abort();
     const ids = [...next.keys()].filter((id) => next.get(id)?.status !== 'ready');
-    let cursor = 0;
+    const cursor = { index: 0 };
     const hydrate = async () => {
-      while (cursor < ids.length && !controller.signal.aborted) {
-        const id = ids[cursor++];
+      while (cursor.index < ids.length && !controller.signal.aborted) {
+        const id = ids[cursor.index++];
         if (!id) continue;
         try {
           const response = await requestBoard(`/api/references/${encodeURIComponent(id)}`, authority, 'GET', undefined, controller.signal);
@@ -131,14 +133,14 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     if (existing) { editor.select(existing.id); editor.zoomToSelection({ animation: { duration: 0 } }); editor.getContainer().focus({ preventScroll: true }); editor.focus(); return true; }
     if (!current.current.queue.some((item) => item.referenceId === candidate.referenceId)) return false;
     const id = createShapeId();
-    const mark = editor.markHistoryStoppingPoint('incoming-placement');
+    editor.markHistoryStoppingPoint('incoming-placement');
     let receivingY = 0;
     if (!point) for (const shape of editor.getCurrentPageShapes()) { const bounds = editor.getShapePageBounds(shape); if (bounds) receivingY = Math.max(receivingY, bounds.maxY + 64); }
     // With a positioned page-space drop and no parentId, native createShapes chooses
     // a receiving frame and performs its page-to-parent point AND rotation conversion.
-    editor.createShape({ id, type: ITEM_CARD_TYPE, ...(point ? point : { x: 0, y: receivingY, parentId: editor.getCurrentPageId() }), props: { version: 1, referenceId: candidate.referenceId, kind: candidate.kind, w: 320, h: 240 } });
+    editor.createShape({ id, type: ITEM_CARD_TYPE, ...(point ? { x: point.x, y: point.y } : { x: 0, y: receivingY, parentId: editor.getCurrentPageId() }), props: { version: 1, referenceId: candidate.referenceId, kind: candidate.kind, w: 320, h: 240 } });
     if (!editor.getShape(id)) return false;
-    history.current.set(candidate.referenceId, { candidate, mark });
+    history.current.set(candidate.referenceId, { candidate, shapeId: id });
     commit((state) => ({ ...state, queue: state.queue.filter((item) => item.referenceId !== candidate.referenceId) }));
     editor.select(id);
     if (!point) editor.zoomToSelection({ animation: { duration: 0 } });
@@ -150,7 +152,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     retryMetadata: () => {
     deniedScopes.current.clear(); publishMetadata(new Map()); setMetadataAttempt((attempt) => attempt + 1);
   } };
-  return <NativeWorkspace initialDocument={board.document} metadata={model.metadata} theme={theme} onDocumentChange={onDocumentChange} onMount={mount}><IncomingTray model={model} /></NativeWorkspace>;
+  return <NativeWorkspace initialDocument={board.document} metadata={model.metadata} theme={theme} onDocumentChange={onDocumentChange} onNativeHistory={onNativeHistory} onMount={mount}><IncomingTray model={model} /></NativeWorkspace>;
 }
 
 const dragType = 'application/x-gitbored-incoming';
@@ -169,7 +171,13 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
   const current = useRef(model);
   useLayoutEffect(() => { current.current = model; }, [model]);
   const request = useRef<AbortController | null>(null);
-  useEffect(() => { const controller = new AbortController(); request.current = controller; setBusySource(null); return () => controller.abort(); }, [model.authority]);
+  useEffect(() => {
+    const controller = new AbortController(); request.current = controller;
+    // An authority replacement aborts the previous external discovery operation.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setBusySource(null);
+    return () => controller.abort();
+  }, [model.authority]);
   useEffect(() => { if (open) heading.current?.focus(); }, [open]);
   useEffect(() => {
     const outside = (event: PointerEvent) => { if (event.target instanceof Node && !shell.current?.contains(event.target)) setOpen(false); };

@@ -153,6 +153,7 @@ function Installations({ session, onSelect, onAccessLoss }: SourceSessionProps &
   </section>;
 }
 export function SourceBrowser({ session, boardActions }: { session: SignedInSession } & BoardActionProps) {
+  const onBoardAccessLoss = boardActions?.accessLost;
   const [installation, setInstallation] = useState<Installation | null>(null);
   const [repository, setRepository] = useState<RepositorySource | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -169,7 +170,7 @@ export function SourceBrowser({ session, boardActions }: { session: SignedInSess
   const denialMessage = selectedScope === undefined ? undefined : repositoryDenials.get(selectedScope);
   const loseAccess = useCallback((failure: SourceReadError, scope?: string): void => {
     const contextLost = isSessionContextFailure(failure.status, failure.code);
-    boardActions?.accessLost?.(contextLost ? undefined : scope);
+    onBoardAccessLoss?.(contextLost ? undefined : scope);
     const focused = document.activeElement;
     const focusedScope = focused?.closest('[data-source-scope]')?.getAttribute('data-source-scope');
     if (focused && (contextLost
@@ -188,7 +189,7 @@ export function SourceBrowser({ session, boardActions }: { session: SignedInSess
       });
       setResolved((current) => current && repositoryScope(current.metadata.locator.owner, current.metadata.locator.repository) === scope ? null : current);
     }
-  }, [boardActions?.accessLost]);
+  }, [onBoardAccessLoss]);
   useLayoutEffect(() => {
     const previous = removedFocus.current;
     removedFocus.current = null;

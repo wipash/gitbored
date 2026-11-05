@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { validateBoard } from '../../src/shared/boards.js';
+import { boardSaveValidator, validateBoard } from '../../src/shared/boards.js';
 import type { Board, BoardSave } from '../../src/shared/boards.js';
+import { validateIncoming } from '../../src/shared/incoming.js';
+import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { readSourceItem } from '../../src/shared/sources.js';
 import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
 
@@ -108,7 +110,8 @@ test('transport failure retains the atomic local placement, explicit retry saves
   let fail = true;
   await page.route(`**/api/boards/${board.id}`, async (route) => {
     if (route.request().method() !== 'PUT') return await route.continue();
-    writes.push(route.request().postDataJSON() as BoardSave);
+    const payload = boardSaveValidator.validate(route.request().postDataJSON());
+    writes.push({ ...payload, document: validateNativeDocument(payload.document), incoming: validateIncoming(payload.incoming) });
     if (fail) { fail = false; await route.abort('connectionfailed'); }
     else await route.continue();
   });

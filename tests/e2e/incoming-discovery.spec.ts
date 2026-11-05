@@ -94,7 +94,7 @@ for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 320, height: 800 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     const add = page.getByRole('button', { name: 'Add to board', exact: true }).first();
-    await add.focus(); await expect(add).toBeFocused();
+    await add.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab'); await expect(add).toBeFocused();
     expect(await add.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
     const bounds = await add.boundingBox(); if (!bounds) throw new Error('Missing keyboard Add bounds');
     expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
@@ -110,6 +110,6 @@ for (const theme of ['light', 'dark']) {
     const shape = shapes[0]; if (!shape) throw new Error('Missing revealed placement');
     await expect(page.locator(`[data-shape-id="${shape.id}"]`)).toBeVisible();
     await page.keyboard.press('ArrowRight'); await saved(page);
-    expect((await read(page, board.id)).document.snapshot.store[shape.id]).toMatchObject({ x: 1, y: 0 });
+    await expect.poll(async () => (await read(page, board.id)).document.snapshot.store[shape.id]).toMatchObject({ x: 1, y: 0 });
   });
 }

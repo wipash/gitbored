@@ -80,7 +80,7 @@ test('competing revisions commit exactly one native document and Incoming queue 
   const operations = incoming.queue.map((candidate, index) => ({ document: placed(candidate, 100 + index * 200),
     incoming: { ...incoming, queue: incoming.queue.filter((item) => item.referenceId !== candidate.referenceId) } }));
   const responses = await Promise.all(operations.map((operation) => save(page, board, operation.incoming, operation.document)));
-  expect(responses.map((response) => response.status()).sort()).toEqual([200, 409]);
+  expect(responses.map((response) => response.status()).sort((a, b) => a - b)).toEqual([200, 409]);
   const winner = responses.findIndex((response) => response.status() === 200);
   const operation = operations[winner];
   if (!operation) throw new Error('Missing winning operation');
