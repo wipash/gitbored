@@ -291,9 +291,14 @@ test('same-revision recovery waits for explicit retry and account/logout isolati
   await account.close();
 });
 
-test('a real copy acknowledgement never consumes edits made while the private copy is in flight', async ({ page, context }) => {
+test('a real copy acknowledgement never consumes edits made while the private copy is in flight', async ({ page, context }, testInfo) => {
   await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
-  await page.route(`**/api/boards/${board.id}`, async (route) => route.request().method() === 'PUT' ? route.abort('connectionfailed') : route.continue());
+  let writes = 0;
+  await page.route(`**/api/boards/${board.id}`, async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    writes += 1;
+    await route.abort('connectionfailed');
+  });
   await draw(page); await expect(page.getByRole('button', { name: 'Retry save' })).toBeVisible();
   const captured = (await stored(page))[0]; if (!captured) throw new Error('Missing captured copy pair');
   const held: { route: Route; response: APIResponse }[] = [];
@@ -301,6 +306,14 @@ test('a real copy acknowledgement never consumes edits made while the private co
   await page.getByRole('button', { name: 'Save as copy', exact: true }).click();
   await expect.poll(() => held.length).toBe(1);
   await draw(page, 150);
+  // Pointer-up completes native geometry synchronously, but recovery observes
+  // the SDK's deferred store listener. Deliver it before freezing the exact pair.
+  await page.evaluate(() => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); });
+    return promise;
+  });
+  expect(held).toHaveLength(1);
   await expect.poll(async () => Object.values((await stored(page))[0]?.value.document.snapshot.store ?? {}).filter((record) => record.typeName === 'shape').length).toBe(2);
   const latest = (await stored(page))[0]; if (!latest) throw new Error('Missing newer copy-time edits');
   const flight = held.shift(); if (!flight) throw new Error('Missing actual copy acknowledgement');
@@ -313,12 +326,20 @@ test('a real copy acknowledgement never consumes edits made while the private co
   const href = await link.getAttribute('href'); if (!href) throw new Error('No created copy destination');
   const copyPage = await context.newPage(); await copyPage.goto(href);
   const id = copyPage.url().split('/').pop(); if (!id) throw new Error('Missing copy ID');
-  expect((await read(copyPage, id)).document).toEqual(captured.value.document);
+  const copy = await read(copyPage, id);
+  expect(copy.document).toEqual(captured.value.document); expect(copy.incoming).toEqual(captured.value.incoming);
+  expect(writes).toBe(1);
   await page.unroute(`**/api/boards/${board.id}`);
   await page.getByRole('button', { name: 'Retry save' }).click();
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
-  expect((await read(page, board.id)).document).toEqual(latest.value.document);
-  expect((await read(copyPage, id)).document).toEqual(captured.value.document);
+  const saved = await read(page, board.id);
+  expect(saved.document).toEqual(latest.value.document); expect(saved.incoming).toEqual(latest.value.incoming);
+  expect(saved.revision).toBe(board.revision + 1);
+  expect(await read(copyPage, id)).toEqual(copy);
+  expect(await stored(page)).toEqual([]);
+  await testInfo.attach('copy-in-flight-pairs.json', {
+    contentType: 'application/json', body: JSON.stringify({ board, captured, latest, copy, saved }),
+  });
   await copyPage.close();
 });
 
