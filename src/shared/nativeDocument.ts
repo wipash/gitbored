@@ -66,6 +66,9 @@ export function validateNativeShape(input: unknown) {
   if (Object.keys(shape.meta).length > 0) throw new Error('Canvas record metadata is not supported');
   if ('richText' in shape.props) validateNativeRichText(shape.props.richText);
   if ('url' in shape.props) annotationLinkValidator.validate(shape.props.url);
+  if (shape.type === 'note' && shape.props.textLastEditedBy !== null) {
+    return { ...shape, props: { ...shape.props, textLastEditedBy: null } };
+  }
   return shape;
 }
 /** Server-safe validation and SDK migration. Accept JSON values, not editor/session state. */
@@ -95,7 +98,7 @@ export function validateNativeDocument(input: unknown): NativeDocument {
     switch (record.typeName) {
       case 'document': nativeSchema.types.document.validate(record); break;
       case 'page': nativeSchema.types.page.validate(record); break;
-      case 'shape': validateNativeShape(record); break;
+      case 'shape': store[record.id] = validateNativeShape(record); break;
       case 'binding': nativeSchema.types.binding.validate(record); break;
       default: throw new Error('Unsupported canvas record');
     }

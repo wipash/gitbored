@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { itemReferenceValidator } from '../src/shared/items.js';
-import { nativeSchema, validateNativeDocument } from '../src/shared/nativeDocument.js';
+import { nativeSchema, validateNativeDocument, validateNativeShape } from '../src/shared/nativeDocument.js';
 import { validateNativeClipboard } from '../src/shared/nativeClipboard.js';
 import { validateNativeRichText } from '../src/shared/nativeRichText.js';
 
@@ -85,7 +85,6 @@ await test('clipboard validates every collection instead of trusting the SDK col
   assert.equal(validateNativeClipboard(clip, known).shapes[0]?.id, card.id);
   for (const invalid of [
     { ...clip, shapes: [], users: [smuggled] },
-    { ...clip, shapes: [], users: [{ id: 'user:local', typeName: 'user', name: 'Private identity', color: '#000000', imageUrl: '', meta: {} }] },
     { ...clip, shapes: [], bindings: [smuggled] },
     { ...clip, assets: [smuggled] },
     { ...clip, shapes: [smuggled] },
@@ -149,4 +148,75 @@ await test('native mailto annotation edits round-trip through document and clipb
   const pasted = validateNativeClipboard({ ...clipboardInput(), shapes: [shape] }, new Set());
   assert.deepEqual(pasted.shapes[0], Object.values(document.snapshot.store).find((record) => record.id === shape.id));
   assert.deepEqual(validateNativeDocument(JSON.parse(JSON.stringify(document))), document);
+});
+
+function attributedNoteInput() {
+  return { ...documentInput().snapshot.store['shape:card'], type: 'note', props: {
+    color: 'yellow', richText: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Keep the native note text' }] }] },
+    size: 'm', font: 'draw', align: 'middle', verticalAlign: 'middle', labelColor: 'black', growY: 30,
+    fontSizeAdjustment: 1, url: '', scale: 1, textLastEditedBy: 'foreign-author',
+  } };
+}
+const attributionUser = { id: 'user:foreign-author', typeName: 'user', name: 'Private fixture author', color: '#112233', imageUrl: 'https://example.invalid/private-avatar.png', meta: { privateUserMetadata: 'Never import this data' } };
+
+await test('native attributed note copies retain content and geometry while discarding identities', () => {
+  const note = attributedNoteInput();
+  const clip = { ...clipboardInput(), shapes: [note], users: [attributionUser] };
+  const before = JSON.stringify(clip);
+  const result = validateNativeClipboard(clip, new Set());
+  assert.deepEqual(result.shapes[0], { ...note, props: { ...note.props, textLastEditedBy: null } });
+  assert.deepEqual(result.users, []);
+  assert.deepEqual(result.assets, []);
+  assert.equal(JSON.stringify(clip), before);
+  for (const privateValue of ['foreign-author', attributionUser.name, attributionUser.imageUrl, attributionUser.meta.privateUserMetadata]) {
+    assert.equal(JSON.stringify(result).includes(privateValue), false);
+  }
+});
+
+await test('clipboard rejects malformed or impersonated attribution users atomically', () => {
+  const note = attributedNoteInput();
+  const clip = { ...clipboardInput(), shapes: [note], users: [attributionUser] };
+  for (const users of [
+    [{ ...attributionUser, id: 'shape:foreign-author' }],
+    [{ ...attributionUser, typeName: 'shape' }],
+    [{ ...attributionUser, name: 123 }],
+    [{ ...attributionUser, fetchedTitle: 'Not a native user field' }],
+    [attributionUser, attributionUser],
+    [{ ...note, meta: { privateTitle: 'Not a user' } }],
+  ]) assert.throws(() => validateNativeClipboard({ ...clip, users }, new Set()));
+  for (const invalid of [
+    { ...clip, shapes: [{ ...note, meta: { privateTitle: 'Not an annotation' } }] },
+    { ...clip, bindings: [{ ...note, meta: { privateTitle: 'Not a binding' } }] },
+    { ...clip, assets: [{ ...note, meta: { privateTitle: 'Not an asset' } }] },
+  ]) assert.throws(() => validateNativeClipboard(invalid, new Set()));
+});
+
+await test('portable notes canonicalize attribution without mutating inputs or native geometry', () => {
+  const note = attributedNoteInput();
+  const input = documentInput();
+  const withNote = { ...input, snapshot: { ...input.snapshot, store: { ...input.snapshot.store, [note.id]: note } } };
+  const before = JSON.stringify(withNote);
+  const normalized = validateNativeShape(note);
+  assert.notEqual(normalized, note);
+  assert.deepEqual(normalized, { ...note, props: { ...note.props, textLastEditedBy: null } });
+  const document = validateNativeDocument(withNote);
+  assert.deepEqual(Object.values(document.snapshot.store).find((record) => record.id === note.id), normalized);
+  assert.equal(JSON.stringify(withNote), before);
+  assert.deepEqual(validateNativeDocument(document), document);
+  assert.throws(() => validateNativeDocument({ ...withNote, snapshot: { ...withNote.snapshot, store: { ...withNote.snapshot.store, [attributionUser.id]: attributionUser } } }));
+});
+
+await test('legacy note attribution migrates before canonical document and clipboard validation', () => {
+  const note = attributedNoteInput();
+  const { textLastEditedBy, ...props } = note.props;
+  const legacy = { ...note, props: { ...props, textFirstEditedBy: textLastEditedBy } };
+  const input = documentInput();
+  input.snapshot.schema.sequences['com.tldraw.shape.note'] = 12;
+  const before = JSON.stringify(legacy);
+  const document = validateNativeDocument({ ...input, snapshot: { ...input.snapshot, store: { ...input.snapshot.store, [legacy.id]: legacy } } });
+  const content = validateNativeClipboard({ ...clipboardInput(), schema: input.snapshot.schema, shapes: [legacy], users: [attributionUser] }, new Set());
+  const expected = { ...note, props: { ...note.props, textLastEditedBy: null } };
+  assert.deepEqual(Object.values(document.snapshot.store).find((record) => record.id === note.id), expected);
+  assert.deepEqual(content.shapes[0], expected);
+  assert.equal(JSON.stringify(legacy), before);
 });

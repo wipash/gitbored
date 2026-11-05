@@ -2,15 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import {
   ArrowToolbarItem, DefaultToolbar, DrawToolbarItem, EraserToolbarItem, FrameToolbarItem,
   RectangleToolbarItem, HandToolbarItem, HighlightToolbarItem, NoteToolbarItem, SelectToolbarItem,
-  TextToolbarItem, Tldraw, createTLStore, defaultHandleExternalTldrawContent,
+  TextToolbarItem, Tldraw, computed, createTLStore, defaultHandleExternalTldrawContent,
   DefaultStylePanel, StylePanelColorPicker, StylePanelFillPicker, StylePanelDashPicker,
   StylePanelSizePicker, StylePanelFontPicker, StylePanelTextAlignPicker, StylePanelLabelAlignPicker,
   StylePanelGeoShapePicker, StylePanelArrowKindPicker, StylePanelArrowheadPicker, StylePanelSplinePicker,
   useStylePanelContext, type TLUiStylePanelProps,
-  useEditor, useValue, type Editor, type TLComponents, type TLUiOverrides,
+  useEditor, useValue, type Editor, type TLComponents, type TLUiOverrides, type TLUserStore,
 } from 'tldraw';
 import { githubItemUrl, type WorkspaceMetadata } from '../../shared/items';
-import { ITEM_CARD_TYPE, nativeSchema, validateNativeDocument, type NativeDocument } from '../../shared/nativeDocument';
+import { ITEM_CARD_TYPE, nativeSchema, validateNativeDocument, validateNativeShape, type NativeDocument } from '../../shared/nativeDocument';
 import { validateNativeClipboard } from '../../shared/nativeClipboard';
 import { ItemCardShapeUtil } from './ItemCardShapeUtil';
 import { MetadataContext, anonymousMetadata, describeItem } from './metadata';
@@ -33,10 +33,14 @@ export function captureNativeDocument(editor: Editor): NativeDocument {
   const snapshot = editor.store.getStoreSnapshot('document');
   const store: NativeDocument['snapshot']['store'] = {};
   for (const record of Object.values(snapshot.store)) {
-    if (['document', 'page', 'shape', 'binding'].includes(record.typeName)) store[record.id] = record;
+    if (record.typeName === 'shape') store[record.id] = validateNativeShape(record);
+    else if (['document', 'page', 'binding'].includes(record.typeName)) store[record.id] = record;
   }
   return { format: 'gitbored-native', version: 1, snapshot: { store, schema: snapshot.schema } };
 }
+const workspaceUsers: TLUserStore = {
+  currentUser: computed('workspace annotation attribution', () => null),
+};
 function WorkspaceToolbar() {
   return <DefaultToolbar><SelectToolbarItem /><HandToolbarItem /><DrawToolbarItem /><EraserToolbarItem /><ArrowToolbarItem /><TextToolbarItem /><NoteToolbarItem /><RectangleToolbarItem /><FrameToolbarItem /><HighlightToolbarItem /></DefaultToolbar>;
 }
@@ -125,7 +129,7 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   const latest = useRef(props);
   useLayoutEffect(() => { latest.current = props; });
   const editorRef = useRef<Editor | null>(null);
-  const [store] = useState(() => createTLStore({ schema: nativeSchema,
+  const [store] = useState(() => createTLStore({ schema: nativeSchema, users: workspaceUsers,
     ...(props.initialDocument ? { snapshot: validateNativeDocument(props.initialDocument).snapshot } : {}),
   }));
   useEffect(() => { editorRef.current?.user.updateUserPreferences({ colorScheme: props.theme }); }, [props.theme]);

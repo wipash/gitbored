@@ -20,11 +20,11 @@ const recordHeader = T.object({ id: T.string, typeName: T.string }).allowUnknown
 /** Rebuild the entire SDK payload after validation; never forward unchecked record collections. */
 export function validateNativeClipboard(input: unknown, knownReferences: ReadonlySet<string>): NativeClipboardContent {
   const content = clipboardValidator.validate(input);
-  // Portable board content has no identity records, media, or provider caches.
-  if (content.assets.length || content.users?.length) throw new Error('Unsupported clipboard records');
-  if (content.shapes.length + (content.bindings?.length ?? 0) > 20000) throw new Error('Too many clipboard records');
+  // Native note copies include attribution users. Validate them, but never forward identities.
+  if (content.assets.length) throw new Error('Unsupported clipboard records');
+  if (content.shapes.length + (content.bindings?.length ?? 0) + (content.users?.length ?? 0) > 20000) throw new Error('Too many clipboard records');
   const store: Record<string, unknown> = {};
-  for (const [typeName, records] of Object.entries({ shape: content.shapes, binding: content.bindings ?? [] })) {
+  for (const [typeName, records] of Object.entries({ shape: content.shapes, binding: content.bindings ?? [], user: content.users ?? [] })) {
     for (const value of records) {
       const record = recordHeader.validate(value);
       if (record.typeName !== typeName || !record.id.startsWith(`${typeName}:`) || Object.hasOwn(store, record.id)) throw new Error('Invalid clipboard record collection');
@@ -47,6 +47,8 @@ export function validateNativeClipboard(input: unknown, knownReferences: Readonl
       nativeSchema.types.binding.validate(record);
       if (Object.keys(record.meta).length) throw new Error('Unsupported clipboard metadata');
       bindings.push(record);
+    } else if (record.typeName === 'user') {
+      nativeSchema.types.user.validate(record);
     } else throw new Error('Unsupported clipboard record');
   }
   const ids = new Set(shapes.map((shape) => shape.id));
