@@ -384,8 +384,9 @@ version when requesting help, never an environment dump or provider payload.
 
 The focused real-HTTP/SQLite regression runs the actual TypeScript application,
 captures operator output and checks redaction without live GitHub access:
-`node --import tsx --test tests/oauthDiagnostics.test.ts`. It temporarily owns
-application port3009 and controlled-provider port3019 and awaits their cleanup.
+`pnpm test:server` (also selected by `pnpm gate` before production E2E). It
+temporarily owns application port3009 and controlled-provider port3019 and awaits
+their cleanup; keep those ports available when running the focused script or gate.
 
 
 ### Authentication contracts for owner routes
