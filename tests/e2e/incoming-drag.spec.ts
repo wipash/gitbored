@@ -59,7 +59,8 @@ test('only a live Incoming drag onto the native canvas consumes the queue, prese
   const panOrigin = { x: fitted.x + fitted.width / 2, y: fitted.y + fitted.height / 2 };
   await expectNativePoint(page, panOrigin, frame.id);
   await page.mouse.move(panOrigin.x, panOrigin.y);
-  await page.mouse.wheel(65, 45);
+  // Pan the frame center into visible canvas to the right of the real Incoming tray.
+  await page.mouse.wheel(-200, 45);
   await expect.poll(async () => (await frameElement.boundingBox())?.x).not.toBe(fitted.x);
   const panned = await frameElement.boundingBox();
   if (!panned) throw new Error('Missing panned frame');
