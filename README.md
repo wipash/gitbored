@@ -63,6 +63,11 @@ Unknown API routes and missing assets return errors, not the application HTML.
 
 ## Private durable boards
 
+Authenticated navigation has one primary view at a time: **Account** (`/` or
+`/account`), **Boards** (`/boards`, `/boards/:id`) and **Sources** (`/sources`).
+Each route has a named, keyboard-focused primary heading; browsing does not
+automatically create a board or placement.
+
 Sign in, open **Boards**, enter a name and select **Create board**. Each board is
 private to its signed-in creator. **Board settings** renames the board or opens a
 permanent-deletion confirmation requiring the exact board name. Deleting a board
@@ -80,16 +85,30 @@ the current owner's summaries; `POST` creates an empty native board with `{title
 a conditional SQLite update. A stale save returns409 and cannot overwrite content.
 `PATCH {title}` updates the display name independently of the document revision;
 `DELETE` permanently removes the owner's board. Cross-owner IDs are404 for every
-operation. Unsafe operations retain exact-Origin/session/CSRF checks.
+operation. Every board request, including GET, requires the current session's
+`X-CSRF-Token` expected-context header; unsafe operations also retain exact-Origin
+checks. Board routes are synchronous SQLite operations, with no awaited provider
+boundary between context validation and delivery/persistence.
 
 Document changes are coalesced and saved one flight at a time. **Saved** means the
 server acknowledged all current edits; **Saving**, **Unsaved** and **Conflict**
 do not claim durability. Later edits cannot be acknowledged by an older response.
 Selection, camera movement, theme and metadata maps are not document saves. Failed
 saves and conflicts leave the current editor mounted and usable. Check the
-connection and select **Retry save** after a failure; expired sessions can be
-renewed in another tab. A conflict stops automatic writes. **Reload server version**
-explicitly confirms discarding local edits; keep the tab open to retain them.
+connection and select **Retry save** after a failure. Failures and conflicts stop
+automatic writes even as local editing continues; failed writes never replay
+automatically. **Reload server version** explicitly confirms discarding local edits.
+Keep this tab open to retain them.
+
+On session-context failure, protected requests pause while the existing
+`/api/session` authority is checked. A renewed session for the **same application
+user ID** updates request context without remounting the native editor or resetting
+its save coordinator/revision; select **Retry save** explicitly. If signed out,
+renew sign-in using the new-tab link, then **Check account** in the retained board
+tab. A transient account-check failure also retains local work and offers
+**Check account**. Fetched private lists/GitHub values are withheld while blocked.
+A **confirmed different user** clears/unmounts the previous account state before
+the new account's private reads; it does not migrate the old draft to that account.
 Navigation with unacknowledged edits invokes the browser's leave warning where
 supported. There is no browser-persisted private draft, automatic conflict merge,
 or save-as-copy yet (recovery is a later ticket).
@@ -146,7 +165,7 @@ type-check alone does not establish correct keyboard behavior.
 
 ## Authorized source browsing
 
-After sign-in, **Browse GitHub sources** lists authorized personal/organization
+After sign-in, open **Sources**. **Browse GitHub sources** lists authorized personal/organization
 installations and their repositories. Sign-in, installation selection and
 organization approval are separate. **Manage GitHub installations** opens GitHub's
 settings; organization owners may need to approve the app and select repositories.
@@ -291,8 +310,10 @@ Provider outages return a safe HTTP 502, not a successful-looking signed-out sta
   if primary quota remains.
 
 Every unsafe `/api/*` request is checked globally for an authenticated session,
-an exact `Origin: APP_ORIGIN` and `X-CSRF-Token` from that session. Future owner
-routes must still call `requireUser` on safe reads and authorize each resource.
+an exact `Origin: APP_ORIGIN` and `X-CSRF-Token` from that session. Protected owner
+routes must use `requireUserContext` on safe reads as well as writes, authorize
+each resource, and use `assertUserContext` after asynchronous authority reads
+before delivering or persisting their result.
 Sessions expire absolutely after seven days. Sign-in rotates the current session;
 logout (`POST /api/auth/logout`) deletes it server-side. The UI does a full
 navigation after logout to clear account-scoped client state. Tokens are

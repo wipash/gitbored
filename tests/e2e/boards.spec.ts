@@ -19,7 +19,7 @@ async function create(page: Page, title: string): Promise<Board> {
   return validateBoard(await response.json());
 }
 async function read(page: Page, id: string): Promise<Board> {
-  const response = await page.request.get(`/api/boards/${id}`);
+  const response = await page.request.get(`/api/boards/${id}`, { headers: await headers(page) });
   expect(response.ok()).toBe(true);
   return validateBoard(await response.json());
 }
@@ -45,7 +45,10 @@ test('owners alone control boards and one atomic revision wins a concurrent save
   const bob = await bobContext.newPage();
   await signIn(bob, 'Bob');
   const bobHeaders = await headers(bob);
-  expect(await (await bob.request.get('/api/boards')).json()).toEqual({ boards: [] });
+  const bobBoard = await create(bob, 'Bob isolated owner');
+  const bobList: unknown = await (await bob.request.get('/api/boards', { headers: bobHeaders })).json();
+  expect(bobList).toEqual({ boards: expect.arrayContaining([expect.objectContaining({ id: bobBoard.id })]) });
+  expect(bobList).toEqual({ boards: expect.not.arrayContaining([expect.objectContaining({ id: board.id })]) });
   for (const method of ['GET', 'PUT', 'PATCH', 'DELETE']) {
     const response = await bob.request.fetch(`/api/boards/${board.id}`, { method, headers: bobHeaders,
       ...(method === 'PUT' ? { data: { expectedRevision: 0, document: board.document } } : method === 'PATCH' ? { data: { title: 'Stolen' } } : {}) });
@@ -62,7 +65,7 @@ test('owners alone control boards and one atomic revision wins a concurrent save
   expect((await page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document: board.document } })).status()).toBe(409);
   expect((await read(page, board.id)).document).toEqual(document);
   expect((await page.request.delete(`/api/boards/${board.id}`, { headers: ownerHeaders })).status()).toBe(204);
-  expect((await page.request.get(`/api/boards/${board.id}`)).status()).toBe(404);
+  expect((await page.request.get(`/api/boards/${board.id}`, { headers: ownerHeaders })).status()).toBe(404);
   await bobContext.close();
 });
 
@@ -141,7 +144,7 @@ test('authenticated board controls and mixed native geometry survive reload and 
   await page.keyboard.press('Tab');
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/boards$/);
-  expect((await page.request.get(`/api/boards/${id}`)).status()).toBe(404);
+  expect((await page.request.get(`/api/boards/${id}`, { headers: await headers(page) })).status()).toBe(404);
 });
 
 test('failed and delayed saves retain newer local work, then a conflict preserves the mounted document', async ({ page }) => {

@@ -24,11 +24,11 @@ export function registerBoards(app: FastifyInstance, database: DatabaseSync): vo
     throw new AuthenticationError(400, 'invalid_board', 'Use a board name from 1 to 160 characters and a supported native document.');
   }
   app.get('/api/boards', (request) => {
-    const user = app.authentication.requireUser(request);
+    const user = app.authentication.requireUserContext(request);
     return { boards: database.prepare(`SELECT ${columns} FROM boards WHERE owner_id = ? ORDER BY updated_at DESC, id`).all(user.id).map((row) => boardSummaryValidator.validate(row)) };
   });
   app.post('/api/boards', (request, reply) => {
-    const user = app.authentication.requireUser(request);
+    const user = app.authentication.requireUserContext(request);
     let title: string;
     try { title = boardNameValidator.validate(request.body).title.trim(); } catch { return invalid(); }
     const id = randomUUID();
@@ -37,9 +37,9 @@ export function registerBoards(app: FastifyInstance, database: DatabaseSync): vo
       .run(id, user.id, title, JSON.stringify(createEmptyBoardDocument()), now, now);
     return reply.code(201).send(load(id, user.id));
   });
-  app.get<{ Params: { id: string } }>('/api/boards/:id', (request) => load(request.params.id, app.authentication.requireUser(request).id));
+  app.get<{ Params: { id: string } }>('/api/boards/:id', (request) => load(request.params.id, app.authentication.requireUserContext(request).id));
   app.patch<{ Params: { id: string } }>('/api/boards/:id', (request) => {
-    const user = app.authentication.requireUser(request);
+    const user = app.authentication.requireUserContext(request);
     ownedRevision(request.params.id, user.id);
     let title: string;
     try { title = boardNameValidator.validate(request.body).title.trim(); } catch { return invalid(); }
@@ -47,7 +47,7 @@ export function registerBoards(app: FastifyInstance, database: DatabaseSync): vo
     return load(request.params.id, user.id);
   });
   app.put<{ Params: { id: string } }>('/api/boards/:id', { bodyLimit: MAX_NATIVE_DOCUMENT_BYTES + 1024 }, (request, reply) => {
-    const user = app.authentication.requireUser(request);
+    const user = app.authentication.requireUserContext(request);
     // Authorize before parsing the document; do not disclose whether another owner's ID exists.
     ownedRevision(request.params.id, user.id);
     let save;
@@ -63,7 +63,7 @@ export function registerBoards(app: FastifyInstance, database: DatabaseSync): vo
     return { revision: save.expectedRevision + 1 };
   });
   app.delete<{ Params: { id: string } }>('/api/boards/:id', (request, reply) => {
-    const user = app.authentication.requireUser(request);
+    const user = app.authentication.requireUserContext(request);
     const result = database.prepare('DELETE FROM boards WHERE id = ? AND owner_id = ?').run(request.params.id, user.id);
     if (result.changes === 0) throw new AuthenticationError(404, 'board_not_found', 'This board is unavailable. Return to Boards.');
     return reply.code(204).send();

@@ -3,7 +3,7 @@ import type { BoardSave } from '../../shared/boards';
 
 export interface SaveState { status: 'saved' | 'saving' | 'unsaved' | 'conflict'; message: string; retryable?: true }
 export class BoardSaveError extends Error {
-  constructor(public readonly kind: 'conflict' | 'failed') { super(kind); }
+  constructor(public readonly kind: 'conflict' | 'failed' | 'blocked') { super(kind); }
 }
 /** A single flight owns its captured generation. Acknowledging it cannot acknowledge later edits. */
 export class SaveCoordinator {
@@ -24,7 +24,7 @@ export class SaveCoordinator {
     if (this.stopped) return;
     this.pending = document;
     this.generation += 1;
-    if (this.state.status === 'conflict') return;
+    if (this.state.status === 'conflict' || this.state.retryable) return;
     this.publish({ status: this.flight ? 'saving' : 'unsaved', message: this.flight ? 'Saving… Newer changes are waiting.' : 'Unsaved changes' });
     this.schedule();
   };
@@ -50,7 +50,9 @@ export class SaveCoordinator {
     } catch (error) {
       this.publish(error instanceof BoardSaveError && error.kind === 'conflict'
         ? { status: 'conflict', message: 'Conflict — another tab saved a newer version. Your current work is still here. Keep this tab open; reloading discards these local changes.' }
-        : { status: 'unsaved', retryable: true, message: 'Unsaved — saving failed. Your current work is still here. Check your connection, then Retry save. If your session ended, sign in in another tab first.' });
+        : error instanceof BoardSaveError && error.kind === 'blocked'
+          ? { status: 'unsaved', retryable: true, message: 'Unsaved — saving is paused after an account check. Your current work is still here. Check account above if needed, then explicitly Retry save. Keep this tab open.' }
+          : { status: 'unsaved', retryable: true, message: 'Unsaved — saving failed. Your current work is still here. Check your connection, then Retry save. If your session ended, sign in in another tab first.' });
     } finally { this.flight = false; }
   }
   dispose(): void { this.stopped = true; clearTimeout(this.timer); this.listeners.clear(); }

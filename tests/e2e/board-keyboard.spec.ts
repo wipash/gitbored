@@ -7,7 +7,9 @@ import { expectNativePoint } from './board-gestures.js';
 test.use({ viewport: { width: 1440, height: 1000 } });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires controlled GitHub authorization.');
 async function cardPosition(page: Page, id: string) {
-  const response = await page.request.get(`/api/boards/${id}`);
+  const session = await currentSession(page.request);
+  if (session.status !== 'signed-in') throw new Error('Expected owner');
+  const response = await page.request.get(`/api/boards/${id}`, { headers: { 'X-CSRF-Token': session.csrfToken } });
   const board = validateBoard(await response.json());
   const card = Object.values(board.document.snapshot.store).find((record) => record.id === 'shape:keyboard-card');
   if (card?.typeName !== 'shape') throw new Error('Missing persisted card');

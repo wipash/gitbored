@@ -1,8 +1,6 @@
 .auth-shell:has(.board-editor) { max-inline-size: none; }
 .auth-shell:has(.board-editor) main { max-inline-size: none; padding-block: 1.25rem; }
 .auth-shell:has(.board-editor) .runtime-header { padding-block: 0.75rem; }
-.application-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-block-end: 1.5rem; }
-.application-nav a[aria-current="page"] { font-weight: 700; text-decoration-thickness: 2px; }
 .boards-list, .board-loading { display: grid; gap: 1.25rem; }
 .boards-list h1, .board-heading h1 { margin: 0; overflow-wrap: anywhere; }
 .board-create, .board-settings form, .board-dialog form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
@@ -22,6 +20,7 @@
 .board-save[data-save-state="saved"] { color: var(--color-text-success); }
 .board-save[data-save-state="conflict"], .board-error { color: var(--color-text-error); }
 .board-error { display: grid; gap: 0.75rem; margin-block: 0.75rem; overflow-wrap: anywhere; }
+.board-error button, .board-loading button { justify-self: start; max-inline-size: 100%; }
 .board-settings { margin-block: 0.75rem; }
 .board-settings summary { cursor: pointer; inline-size: fit-content; min-block-size: 2rem; }
 .board-settings form { max-inline-size: 44rem; margin-block: 0.75rem 1.25rem; }
