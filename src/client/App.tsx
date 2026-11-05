@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { checkHealth } from './health';
 import { isThemePreference, useTheme } from './theme';
+import { AuthLanding } from './AuthLanding';
 
 type HealthState =
   | { status: 'loading' }
@@ -8,6 +9,13 @@ type HealthState =
   | { status: 'failed'; detail: string };
 
 export function App() {
+  useEffect(() => {
+    document.title = window.location.pathname === '/runtime' ? 'GitBored runtime diagnostics' : 'GitBored';
+  }, []);
+  return window.location.pathname === '/runtime' ? <RuntimeDiagnostics /> : <AuthLanding />;
+}
+
+function RuntimeDiagnostics() {
   const theme = useTheme();
   const [health, setHealth] = useState<HealthState>({ status: 'loading' });
   const [checkNumber, setCheckNumber] = useState(0);
@@ -110,7 +118,7 @@ export function App() {
 
         <section className="scope-note" aria-labelledby="scope-heading">
           <h2 id="scope-heading">Runtime only, not a board yet</h2>
-          <p>This page checks the development setup. GitHub sign-in, issue intake, and boards are not implemented. No GitHub data is requested.</p>
+          <p>This page checks the development setup. Return to <a href="/">GitBored</a> to sign in. No GitHub data is requested by this diagnostic page.</p>
         </section>
         {!theme.persistenceAvailable && (
           <p id="theme-storage-note" className="storage-note" role="status">
