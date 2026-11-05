@@ -10,7 +10,8 @@ import {
   useEditor, useValue, type Editor, type TLComponents, type TLUiOverrides,
 } from 'tldraw';
 import { githubItemUrl, type WorkspaceMetadata } from '../../shared/items';
-import { ITEM_CARD_TYPE, nativeSchema, validateNativeDocument, validateNativeShape, type NativeDocument } from '../../shared/nativeDocument';
+import { ITEM_CARD_TYPE, nativeSchema, validateNativeDocument, type NativeDocument } from '../../shared/nativeDocument';
+import { validateNativeClipboard } from '../../shared/nativeClipboard';
 import { ItemCardShapeUtil } from './ItemCardShapeUtil';
 import { MetadataContext, anonymousMetadata, describeItem } from './metadata';
 import 'tldraw/tldraw.css';
@@ -67,6 +68,10 @@ const overrides: TLUiOverrides = {
     return actions;
   },
 };
+const workspaceOptions = {
+  maxPages: 1,
+  text: { tipTapConfig: { editorProps: { attributes: { 'aria-label': 'Canvas annotation text', 'aria-multiline': 'true' } } } },
+};
 
 function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
   const editor = useEditor();
@@ -80,10 +85,11 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
   }, []);
   const cards = useValue('Workspace cards', () => editor.getCurrentPageShapes().filter((shape) => shape.type === ITEM_CARD_TYPE), [editor]);
   return <details className="workspace-cards" ref={listRef} onKeyDown={(event) => {
+    // Let disclosure/list controls handle their keys without invoking canvas shortcuts.
+    event.stopPropagation();
     if (event.key === 'Escape') {
       event.currentTarget.open = false;
       event.currentTarget.querySelector('summary')?.focus();
-      event.stopPropagation();
     }
   }}>
     <summary>Cards <span>{cards.length}</span></summary>
@@ -98,9 +104,13 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
           <p>{describeItem(shape.props.kind, state)}</p>
           {item && <><p>Labels: {item.labels.join(', ') || 'None'}</p><p>Assignees: {item.assignees.join(', ') || 'None'}</p></>}
           <button type="button" onClick={(event) => {
+            editor.complete();
+            editor.setCurrentTool('select');
             editor.select(shape.id);
             editor.zoomToSelection({ animation: { duration: 0 } });
             event.currentTarget.closest('details')?.removeAttribute('open');
+            // SDK focus() returns early when logical focus is already true, even inside Cards.
+            editor.getContainer().focus({ preventScroll: true });
             editor.focus();
           }}>Select card</button>
           {url && <a href={url} target="_blank" rel="noreferrer">Open in GitHub</a>}
@@ -131,19 +141,16 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
     editor.registerExternalContentHandler('svg-text', null);
     editor.registerExternalContentHandler('excalidraw', null);
     editor.registerExternalContentHandler('tldraw', (info) => {
-      const known = new Set(editor.getCurrentPageShapes().flatMap((shape) => shape.type === ITEM_CARD_TYPE ? [shape.props.referenceId] : []));
-      const valid = info.content.assets.length === 0 && info.content.shapes.every((shape) => {
-        try {
-          validateNativeShape(shape);
-          return Object.keys(shape.meta).length === 0 && (shape.type !== ITEM_CARD_TYPE
-            || known.has(shape.props.referenceId) || latest.current.metadata.has(shape.props.referenceId));
-        } catch { return false; }
-      }) && info.content.bindings?.every((binding) => {
-        try { nativeSchema.types.binding.validate(binding); return Object.keys(binding.meta).length === 0; }
-        catch { return false; }
-      }) !== false;
-      if (!valid) { setPasteError('Unable to paste this content. Copy native annotations or references already available to this board.'); return; }
-      defaultHandleExternalTldrawContent(editor, info).catch(() => {
+      const known = new Set(latest.current.metadata.keys());
+      for (const shape of editor.getCurrentPageShapes()) if (shape.type === ITEM_CARD_TYPE) known.add(shape.props.referenceId);
+      let content;
+      try {
+        content = validateNativeClipboard(info.content, known);
+      } catch {
+        setPasteError('Unable to paste this content. Copy native annotations or references already available to this board.');
+        return;
+      }
+      defaultHandleExternalTldrawContent(editor, { ...info, content }).catch(() => {
         setPasteError('Unable to paste this content. Copy supported canvas shapes and try again.');
       });
     });
@@ -158,7 +165,7 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
     <MetadataContext value={props.metadata}>
-      <Tldraw store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={{ maxPages: 1 }}>
+      <Tldraw store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions}>
         <WorkspaceCards metadata={props.metadata} />
         <div className="workspace-status" role="status">{pasteError}</div>
         {props.children}

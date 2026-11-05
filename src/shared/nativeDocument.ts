@@ -4,6 +4,7 @@ import {
 } from '@tldraw/tlschema';
 import { T } from '@tldraw/validate';
 import { itemKindValidator, itemReferenceIdValidator } from './items.js';
+import { annotationLinkValidator, validateNativeRichText } from './nativeRichText.js';
 
 export const ITEM_CARD_TYPE = 'item-card';
 export interface ItemCardProps {
@@ -45,10 +46,13 @@ export interface NativeDocument {
   version: 1;
   snapshot: TLStoreSnapshot;
 }
+export const nativeSerializedSchemaValidator = T.object({
+  schemaVersion: T.literal(2), sequences: T.dict(T.string, T.number),
+});
 const envelopeValidator = T.object({
   format: T.literal('gitbored-native'), version: T.literal(1),
   snapshot: T.object({
-    schema: T.object({ schemaVersion: T.literal(2), sequences: T.dict(T.string, T.number) }),
+    schema: nativeSerializedSchemaValidator,
     store: T.dict(T.string, T.unknown),
   }),
 });
@@ -60,18 +64,8 @@ export function validateNativeShape(input: unknown) {
   const shape = nativeSchema.types.shape.validate(input);
   if (shape.typeName !== 'shape') throw new Error('Expected canvas shape');
   if (Object.keys(shape.meta).length > 0) throw new Error('Canvas record metadata is not supported');
-  const pending: unknown[] = [shape.props];
-  while (pending.length > 0) {
-    const value = pending.pop();
-    if (typeof value !== 'object' || value === null) continue;
-    for (const [key, child] of Object.entries(value)) {
-      if ((key === 'url' || key === 'href' || key === 'src') && typeof child === 'string' && child !== '') {
-        const url = new URL(child);
-        if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error('Unsupported canvas link');
-      }
-      if (typeof child === 'object' && child !== null) pending.push(child);
-    }
-  }
+  if ('richText' in shape.props) validateNativeRichText(shape.props.richText);
+  if ('url' in shape.props) annotationLinkValidator.validate(shape.props.url);
   return shape;
 }
 /** Server-safe validation and SDK migration. Accept JSON values, not editor/session state. */
