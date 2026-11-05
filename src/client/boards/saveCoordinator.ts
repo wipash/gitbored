@@ -32,7 +32,7 @@ export class SaveCoordinator {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => { void this.save(); }, 300);
   }
-  retry = (): void => { if (this.state.status !== 'conflict') void this.save(); };
+  retry = async (): Promise<void> => { if (this.state.status !== 'conflict') await this.save(); };
   private async save(): Promise<void> {
     clearTimeout(this.timer);
     if (this.stopped || this.flight || !this.pending || !this.dirty || this.state.status === 'conflict') return;

@@ -37,6 +37,7 @@ function BoardList({ session }: { session: Session }) {
     return () => controller.abort();
   }, [attempt]);
   async function create() {
+    if (busy) return;
     setBusy(true); setError('');
     try {
       const response = await requestBoard('/api/boards', session, 'POST', { title });
@@ -50,7 +51,7 @@ function BoardList({ session }: { session: Session }) {
     <p>Private spaces for your GitHub work, notes and drawings.</p>
     <form className="board-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <label htmlFor="new-board-title">Board name <span className="connection-detail">(1–160 characters)</span></label>
-      <div className="board-form-row"><input id="new-board-title" name="title" required maxLength={160} value={title} onChange={(event) => setTitle(event.currentTarget.value)} /><button className="board-primary" disabled={busy} type="submit">{busy ? 'Creating board…' : 'Create board'}</button></div>
+      <div className="board-form-row"><input id="new-board-title" name="title" required maxLength={160} value={title} onChange={(event) => setTitle(event.currentTarget.value)} /><button className="board-primary" aria-disabled={busy} aria-busy={busy} type="submit">{busy ? 'Creating board…' : 'Create board'}</button></div>
     </form>
     <p role="status">{boards === null && !error ? 'Loading boards…' : boards?.length === 0 ? 'No boards yet. Name your first board above to start drawing and arranging work.' : ''}</p>
     {error && <div className="board-error"><p role="alert">{error}</p><button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>Retry loading</button><a href="/api/auth/github">Sign in again</a></div>}
@@ -105,13 +106,16 @@ function EditableBoard({ board, session, theme, coordinator }: { board: Board; s
   const [name, setName] = useState(board.title);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [retryInProgress, setRetryInProgress] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const confirmation = useRef<HTMLInputElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const saveStatus = useRef<HTMLParagraphElement>(null);
   useEffect(() => { document.title = `${title} · GitBored`; }, [title]);
   useEffect(() => { heading.current?.focus(); }, []);
   async function rename() {
+    if (busy) return;
     setBusy(true); setError('');
     try {
       const response = await requestBoard(`/api/boards/${board.id}`, session, 'PATCH', { title: name });
@@ -121,6 +125,7 @@ function EditableBoard({ board, session, theme, coordinator }: { board: Board; s
     finally { setBusy(false); }
   }
   async function remove() {
+    if (busy) return;
     setBusy(true); setError('');
     try {
       const response = await requestBoard(`/api/boards/${board.id}`, session, 'DELETE');
@@ -129,13 +134,22 @@ function EditableBoard({ board, session, theme, coordinator }: { board: Board; s
       window.location.assign('/boards');
     } catch { setError('The board could not be deleted. Check your connection and try Delete board again.'); setBusy(false); dialog.current?.close(); }
   }
+  async function retrySave() {
+    if (retryInProgress) return;
+    setRetryInProgress(true);
+    await coordinator.retry();
+    if (!coordinator.getSnapshot().retryable && document.activeElement === retryButton.current) saveStatus.current?.focus();
+    setRetryInProgress(false);
+  }
   return <section className="board-editor" aria-labelledby="board-heading">
     <div className="board-heading"><h1 id="board-heading" ref={heading} tabIndex={-1}>{title}</h1><a href="/boards">All boards</a></div>
-    <div className="board-save" data-save-state={save.status}><p role="status">{save.message}</p>{save.retryable && <button type="button" onClick={coordinator.retry}>Retry save</button>}{save.status === 'conflict' && <button type="button" onClick={() => { if (window.confirm('Reload the server version? Your unsaved local changes will be discarded.')) window.location.reload(); }}>Reload server version</button>}</div>
-    <details className="board-settings"><summary>Board settings</summary><form onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name (1–160 characters)</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button disabled={busy} type="submit">Rename board</button></div></form><button className="board-danger" type="button" disabled={busy} onClick={() => { setDeleting(true); dialog.current?.showModal(); }}>Delete board</button></details>
+    <div className="board-save" data-save-state={save.status}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{save.status === 'conflict' && <button type="button" onClick={() => { if (window.confirm('Reload the server version? Your unsaved local changes will be discarded.')) window.location.reload(); }}>Reload server version</button>}</div>
+    <details className="board-settings"><summary>Board settings</summary><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name (1–160 characters)</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy} onClick={() => { if (!busy) dialog.current?.showModal(); }}>Delete board</button></details>
     {error && <p className="board-error" role="alert">{error}</p>}
     <div className="board-canvas"><NativeWorkspace initialDocument={board.document} metadata={emptyMetadata} theme={theme} onDocumentChange={coordinator.change} /></div>
-    <dialog ref={dialog} className="board-dialog" onClose={() => setDeleting(false)}><h2>Delete “{title}”?</h2><p>This permanently deletes the board and all its notes, drawings and placements. It cannot be undone.</p><form onSubmit={(event) => {
+    <dialog ref={dialog} className="board-dialog" aria-labelledby="delete-board-heading" onClose={() => {
+      if (confirmation.current) { confirmation.current.value = ''; confirmation.current.setCustomValidity(''); }
+    }}><h2 id="delete-board-heading">Delete “{title}”?</h2><p>This permanently deletes the board and all its notes, drawings and placements. It cannot be undone.</p><form aria-busy={busy} onSubmit={(event) => {
       event.preventDefault();
       if (confirmation.current?.value !== title) {
         confirmation.current?.setCustomValidity('Type the exact board name to confirm deletion.');
@@ -143,6 +157,6 @@ function EditableBoard({ board, session, theme, coordinator }: { board: Board; s
         return;
       }
       void remove();
-    }}><label htmlFor="delete-board-name">Type the board name to confirm</label><input ref={confirmation} key={deleting ? 'open' : 'closed'} id="delete-board-name" name="confirmation" required autoComplete="off" onChange={(event) => event.currentTarget.setCustomValidity('')} /><div className="board-form-row"><button type="button" onClick={() => dialog.current?.close()}>Cancel</button><button className="board-danger" type="submit" disabled={busy}>Delete board permanently</button></div></form></dialog>
+    }}><label htmlFor="delete-board-name">Type the board name to confirm</label><input ref={confirmation} id="delete-board-name" name="confirmation" required autoComplete="off" onChange={(event) => event.currentTarget.setCustomValidity('')} /><div className="board-form-row"><button type="button" aria-disabled={busy} onClick={() => { if (!busy) dialog.current?.close(); }}>Cancel</button><button className="board-danger" type="submit" aria-disabled={busy}>Delete board permanently</button></div></form></dialog>
   </section>;
 }

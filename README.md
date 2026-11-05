@@ -68,6 +68,10 @@ private to its signed-in creator. **Board settings** renames the board or opens 
 permanent-deletion confirmation requiring the exact board name. Deleting a board
 does not change GitHub. The list and workspace support both themes and keyboard
 controls; the spatial canvas scrolls independently of the surrounding document.
+The narrow board canvas reaches the viewport edges so native mobile controls stay
+available at enlarged text sizes. The named deletion dialog keeps its confirmation
+field focused on open; asynchronous board actions preserve keyboard focus, with
+an acknowledged retry returning focus to the save status.
 
 `src/shared/boards.ts` owns the board/save contract. `GET /api/boards` lists only
 the current owner's summaries; `POST` creates an empty native board with `{title}`.

@@ -110,18 +110,36 @@ test('authenticated board controls and mixed native geometry survive reload and 
   await page.setViewportSize({ width: 320, height: 900 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const styles = await page.getByRole('button', { name: 'Styles', exact: true }).boundingBox();
+  expect(styles).not.toBeNull();
+  expect(styles && styles.x >= 0 && styles.x + styles.width <= 320).toBe(true);
   await page.getByText('Board settings', { exact: true }).click();
   await page.getByLabel('Board name (1–160 characters)', { exact: true }).fill('Renamed board');
-  await page.getByRole('button', { name: 'Rename board', exact: true }).click();
+  await page.getByRole('button', { name: 'Rename board', exact: true }).focus();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Renamed board', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Rename board', exact: true })).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('board-narrow-enlarged.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Delete board', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete board', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: /Delete.*Renamed board/ })).toBeVisible();
+  await expect(page.getByLabel('Type the board name to confirm')).toBeFocused();
+  expect(await page.getByRole('dialog').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const dialogBounds = await page.getByRole('dialog').boundingBox();
+  if (!dialogBounds) throw new Error('Missing confirmation dialog');
+  for (const control of [page.getByLabel('Type the board name to confirm'), page.getByRole('button', { name: 'Cancel', exact: true }), page.getByRole('button', { name: 'Delete board permanently' })]) {
+    const bounds = await control.boundingBox();
+    expect(bounds && bounds.x >= dialogBounds.x && bounds.x + bounds.width <= dialogBounds.x + dialogBounds.width).toBe(true);
+  }
+  await page.screenshot({ path: testInfo.outputPath('board-narrow-enlarged-dialog.png'), fullPage: true });
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).not.toBeVisible();
-  await page.getByRole('button', { name: 'Delete board', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Delete board', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
   await page.getByLabel('Type the board name to confirm').fill('Renamed board');
-  await page.getByRole('button', { name: 'Delete board permanently' }).click();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/boards$/);
   expect((await page.request.get(`/api/boards/${id}`)).status()).toBe(404);
 });
@@ -144,8 +162,10 @@ test('failed and delayed saves retain newer local work, then a conflict preserve
   await expect(page.locator('.board-save')).toContainText('saving failed');
   await expect(page.locator('.tl-shape')).toHaveCount(1);
   expect((await read(page, board.id)).revision).toBe(0);
-  await page.getByRole('button', { name: 'Retry save' }).click();
+  await page.getByRole('button', { name: 'Retry save' }).focus();
+  await page.keyboard.press('Enter');
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+  await expect(page.locator('.board-save [role="status"]')).toBeFocused();
   await page.unroute(`**/api/boards/${board.id}`);
   const acknowledgements: { route: Route; response: APIResponse }[] = [];
   await page.route(`**/api/boards/${board.id}`, async (route) => {
