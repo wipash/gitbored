@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Work state:** queued
+**Work state:** in-progress
 
 ## Acceptance criteria
 
@@ -27,3 +27,4 @@ Own portable envelope and import remapping transaction; use shared native valida
 ## Comments
 
 - 2026-11-05 — Project manager: Published from the accepted specification under the user’s instruction to proceed without a confirmation round. Work starts only when blocking tickets are done.
+- 2026-11-06 — **Project manager, claim after checked11:** owner JsonPortability, branch `ticket/12-reference-json-portability`, worktree `../gitbored-wt/12-reference-json-portability`, frontend/backend/provider3001/3002/3007 (observed empty before reservation).04 and11 are done; checked11 merge0c5e796 passed both canonical gates. Own portable envelope, owner-scoped export, staged import validation/authorized reference remapping and the corresponding Boards-list/Board-settings controls. First return a concise envelope/API/authority/Incoming-semantics plan for manager approval; no public-contract implementation before that plan. Reuse existing native validators/migrations, provider registry and11 checkpoint/current-pair semantics; no arbitrary provider URL proxy, private metadata cache, auth/session ownership change, SDK import bypass or visual-export scope. Follow coding/management rules and better-interface/all six domains.22 owns the priority identity fix on3009/3019,06 contextual layout on3005/3006/3008,08 refresh/provider lifecycle; do not import their unfrozen source. Later final composition preserves their checked changes.
