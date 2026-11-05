@@ -26,3 +26,7 @@ export function isSessionResponse(value: unknown): value is SessionResponse {
     && 'csrfToken' in value && typeof value.csrfToken === 'string'
     && 'authorization' in value && (value.authorization === 'ready' || value.authorization === 'reauthorize');
 }
+
+export function isSessionContextFailure(status: number, code: string): boolean {
+  return status === 401 || (status === 409 && code === 'session_changed') || (status === 403 && code === 'csrf');
+}

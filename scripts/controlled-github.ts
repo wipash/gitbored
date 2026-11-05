@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import { registerControlledSources, type ControlledSourceSettings } from './controlled-sources.js';
 
-interface ProviderSettings {
+interface ProviderSettings extends ControlledSourceSettings {
   login: string;
   expiresIn: number;
   refreshExpiresIn: number;
@@ -17,7 +18,9 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
   const codes = new Map<string, { id: number; challenge: string; redirect: string }>();
   const tokens = new Map<string, { id: number; revoked: boolean; expires: number }>();
   const refreshTokens = new Map<string, number>();
-  let settings: ProviderSettings = { login: 'alice', expiresIn: 28800, refreshExpiresIn: 15897600, fail: false, deny: false, rateLimit: false };
+  const defaults = (): ProviderSettings => ({ login: 'alice', expiresIn: 28800, refreshExpiresIn: 15897600,
+    fail: false, deny: false, rateLimit: false, sourceMode: 'normal', sourceFailurePage: 0, pullUnavailable: false, sourceDelayMs: 0, sourceDenied: false, sourceDenialStatus: 403, sourceThrottlePage: 0 });
+  let settings = defaults();
   let refreshCount = 0;
   let exchangeCount = 0;
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
@@ -28,7 +31,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
     if (typeof value !== 'object' || value === null) return { error: 'invalid settings' };
     if ('reset' in value) {
       codes.clear(); tokens.clear(); refreshTokens.clear(); refreshCount = 0; exchangeCount = 0;
-      settings = { login: 'alice', expiresIn: 28800, refreshExpiresIn: 15897600, fail: false, deny: false, rateLimit: false };
+      settings = defaults();
     }
     if ('login' in value && typeof value.login === 'string') settings.login = value.login;
     if ('expiresIn' in value && typeof value.expiresIn === 'number') settings.expiresIn = value.expiresIn;
@@ -38,6 +41,13 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
     if ('rateLimit' in value && typeof value.rateLimit === 'boolean') settings.rateLimit = value.rateLimit;
     if ('revoke' in value) for (const token of tokens.values()) token.revoked = true;
     if ('revokeRefresh' in value) refreshTokens.clear();
+    if ('sourceMode' in value && (value.sourceMode === 'normal' || value.sourceMode === 'empty' || value.sourceMode === 'malformed' || value.sourceMode === 'untrusted-link')) settings.sourceMode = value.sourceMode;
+    if ('sourceFailurePage' in value && typeof value.sourceFailurePage === 'number') settings.sourceFailurePage = value.sourceFailurePage;
+    if ('pullUnavailable' in value && typeof value.pullUnavailable === 'boolean') settings.pullUnavailable = value.pullUnavailable;
+    if ('sourceDelayMs' in value && typeof value.sourceDelayMs === 'number' && value.sourceDelayMs >= 0 && value.sourceDelayMs <= 5000) settings.sourceDelayMs = value.sourceDelayMs;
+    if ('sourceDenied' in value && typeof value.sourceDenied === 'boolean') settings.sourceDenied = value.sourceDenied;
+    if ('sourceDenialStatus' in value && (value.sourceDenialStatus === 403 || value.sourceDenialStatus === 404)) settings.sourceDenialStatus = value.sourceDenialStatus;
+    if ('sourceThrottlePage' in value && typeof value.sourceThrottlePage === 'number') settings.sourceThrottlePage = value.sourceThrottlePage;
     return { ok: true };
   });
   app.get('/__stats', () => ({ refreshCount, exchangeCount,
@@ -54,7 +64,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
       return reply.type('text/html').send(`<!doctype html><html lang="en"><title>Controlled GitHub</title><body><h1>Controlled GitHub authorization</h1><p>Test identities only; not real GitHub.</p><a href="${alice.pathname}${alice.search.replaceAll('&', '&amp;')}">Authorize Alice</a> <a href="${bob.pathname}${bob.search.replaceAll('&', '&amp;')}">Authorize Bob</a></body></html>`);
     }
     const redirect = url.searchParams.get('redirect_uri');
-    if (redirect !== 'http://127.0.0.1:3100/api/auth/callback' && redirect !== 'http://127.0.0.1:3001/api/auth/callback') {
+    if (!redirect || !['http://127.0.0.1:3100/api/auth/callback', 'http://127.0.0.1:3001/api/auth/callback', 'http://127.0.0.1:3005/api/auth/callback'].includes(redirect)) {
       return reply.code(400).send({ error: 'Unregistered test callback' });
     }
     const callback = new URL(redirect);
@@ -102,6 +112,10 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
     if (!token || token.revoked) return reply.code(401).send({ error: 'SENSITIVE_PROVIDER_PAYLOAD' });
     return { id: token.id, login: token.id === 101 ? settings.login : 'bob', name: token.id === 101 ? 'Alice Example' : 'Bob Example' };
   });
+  registerControlledSources(app, port, (request) => {
+    const token = tokens.get(request.headers.authorization?.replace('Bearer ', '') ?? '');
+    return token && !token.revoked && token.expires > Date.now() ? token.id : null;
+  }, () => settings);
   configure?.(app);
   await app.listen({ host: '127.0.0.1', port });
   return app;
