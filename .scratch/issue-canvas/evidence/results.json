@@ -1,0 +1,540 @@
+{
+  "versions": {
+    "excalidraw": "0.18.1"
+  },
+  "embed": {
+    "singleClick": {
+      "inspections": 0,
+      "activeEmbed": null,
+      "selected": [
+        "card-1"
+      ]
+    },
+    "activatedClick": {
+      "inspections": 1,
+      "activeEmbed": "active",
+      "selected": [
+        "card-1"
+      ]
+    },
+    "drag": {
+      "id": "card-1",
+      "type": "embeddable",
+      "x": 610,
+      "y": 250,
+      "width": 320,
+      "height": 170,
+      "groupIds": [],
+      "frameId": null,
+      "ref": "fixture-1"
+    },
+    "refreshUnchangedGeometry": true,
+    "undoAfterRefresh": {
+      "id": "card-1",
+      "type": "embeddable",
+      "x": 490,
+      "y": 100,
+      "width": 320,
+      "height": 170,
+      "groupIds": [],
+      "frameId": null,
+      "ref": "fixture-1"
+    },
+    "group": [
+      {
+        "id": "card-1",
+        "type": "embeddable",
+        "x": 491,
+        "y": 100,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "OnOOgT9Dt5RH7_LJCMBVT"
+        ],
+        "frameId": null,
+        "ref": "fixture-1"
+      },
+      {
+        "id": "card-2",
+        "type": "embeddable",
+        "x": 81,
+        "y": 340,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "OnOOgT9Dt5RH7_LJCMBVT"
+        ],
+        "frameId": null,
+        "ref": "fixture-2"
+      }
+    ],
+    "svg": {
+      "length": 5172,
+      "images": 0,
+      "foreignObjects": 0,
+      "text": "\n      Planning frameDRAWING ABOVE CARDNative text: organize issues + PRsDraw, group, move, undo.https://gitboard.invalid/card/0https://gitboard.invalid/card/1https://gitboard.invalid/card/2"
+    },
+    "reloadRoundtrip": true
+  },
+  "image": {
+    "drag": {
+      "id": "card-1",
+      "type": "image",
+      "x": 610,
+      "y": 250,
+      "width": 320,
+      "height": 170,
+      "groupIds": [],
+      "frameId": null,
+      "fileId": "file-1",
+      "ref": "fixture-1"
+    },
+    "refreshUnchangedDocument": true,
+    "sameFileIdRefresh": "Failed visually: old title/status retained despite changed file data; revised to new file IDs + captureUpdate NEVER",
+    "versionedRefreshGeometry": true,
+    "undoAfterRefresh": {
+      "id": "card-1",
+      "type": "image",
+      "x": 490,
+      "y": 100,
+      "width": 320,
+      "height": 170,
+      "groupIds": [],
+      "frameId": null,
+      "fileId": "file-1-1",
+      "ref": "fixture-1"
+    },
+    "group": [
+      {
+        "id": "card-1",
+        "type": "image",
+        "x": 491,
+        "y": 100,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "FPQNXfvdRpmgKvqisdedv"
+        ],
+        "frameId": null,
+        "fileId": "file-1-1",
+        "ref": "fixture-1"
+      },
+      {
+        "id": "card-2",
+        "type": "image",
+        "x": 81,
+        "y": 340,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "FPQNXfvdRpmgKvqisdedv"
+        ],
+        "frameId": null,
+        "fileId": "file-2-1",
+        "ref": "fixture-2"
+      }
+    ],
+    "duplicate": [
+      {
+        "id": "card-0",
+        "type": "image",
+        "x": 80,
+        "y": 100,
+        "width": 320,
+        "height": 170,
+        "groupIds": [],
+        "frameId": "frame-demo",
+        "fileId": "file-0-1",
+        "ref": "fixture-0"
+      },
+      {
+        "id": "card-1",
+        "type": "image",
+        "x": 491,
+        "y": 100,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "FPQNXfvdRpmgKvqisdedv"
+        ],
+        "frameId": null,
+        "fileId": "file-1-1",
+        "ref": "fixture-1"
+      },
+      {
+        "id": "card-2",
+        "type": "image",
+        "x": 81,
+        "y": 340,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "FPQNXfvdRpmgKvqisdedv"
+        ],
+        "frameId": null,
+        "fileId": "file-2-1",
+        "ref": "fixture-2"
+      },
+      {
+        "id": "9DXhRPqooRYIETb3eNJSf",
+        "type": "image",
+        "x": 501,
+        "y": 110,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "QHLi5k7F-Wd5IkGt1vEzn"
+        ],
+        "frameId": null,
+        "fileId": "file-1-1",
+        "ref": "fixture-1"
+      },
+      {
+        "id": "H36RZekb76aSVO7TBIlBK",
+        "type": "image",
+        "x": 91,
+        "y": 350,
+        "width": 320,
+        "height": 170,
+        "groupIds": [
+          "QHLi5k7F-Wd5IkGt1vEzn"
+        ],
+        "frameId": null,
+        "fileId": "file-2-1",
+        "ref": "fixture-2"
+      }
+    ],
+    "reloadRoundtrip": true,
+    "svg": {
+      "length": 5863,
+      "images": 3,
+      "foreignObjects": 0,
+      "text": "\n      Planning frameDRAWING ABOVE CARDNative text: organize issues + PRsDraw, group, move, undo."
+    },
+    "png": {
+      "type": "image/png",
+      "size": 61446
+    },
+    "frameMove": [
+      {
+        "id": "frame-demo",
+        "type": "frame",
+        "x": 50,
+        "y": 65,
+        "width": 390,
+        "height": 225,
+        "groupIds": [],
+        "frameId": null
+      },
+      {
+        "id": "card-0",
+        "type": "image",
+        "x": 85,
+        "y": 100,
+        "width": 320,
+        "height": 170,
+        "groupIds": [],
+        "frameId": "frame-demo",
+        "fileId": "file-0-0",
+        "ref": "fixture-0"
+      }
+    ],
+    "drawAndText": [
+      {
+        "type": "freedraw",
+        "points": 18
+      },
+      {
+        "type": "text",
+        "text": "Plan release"
+      }
+    ],
+    "resize": {
+      "id": "card-1",
+      "type": "image",
+      "x": 490,
+      "y": 100,
+      "width": 380.2352941176471,
+      "height": 202,
+      "groupIds": [],
+      "frameId": null,
+      "fileId": "file-1-0",
+      "ref": "fixture-1"
+    },
+    "copyPaste": [
+      {
+        "id": "card-1",
+        "type": "image",
+        "x": 490,
+        "y": 100,
+        "width": 320,
+        "height": 170,
+        "groupIds": [],
+        "frameId": null,
+        "fileId": "file-1-0",
+        "ref": "fixture-1"
+      },
+      {
+        "id": "TDSHIyudRQVj1XZwjtozM",
+        "type": "image",
+        "x": 380,
+        "y": 45,
+        "width": 320,
+        "height": 170,
+        "groupIds": [],
+        "frameId": null,
+        "fileId": "file-1-0",
+        "ref": "fixture-1"
+      }
+    ],
+    "enterBehavior": {
+      "cropping": false,
+      "croppingId": null
+    },
+    "doubleClickBehavior": {
+      "croppingId": null,
+      "selected": [
+        "card-2"
+      ]
+    },
+    "finalSupportedMutationSmoke": {
+      "cards": [
+        {
+          "id": "card-0",
+          "type": "image",
+          "x": 80,
+          "y": 100,
+          "width": 320,
+          "height": 170,
+          "groupIds": [],
+          "frameId": "frame-demo",
+          "fileId": "file-0-1",
+          "ref": "fixture-0"
+        },
+        {
+          "id": "card-1",
+          "type": "image",
+          "x": 490,
+          "y": 100,
+          "width": 320,
+          "height": 170,
+          "groupIds": [],
+          "frameId": null,
+          "fileId": "file-1-1",
+          "ref": "fixture-1"
+        },
+        {
+          "id": "card-2",
+          "type": "image",
+          "x": 80,
+          "y": 340,
+          "width": 320,
+          "height": 170,
+          "groupIds": [],
+          "frameId": null,
+          "fileId": "file-2-1",
+          "ref": "fixture-2"
+        }
+      ],
+      "metadata0": {
+        "key": "fixture-0",
+        "kind": "Issue",
+        "repo": "private/web",
+        "number": 42,
+        "title": "REFRESHED 1: keyboard navigation",
+        "state": "closed",
+        "labels": "accessibility · planning",
+        "assignee": "@alex"
+      },
+      "metadata1": {
+        "key": "fixture-1",
+        "kind": "PR",
+        "repo": "private/platform",
+        "number": 43,
+        "title": "Ship dark mode and contrast fixes",
+        "state": "merged",
+        "labels": "frontend · review",
+        "assignee": "@morgan"
+      }
+    }
+  },
+  "tldraw": {
+    "frame": [
+      {
+        "id": "shape:fixture-card-0",
+        "type": "repo-card",
+        "x": 20,
+        "y": 20,
+        "parentId": "shape:clipping-frame"
+      },
+      {
+        "id": "shape:fixture-card-1",
+        "type": "repo-card",
+        "x": 450,
+        "y": 100,
+        "parentId": "page:page"
+      },
+      {
+        "id": "shape:fixture-card-2",
+        "type": "repo-card",
+        "x": 80,
+        "y": 380,
+        "parentId": "page:page"
+      },
+      {
+        "id": "shape:overlay-line",
+        "type": "line",
+        "x": -5,
+        "y": 130,
+        "parentId": "shape:clipping-frame"
+      },
+      {
+        "id": "shape:overlay-text",
+        "type": "text",
+        "x": 45,
+        "y": 160,
+        "parentId": "shape:clipping-frame"
+      },
+      {
+        "id": "shape:clipping-frame",
+        "type": "frame",
+        "x": 60,
+        "y": 80,
+        "parentId": "page:page"
+      }
+    ],
+    "refresh": {
+      "documentUnchanged": true,
+      "elapsedMs": 0.09999990463256836
+    },
+    "export": {
+      "hasMetadata": true,
+      "length": 74039,
+      "metadataRevision1": true
+    },
+    "drag": {
+      "x": 570,
+      "y": 200
+    },
+    "refreshAfterDrag": {
+      "documentUnchanged": true,
+      "elapsedMs": 0
+    },
+    "undoAfterRefresh": {
+      "x": 450,
+      "y": 100
+    },
+    "roundtrip": true
+  },
+  "performance": [
+    {
+      "count": 100,
+      "resetMs": 30,
+      "readyMs": 255.60000002384186,
+      "refreshSyncMs": 16.100000023841858,
+      "refreshDecodeAndTwoFramesMs": 45.90000009536743,
+      "fileCount": 200,
+      "rows": [
+        {
+          "count": 100,
+          "view": "detail",
+          "zoom": 1,
+          "visible": 16,
+          "p50Ms": 16.69999999999709,
+          "p95Ms": 16.79999999998836,
+          "maxMs": 16.80000000000291,
+          "samples": 90
+        },
+        {
+          "count": 100,
+          "view": "overview",
+          "zoom": 0.30416666666666664,
+          "visible": 100,
+          "p50Ms": 16.69999999999709,
+          "p95Ms": 16.70000000001164,
+          "maxMs": 16.80000000000291,
+          "samples": 90
+        }
+      ]
+    },
+    {
+      "count": 500,
+      "resetMs": 111.60000002384186,
+      "readyMs": 1276.1000000238419,
+      "refreshSyncMs": 70.90000009536743,
+      "refreshDecodeAndTwoFramesMs": 247.90000009536743,
+      "fileCount": 1000,
+      "rows": [
+        {
+          "count": 500,
+          "view": "detail",
+          "zoom": 1,
+          "visible": 16,
+          "p50Ms": 16.69999999999709,
+          "p95Ms": 16.80000000000291,
+          "maxMs": 16.80000000000291,
+          "samples": 90
+        },
+        {
+          "count": 500,
+          "view": "overview",
+          "zoom": 0.1322463768115942,
+          "visible": 500,
+          "p50Ms": 16.69999999999709,
+          "p95Ms": 16.79999999998836,
+          "maxMs": 33.20000000001164,
+          "samples": 90
+        }
+      ]
+    },
+    {
+      "count": 1000,
+      "resetMs": 134.30000007152557,
+      "readyMs": 1578.6000000238419,
+      "refreshSyncMs": 88.59999990463257,
+      "refreshDecodeAndTwoFramesMs": 337.1999999284744,
+      "fileCount": 2000,
+      "rows": [
+        {
+          "count": 1000,
+          "view": "detail",
+          "zoom": 1,
+          "visible": 16,
+          "p50Ms": 16.69999999999709,
+          "p95Ms": 99.89999999999418,
+          "maxMs": 100.10000000000582,
+          "samples": 90
+        },
+        {
+          "count": 1000,
+          "view": "overview",
+          "zoom": 0.1,
+          "visible": 1000,
+          "p50Ms": 16.69999999999709,
+          "p95Ms": 16.70000000001164,
+          "maxMs": 16.80000000000291,
+          "samples": 90
+        }
+      ]
+    }
+  ],
+  "environment": {
+    "browser": "Chrome/151.0.7922.34",
+    "page": {
+      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "cores": 8,
+      "width": 1440,
+      "height": 1000,
+      "dpr": 1.25
+    }
+  },
+  "verdict": "Recommend Excalidraw native SVG-image cards + detail sidebar for current scope; reject React embed cards; tldraw remains richer-shape alternative",
+  "limitations": [
+    "Fixture-only, no private auth/durable server tested",
+    "Image cache retains previous generations; production lifecycle not implemented",
+    "Observed SVG frame clipping mismatch, PNG correct",
+    "Single-run synthetic viewport timings, no physical-device guarantee",
+    "No touch, other browsers, screen-reader, schema-migration, or memory profiling"
+  ],
+  "measurementNote": "Viewport timings measured before final replacement of handcrafted element counters with public newElementWith; final helper path separately smoke-verified."
+}
