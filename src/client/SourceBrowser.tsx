@@ -170,7 +170,8 @@ export function SourceBrowser({ session, boardActions }: { session: SignedInSess
   const denialMessage = selectedScope === undefined ? undefined : repositoryDenials.get(selectedScope);
   const loseAccess = useCallback((failure: SourceReadError, scope?: string): void => {
     const contextLost = isSessionContextFailure(failure.status, failure.code);
-    onBoardAccessLoss?.(contextLost ? undefined : scope);
+    if (contextLost) onBoardAccessLoss?.();
+    else if (scope !== undefined) onBoardAccessLoss?.(scope);
     const focused = document.activeElement;
     const focusedScope = focused?.closest('[data-source-scope]')?.getAttribute('data-source-scope');
     if (focused && (contextLost

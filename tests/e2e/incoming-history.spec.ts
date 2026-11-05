@@ -102,6 +102,43 @@ test('first-placement history owns Incoming consumption, unlike native duplicati
   await page.keyboard.press('Delete'); await check(0, false);
 });
 
+for (const reopened of [false, true]) {
+  test(`undoing deletion consumes an explicit requeue ${reopened ? 'after reopening the board' : 'in the placement editor lifetime'}`, async ({ page }) => {
+    const { board, candidate } = await queuedBoard(page, `Requeued deletion ${reopened}`);
+    await add(page);
+    const placed = await durable(page, board.id, candidate.referenceId, 1, false, board.revision);
+    const original = shapes(placed)[0];
+    if (!original) throw new Error('Missing original placement');
+    if (reopened) {
+      await page.reload();
+      await page.locator('.workspace-cards summary').click();
+      await page.getByRole('button', { name: 'Select card', exact: true }).click();
+      await expect(page.locator('.tl-container')).toBeFocused();
+    }
+    await page.keyboard.press('Delete');
+    const deleted = await durable(page, board.id, candidate.referenceId, 0, false, placed.revision);
+    await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
+    if (!(await page.getByLabel('GitHub item URL', { exact: true }).isVisible())) {
+      await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+    }
+    await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
+    await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
+    await page.getByRole('button', { name: 'Send to Incoming', exact: true }).click();
+    const requeued = await durable(page, board.id, candidate.referenceId, 0, true, deleted.revision);
+    expect(requeued.incoming.seen).toEqual([candidate.referenceId]);
+    await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
+    await page.locator('.tl-container').focus();
+    await page.keyboard.press('Control+z');
+    const restored = await durable(page, board.id, candidate.referenceId, 1, false, requeued.revision);
+    expect(shapes(restored)).toEqual([original]);
+    await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Control+Shift+z');
+    const redeleted = await durable(page, board.id, candidate.referenceId, 0, false, restored.revision);
+    await page.keyboard.press('Control+z');
+    await durable(page, board.id, candidate.referenceId, 1, false, redeleted.revision);
+  });
+}
+
 test('transport failure retains the atomic local placement, explicit retry saves latest native movement, and stale save conflicts retain local work', async ({ page }) => {
   const { board, candidate } = await queuedBoard(page, 'Incoming retry and conflict');
   const now = Date.now();

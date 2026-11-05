@@ -9,6 +9,7 @@ export interface ControlledSourceSettings {
   sourceDenied: boolean;
   sourceDenialStatus: 403 | 404;
   sourceThrottlePage: number;
+  sourceRepositoryRenamed: boolean;
 }
 export function registerControlledSources(app: FastifyInstance, port: number, identity: (request: FastifyRequest) => number | null,
   settings: () => ControlledSourceSettings) {
@@ -58,10 +59,12 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
       await delay(settings().sourceDelayMs);
     }
   });
+  const canonicalName = (owner: string, name: string) =>
+    settings().sourceRepositoryRenamed && owner === 'alice' && name === 'renamed-project' ? 'project' : name;
   const repo = (owner: string, name: string) => ({ id: `raw:${(name === 'outside' ? 9007199254740997n : owner === 'alice' ? 9007199254740993n : owner === 'bob' ? 9007199254741101n : 9007199254741201n) + (name === 'other' ? 2n : 0n)}`,
-    node_id: `R_${owner}_${name}`, name, owner: { login: owner }, private: name !== 'outside' });
+    node_id: `R_${owner}_${canonicalName(owner, name)}`, name, owner: { login: owner }, private: name !== 'outside' });
   const issue = (owner: string, name: string, number: number, pull = false) => ({ id: `raw:${9007199254741001n + BigInt(number) + (name === 'other' ? 2000n : 0n) + (owner === 'alice' ? 0n : owner === 'bob' ? 10000n : 20000n)}`,
-    node_id: `${pull ? 'PR' : 'I'}_${owner}_${name}_${number}`, number, title: number === 1
+    node_id: `${pull ? 'PR' : 'I'}_${owner}_${canonicalName(owner, name)}_${number}`, number, title: number === 1
       ? `${owner} ${name === 'outside' ? 'public' : 'private'} issue — ${'Long complete title, with accessible full details. '.repeat(8)}` : `${pull ? 'Pull request' : 'Issue'} ${number}`,
     state: pull ? 'closed' : 'open', state_reason: pull ? null : 'reopened',
     ...(pull ? { pull_request: { url: `http://127.0.0.1:${port}/repos/${owner}/${name}/pulls/${number}` } } : {}),
@@ -102,7 +105,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     const own = user === 101 ? 'alice' : 'bob';
     const owner = request.params.id === '9007199254740995' ? 'example-org' : own;
     if (page === 2) await hold('repositories-page-2');
-    return raw(reply, { total_count: 2, repositories: [repo(owner, page === 1 ? 'project' : 'other')] });
+    return raw(reply, { total_count: 2, repositories: [repo(owner, page === 1 ? settings().sourceRepositoryRenamed && owner === 'alice' ? 'renamed-project' : 'project' : 'other')] });
   });
   app.get<{ Params: { owner: string; name: string } }>('/repos/:owner/:name', async (request, reply) => {
     const denied = settings().sourceDenied; const denialStatus = settings().sourceDenialStatus;
@@ -114,6 +117,9 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     const { owner, name } = request.params;
     if (owner === 'missing' || (name !== 'outside' && owner !== (user === 101 ? 'alice' : 'bob') && owner !== 'example-org')) return reply.code(404).send({ message: 'Private access denied' });
     if (owner === 'approval') return reply.code(403).send({ message: 'Organization approval required' });
+    if (settings().sourceRepositoryRenamed && owner === 'alice' && name === 'project') {
+      return reply.code(301).header('Location', `http://127.0.0.1:${port}/repos/alice/renamed-project`).send();
+    }
     return raw(reply, repo(owner, name));
   });
   app.get<{ Params: { owner: string; name: string } }>('/repos/:owner/:name/issues', async (request, reply) => {
@@ -140,6 +146,6 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (!authorize(request, reply)) return reply;
     if (settings().pullUnavailable) return reply.code(403).send({ message: 'PR enrichment unavailable' });
     const { owner, name, number } = request.params;
-    return raw(reply, { id: 'raw:9007199254741999', node_id: `PR_${owner}_${name}_${number}`, number: Number(number), state: 'closed', merged: true, draft: false, base: { repo: repo(owner, name) } });
+    return raw(reply, { id: 'raw:9007199254741999', node_id: `PR_${owner}_${canonicalName(owner, name)}_${number}`, number: Number(number), state: 'closed', merged: true, draft: false, base: { repo: repo(owner, name) } });
   });
 }

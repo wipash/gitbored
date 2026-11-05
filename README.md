@@ -133,7 +133,9 @@ authorized source browser: browse an installation/repository and select **Use
 repository for Incoming**, or resolve a supported GitHub URL and select **Send to
 Incoming**. These actions never create canvas shapes. Sources are selected per
 owner and board, using the provider's immutable repository node ID; mutable owner
-and repository names are request locators, not identity.
+and repository names are request locators, not identity. After a repository rename
+or transfer, browse its currently authorized location and choose **Use repository
+for Incoming** again: trusted locators update without resetting discovery progress.
 
 **Discover first page** and **Discover next page** each read one bounded mixed
 issue/PR page. PR-only pages still advance the cursor. The tray distinguishes
@@ -166,7 +168,10 @@ remains; redo consumes it again. Ordinary deletion and explicit duplication do n
 manufacture queue entries. Native stopping marks separate placement operations;
 the supported SDK undo/redo UI events reconcile first-placement provenance against
 the resulting native document. There is no second undo stack or private history
-introspection; as with the native editor, history does not survive reload.
+introspection; as with the native editor, history does not survive reload. If you
+delete a placement, explicitly requeue its reference, then undo that deletion,
+the restored placement consumes the queue entry in the same save. This also works
+when the deleted placement was loaded from a previously saved board.
 
 Selected sources, bounded cursors, queue and seen IDs live in SQLite alongside the
 native document. Existing databases receive an additive Incoming-column migration.
@@ -175,8 +180,13 @@ owner-scoped reference/source checks and no queued/placed overlap. GitHub titles
 labels and assignees are hydrated under the current authorization into an immutable
 in-memory map shared by all placements, never saved in Incoming, SDK history or
 browser storage. Account checks withhold fetched values while retaining same-owner
-unsaved work; a confirmed other user clears the previous workspace before private
-reads. Incoming is a non-modal region: Escape/Close returns to its trigger, outside
+unsaved work; global source-context loss rejects pending metadata and discovery
+results through the same account/abort lifetime. A confirmed other user clears the
+previous workspace before private reads. GitHub reauthorization pauses source and
+reference reads without blocking native editing or saving under a valid application
+session. Use **Reconnect GitHub** in a new tab, then **Check GitHub access** in the
+retained tray to resume authorized reads; no failed write replays automatically.
+Incoming is a non-modal region: Escape/Close returns to its trigger, outside
 pointer dismissal does not consume the canvas action, and its controls remain
 scrollable at narrow widths. Board view filters and contextual card details are
 separate later features, not fabricated controls in this tray.
