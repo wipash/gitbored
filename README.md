@@ -329,7 +329,7 @@ Supply these **server-only** variables through your shell/service environment
 ```sh
 export GITHUB_CLIENT_ID='your-app-client-id'
 export GITHUB_CLIENT_SECRET='your-app-client-secret'
-export TOKEN_ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"
+export TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)"
 export APP_ORIGIN='http://127.0.0.1:3001'
 export ALLOW_LOOPBACK_HTTP=true
 pnpm dev
