@@ -148,6 +148,11 @@ the original board is reopened; the new private copy remains independently saved
 Before copy, retry, acknowledgement and leaving, a native checkpoint captures any
 edit whose SDK store notification is still waiting for an animation frame, using
 the same capture boundary and placed-reference queue filtering as ordinary saves.
+Checkpoint capture and normal native notifications share content deduplication:
+the same deferred document is not a newer edit, while real Incoming operations
+still advance the atomic pair. A quota/storage failure announces that the newest
+work may exist only in this tab even when saving is paused after failure/conflict;
+showing that warning never retries or posts a save.
 
 SQLite remains authoritative across browser reloads and real server restarts.
 Use the consistent database backup and separate key recovery procedure below;

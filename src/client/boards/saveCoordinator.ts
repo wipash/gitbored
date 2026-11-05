@@ -33,7 +33,11 @@ export class SaveCoordinator {
   }
   getOperation = (): BoardSave => ({ expectedRevision: this.revision, ...this.pending });
   private persist(): void {
-    if (this.recovery && !this.recovery.write(this.getOperation())) this.state = { ...this.state, recoveryUnavailable: true };
+    if (this.recovery && !this.recovery.write(this.getOperation()) && !this.state.recoveryUnavailable) {
+      // Paused saves still need to announce that the newest local work could
+      // not be recovered. Publishing must not schedule or replay a write.
+      this.publish({ ...this.state, recoveryUnavailable: true });
+    }
   }
   /** Copy acknowledges only the captured pair, never edits made while it was sent. */
   completeCopy(operation: BoardSave): boolean {

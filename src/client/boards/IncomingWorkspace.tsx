@@ -39,6 +39,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
   const current = useRef(board.incoming);
   const editorRef = useRef<Editor | null>(null);
   const documentRef = useRef(board.document);
+  const documentSerialization = useRef<string | null>(null);
   const history = useRef(new Map<string, PlacementHistory>());
   const [references, setReferences] = useState(() => [...new Set([...placedReferences(board.document), ...board.incoming.queue.map((candidate) => candidate.referenceId)])].sort((a, b) => a.localeCompare(b)).join(','));
   const [metadata, setMetadata] = useState<{ authority: BoardAuthority | null; values: WorkspaceMetadata }>(() => ({ authority, values: new Map() }));
@@ -58,6 +59,12 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     // when that placement predates this editor's first-placement provenance.
     const queue = next.queue.filter((candidate) => !placed.has(candidate.referenceId));
     const consistent = queue.length === next.queue.length ? next : { ...next, queue };
+    const serialized = JSON.stringify(document);
+    documentSerialization.current ??= JSON.stringify(documentRef.current);
+    // Checkpoints can precede the SDK's deferred notification. Equal native
+    // redelivery is not another edit, but a real Incoming operation still is.
+    if (consistent === current.current && serialized === documentSerialization.current) return;
+    documentSerialization.current = serialized;
     documentRef.current = document;
     current.current = consistent;
     setIncoming(consistent);
@@ -85,10 +92,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
   const mount = useCallback((editor: Editor) => {
     editorRef.current = editor;
     const releaseCheckpoint = coordinator.setCheckpoint(() => {
-      const document = captureNativeDocument(editor);
-      // Explicit save/copy/leave boundaries must include edits whose SDK store
-      // notification has not reached the next animation frame yet.
-      if (JSON.stringify(document) !== JSON.stringify(documentRef.current)) save(document, current.current);
+      save(captureNativeDocument(editor), current.current);
     });
     return () => { releaseCheckpoint(); editorRef.current = null; history.current.clear(); };
   }, [coordinator, save]);

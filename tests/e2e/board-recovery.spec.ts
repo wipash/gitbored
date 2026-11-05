@@ -300,12 +300,28 @@ test('a real copy acknowledgement never consumes edits made while the private co
   await copyPage.close();
 });
 
-test('copy validates native and atomic Incoming payloads and enforces the public origin/session boundary', async ({ page }) => {
+test('copy validates native and atomic Incoming payloads and enforces the public origin/session boundary', async ({ page, browser }) => {
   await signIn(page); const board = await seedMixed(page, await create(page));
   const url = `/api/boards/${board.id}/copy`;
   const ownerHeaders = await headers(page);
   const valid = { title: 'Validated private copy', document: board.document, incoming: board.incoming };
   expect((await page.request.post(url, { headers: { ...ownerHeaders, Origin: 'https://untrusted.invalid' }, data: valid })).status()).toBe(403);
+  expect((await page.request.post(url, { headers: { ...ownerHeaders, 'X-CSRF-Token': 'wrong-token' }, data: valid })).status()).toBe(403);
+  const summariesBefore: unknown = await (await page.request.get('/api/boards', { headers: ownerHeaders })).json();
+  const anonymous = await browser.newContext({ baseURL: applicationOrigin });
+  try { expect((await anonymous.request.post(url, { headers: { Origin: applicationOrigin }, data: valid })).status()).toBe(401); }
+  finally { await anonymous.close(); }
+  const bobContext = await browser.newContext({ baseURL: applicationOrigin });
+  try {
+    const bob = await bobContext.newPage(); await signIn(bob, 'Bob');
+    const response = await bob.request.get('/api/sources/repositories/bob/other/items?page=1', { headers: await headers(bob) });
+    expect(response.status()).toBe(200);
+    const foreign = readSourcePage(await response.json(), readSourceItem).items[0];
+    if (!foreign) throw new Error('No foreign-account reference');
+    expect((await page.request.post(url, { headers: ownerHeaders, data: { ...valid, incoming: { ...board.incoming,
+      queue: [...board.incoming.queue, { referenceId: foreign.reference.id, kind: foreign.reference.kind }], seen: [...board.incoming.seen, foreign.reference.id] } } })).status()).toBe(400);
+    expect((await bob.request.post(url, { headers: await headers(bob), data: valid })).status()).toBe(404);
+  } finally { await bobContext.close(); }
   expect((await page.request.post(url, { headers: { Origin: applicationOrigin }, data: valid })).status()).toBe(403);
   const card = Object.values(board.document.snapshot.store).find((record) => record.typeName === 'shape' && record.type === 'item-card');
   if (card?.typeName !== 'shape' || card.type !== 'item-card') throw new Error('No mixed placed reference');
@@ -315,9 +331,167 @@ test('copy validates native and atomic Incoming payloads and enforces the public
     { ...valid, incoming: { ...board.incoming, seen: [...board.incoming.seen, 'borrowed-reference'] } },
   ];
   for (const data of invalid) expect((await page.request.post(url, { headers: ownerHeaders, data })).status()).toBe(400);
+  expect(await (await page.request.get('/api/boards', { headers: ownerHeaders })).json()).toEqual(summariesBefore);
   const copied = await page.request.post(url, { headers: ownerHeaders, data: valid });
   expect(copied.status()).toBe(201);
   const result = validateBoard(await copied.json());
   expect(result.document).toEqual(board.document); expect(result.incoming).toEqual(board.incoming);
   expect(await read(page, board.id)).toEqual(board);
+});
+
+test('equal deferred native delivery after a copy checkpoint is not a later user edit', async ({ page }) => {
+  await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
+  await page.route(`**/api/boards/${board.id}`, async (route) => route.request().method() === 'PUT' ? route.abort('connectionfailed') : route.continue());
+  await draw(page); await expect(page.getByRole('button', { name: 'Retry save' })).toBeVisible();
+  const before = (await stored(page))[0]; if (!before) throw new Error('No paused native draft');
+  const shape = Object.values(before.value.document.snapshot.store).find((record) => record.typeName === 'shape');
+  if (shape?.typeName !== 'shape') throw new Error('No native shape');
+  const pending: { route: Route; response: APIResponse }[] = [];
+  await page.route(`**/api/boards/${board.id}/copy`, async (route) => { pending.push({ route, response: await route.fetch() }); });
+  const button = page.getByRole('button', { name: 'Save as copy', exact: true });
+  await button.scrollIntoViewIfNeeded();
+  const bounds = await button.boundingBox(); if (!bounds) throw new Error('No visible copy button');
+  expect(await page.locator('.tl-container').evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  const client = await page.context().newCDPSession(page);
+  try {
+    // Browser scheduling control, not an app/SDK hook: real trusted key/pointer
+    // input reaches copy before the deferred store frame, without focus repair.
+    await client.send('Emulation.setVirtualTimePolicy', { policy: 'pause' });
+    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 });
+    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 });
+    const x = bounds.x + bounds.width / 2; const y = bounds.y + bounds.height / 2;
+    await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    await expect.poll(() => pending.length).toBe(1);
+    const checkpoint = (await stored(page))[0]; if (!checkpoint) throw new Error('No checkpoint draft');
+    expect(Object.values(checkpoint.value.document.snapshot.store).find((record) => record.id === shape.id)).toMatchObject({ x: shape.x + 1, y: shape.y });
+    const frames = page.evaluate(() => {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      return promise;
+    });
+    await client.send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: 100 });
+    await frames;
+    expect((await stored(page))[0]?.value.document).toEqual(checkpoint.value.document);
+    const flight = pending.shift(); if (!flight) throw new Error('No actual copy response');
+    const copy = validateBoard(await flight.response.json());
+    expect(copy.document).toEqual(checkpoint.value.document); expect(copy.incoming).toEqual(checkpoint.value.incoming);
+    await flight.route.fulfill({ response: flight.response });
+    await client.send('Emulation.setVirtualTimePolicy', { policy: 'advance' });
+    await expect(page).toHaveURL(new RegExp(`/boards/${copy.id}$`));
+    await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+    expect(await stored(page)).toEqual([]);
+    expect(await read(page, board.id)).toEqual(board);
+    expect((await read(page, copy.id)).document).toEqual(checkpoint.value.document);
+  } finally {
+    await client.send('Emulation.setVirtualTimePolicy', { policy: 'advance' });
+    await client.detach();
+  }
+});
+
+for (const paused of ['failed', 'conflict']) {
+  test(`real quota failure publishes recoverability loss while ${paused} saves stay paused`, async ({ page }, testInfo) => {
+    await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
+    if (paused === 'conflict') {
+      expect((await page.request.put(`/api/boards/${board.id}`, { headers: await headers(page), data: { expectedRevision: board.revision, document: board.document, incoming: board.incoming } })).status()).toBe(200);
+    }
+    let writes = 0;
+    await page.route(`**/api/boards/${board.id}`, async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      writes += 1;
+      if (paused === 'failed') await route.abort('connectionfailed');
+      else await route.continue();
+    });
+    await draw(page);
+    await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', paused === 'failed' ? 'unsaved' : 'conflict');
+    const warning = page.getByRole('alert').filter({ hasText: 'Browser recovery storage is unavailable' });
+    await expect(warning).toHaveCount(0);
+    if (paused === 'failed') await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toBeVisible();
+    const older = (await stored(page))[0]; if (!older) throw new Error('No older recoverable pair');
+    const original = await read(page, board.id);
+    const quota = await page.evaluate(() => {
+      let index = 0; let filled = 0; const errors: string[] = [];
+      for (let size = 1024 * 1024; size >= 1; size = Math.floor(size / 2)) {
+        const value = 'q'.repeat(size);
+        for (;;) {
+          try { localStorage.setItem(`ticket11-quota:${index}`, value); filled += size; index += 1; }
+          catch (error) {
+            if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
+            errors.push(error.name); break;
+          }
+        }
+      }
+      return { filled, errors };
+    });
+    expect(quota.filled).toBeGreaterThan(1024 * 1024);
+    expect(quota.errors.every((name) => name === 'QuotaExceededError')).toBe(true);
+    await draw(page, 150);
+    await expect(page.locator('.tl-shape')).toHaveCount(2);
+    await expect(warning).toBeVisible();
+    expect(await stored(page)).toEqual([older]);
+    expect(await read(page, board.id)).toEqual(original);
+    // Negative assertion across two native-save debounce windows: warning
+    // publication must not replay the paused write.
+    await page.waitForTimeout(650);
+    expect(writes).toBe(1);
+    await page.evaluate(() => { for (const key of Object.keys(localStorage)) if (key.startsWith('ticket11-quota:')) localStorage.removeItem(key); });
+    for (const theme of ['light', 'dark']) {
+      await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+      await page.screenshot({ path: testInfo.outputPath(`quota-${paused}-${theme}-desktop.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 320, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`quota-${paused}-dark-320-enlarged.png`), fullPage: true });
+    if (paused === 'failed') {
+      await page.unroute(`**/api/boards/${board.id}`);
+      await page.getByRole('button', { name: 'Retry save' }).click();
+      await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+      expect(Object.values((await read(page, board.id)).document.snapshot.store).filter((record) => record.typeName === 'shape')).toHaveLength(2);
+    } else {
+      await page.getByRole('button', { name: 'Save as copy', exact: true }).click();
+      await expect(page).not.toHaveURL(new RegExp(`${board.id}$`));
+      const copyId = page.url().split('/').pop(); if (!copyId) throw new Error('No recovered copy ID');
+      expect(Object.values((await read(page, copyId)).document.snapshot.store).filter((record) => record.typeName === 'shape')).toHaveLength(2);
+      expect(await read(page, board.id)).toEqual(original);
+    }
+    expect(await stored(page)).toEqual([]);
+  });
+}
+
+test('an Incoming-only operation commits even when the native document is unchanged', async ({ page }) => {
+  await signIn(page); const board = await seedMixed(page, await create(page)); await page.goto(`/boards/${board.id}`);
+  await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
+  await page.getByRole('button', { name: 'Remove source', exact: true }).click();
+  await expect.poll(async () => (await read(page, board.id)).revision).toBe(board.revision + 1);
+  const saved = await read(page, board.id);
+  expect(saved.document).toEqual(board.document);
+  expect(saved.incoming).toEqual({ ...board.incoming, sources: [] });
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+});
+
+test('provider read authorization loss does not block application-session native saves or private conflict copies', async ({ page }) => {
+  await signIn(page); const board = await seedMixed(page, await create(page));
+  await controlProvider(page.request, { revoke: true });
+  await page.goto(`/boards/${board.id}`);
+  const session = await currentSession(page.request);
+  expect(session.status === 'signed-in' && session.authorization).toBe('reauthorize');
+  await draw(page);
+  await expect.poll(async () => (await read(page, board.id)).revision).toBe(board.revision + 1);
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+  const saved = await read(page, board.id);
+  expect((await page.request.put(`/api/boards/${board.id}`, { headers: await headers(page), data: { expectedRevision: saved.revision, document: saved.document, incoming: saved.incoming } })).status()).toBe(200);
+  const winner = await read(page, board.id);
+  await draw(page, 150);
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'conflict');
+  const draft = (await stored(page))[0]; if (!draft) throw new Error('No provider-blocked local draft');
+  expect(JSON.stringify(draft.value)).not.toContain('Long complete title');
+  await page.getByRole('button', { name: 'Save as copy', exact: true }).click();
+  await expect(page).not.toHaveURL(new RegExp(`${board.id}$`));
+  const copyId = page.url().split('/').pop(); if (!copyId) throw new Error('No private copy');
+  const copy = await read(page, copyId);
+  expect(copy.document).toEqual(draft.value.document); expect(copy.incoming).toEqual(draft.value.incoming);
+  expect(await read(page, board.id)).toEqual(winner);
+  const after = await currentSession(page.request);
+  expect(after.status === 'signed-in' && after.authorization).toBe('reauthorize');
 });
