@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Work state:** in-review
+**Work state:** in-progress
 
 ## Acceptance criteria
 
