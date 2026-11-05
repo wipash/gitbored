@@ -1,4 +1,3 @@
-/// <reference lib="es2024.promise" />
 import { expect, test } from '@playwright/test';
 import type { Page, Route, APIResponse } from '@playwright/test';
 import { T } from '@tldraw/validate';
@@ -366,13 +365,18 @@ test('equal deferred native delivery after a copy checkpoint is not a later user
     await expect.poll(() => pending.length).toBe(1);
     const checkpoint = (await stored(page))[0]; if (!checkpoint) throw new Error('No checkpoint draft');
     expect(Object.values(checkpoint.value.document.snapshot.store).find((record) => record.id === shape.id)).toMatchObject({ x: shape.x + 1, y: shape.y });
-    const frames = page.evaluate(() => {
-      const { promise, resolve } = Promise.withResolvers<void>();
+    // Register the browser frame barrier on this same protocol session before
+    // advancing virtual time; Playwright's async evaluate dispatch can otherwise
+    // reach the renderer only after the finite frame budget has expired.
+    const frames = await client.send('Runtime.evaluate', { expression: `(() => {
+      const { promise, resolve } = Promise.withResolvers();
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       return promise;
-    });
+    })()` });
+    if (!frames.result.objectId) throw new Error('No native frame barrier');
     await client.send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: 100 });
-    await frames;
+    await client.send('Runtime.awaitPromise', { promiseObjectId: frames.result.objectId });
+    await client.send('Runtime.releaseObject', { objectId: frames.result.objectId });
     expect((await stored(page))[0]?.value.document).toEqual(checkpoint.value.document);
     const flight = pending.shift(); if (!flight) throw new Error('No actual copy response');
     const copy = validateBoard(await flight.response.json());
@@ -385,8 +389,10 @@ test('equal deferred native delivery after a copy checkpoint is not a later user
     expect(await read(page, board.id)).toEqual(board);
     expect((await read(page, copy.id)).document).toEqual(checkpoint.value.document);
   } finally {
-    await client.send('Emulation.setVirtualTimePolicy', { policy: 'advance' });
-    await client.detach();
+    if (!page.isClosed()) {
+      await client.send('Emulation.setVirtualTimePolicy', { policy: 'advance' });
+      await client.detach();
+    }
   }
 });
 
