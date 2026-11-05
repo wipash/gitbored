@@ -40,10 +40,10 @@ No new product candidate reviewed or integrated yet. Bootstrap previously passed
 
 ## User updates and prerequisites
 
-- User has created a GitHub App and authorized looking for its details through Azure on holmesgroup. Azure CLI can enumerate the Holmes tenant. Read-only metadata/configuration discovery is underway; no credentials will be printed, source-controlled or placed in tracking records. No Azure resources will be modified.
+- Read-only configuration discovery finished: Azure Resource Graph across accessible subscriptions found no gitboard/gitbored resources; the shared InternalApps vault listed no secrets; registered-app prefix searches returned none. The holmesgroup GitHub installation list has no clearly identified GitBored app. No credentials were discovered or resources modified. User can provide App details later; controlled-provider implementation proceeds independently.
 - The user removed licensing from the requested work; it is not tracked or a completion gate in these tickets.
 - Real GitHub permissions, two independent users, configured planning mappings, and human interaction for authorization remain acceptance evidence distinct from controlled-provider tests. Continue independent work if configuration is unavailable.
 
 ## Next action
 
-Create assigned worktrees from the recorded main, launch both implementers, continue read-only Azure configuration discovery, and schedule exact-candidate review/validation as results arrive. Recompute frontier after every integrated ticket.
+Both worktrees are created from tracking commit `8691a10`, and GitHubIdentity / NativeWorkspace are implementing their claimed tickets. Ticket dependency integrity check passed for all 19 files (canonical triage roles; blockers exist and precede dependants). Schedule exact-candidate independent review and runtime validation as handoffs arrive, then gates and local no-fast-forward merges. Recompute frontier after every integrated ticket.
