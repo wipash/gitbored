@@ -203,3 +203,32 @@ test('failed and delayed saves retain newer local work, then a conflict preserve
   await page.getByRole('button', { name: 'Reload server version' }).click();
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
 });
+
+for (const { theme, width } of [{ theme: 'light', width: 1440 }, { theme: 'dark', width: 320 }]) {
+  test(`keyboard Retry loading deliberately returns focus during the real ${theme} ${width}px list request`, async ({ page }) => {
+    await controlProvider(page.request, { reset: true }); await signIn(page);
+    const board = await create(page, `Focus recovery ${theme}`);
+    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await page.setViewportSize({ width, height: 1000 });
+    let fail = true;
+    let hold = true;
+    const pending: Route[] = [];
+    await page.route('**/api/boards', async (route) => {
+      if (route.request().method() !== 'GET') return await route.continue();
+      if (fail) await route.abort('connectionfailed');
+      else if (hold) pending.push(route);
+      else await route.continue();
+    });
+    await page.goto('/boards');
+    if (width === 320) await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const retry = page.getByRole('button', { name: 'Retry loading', exact: true });
+    await expect(retry).toBeVisible(); fail = false;
+    await retry.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeFocused();
+    await expect.poll(() => pending.length).toBeGreaterThan(0);
+    hold = false; await Promise.all(pending.map((route) => route.continue()));
+    await expect(page.getByRole('link', { name: board.title, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

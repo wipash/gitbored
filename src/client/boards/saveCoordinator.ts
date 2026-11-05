@@ -32,10 +32,10 @@ export class SaveCoordinator {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => { void this.save(); }, 300);
   }
-  retry = async (): Promise<void> => { if (this.state.status !== 'conflict') await this.save(); };
-  private async save(): Promise<void> {
+  retry = async (): Promise<void> => { if (this.state.status !== 'conflict') await this.save(true); };
+  private async save(explicitRetry = false): Promise<void> {
     clearTimeout(this.timer);
-    if (this.stopped || this.flight || !this.pending || !this.dirty || this.state.status === 'conflict') return;
+    if (this.stopped || this.flight || !this.pending || !this.dirty || this.state.status === 'conflict' || (!explicitRetry && this.state.retryable)) return;
     const generation = this.generation;
     const document = this.pending;
     this.flight = true;
@@ -48,6 +48,7 @@ export class SaveCoordinator {
       this.publish(this.dirty ? { status: 'unsaved', message: 'Unsaved changes' } : { status: 'saved', message: 'Saved' });
       if (this.dirty) this.schedule();
     } catch (error) {
+      clearTimeout(this.timer);
       this.publish(error instanceof BoardSaveError && error.kind === 'conflict'
         ? { status: 'conflict', message: 'Conflict — another tab saved a newer version. Your current work is still here. Keep this tab open; reloading discards these local changes.' }
         : error instanceof BoardSaveError && error.kind === 'blocked'

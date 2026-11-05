@@ -73,7 +73,7 @@ function BoardList({ authority }: { authority: BoardAuthority }) {
     </form>
     {!authority.ready && <p role="status">Boards are paused until your account is checked. Your entered board name remains here.</p>}
     {authority.ready && <><p role="status">{boards === null && !error ? 'Loading boards…' : boards?.length === 0 ? 'No boards yet. Name your first board above to start drawing and arranging work.' : ''}</p>
-    {error && <div className="board-error"><p role="alert">{error}</p><button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>Retry loading</button></div>}
+    {error && <div className="board-error"><p role="alert">{error}</p><button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); heading.current?.focus(); }}>Retry loading</button></div>}
     {boards && <ul className="board-entries">{boards.map((board) => <li key={board.id}><a href={`/boards/${encodeURIComponent(board.id)}`}>{board.title}</a><span>Updated {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(board.updatedAt)}</span></li>)}</ul>}</>}
   </section>;
 }
@@ -148,7 +148,9 @@ function EditableBoard({ board, authority, theme, coordinator }: { board: Board;
       if (!response.ok) throw new Error('Cannot rename board');
       if (signal?.aborted) return;
       setTitle(validateBoard(await response.json()).title);
-    } catch { if (!signal?.aborted) setError('The name could not be saved. Check your connection and name, then Rename board again. Your canvas is unchanged.'); }
+    } catch (failure) { if (!signal?.aborted) setError(failure instanceof BoardSaveError && failure.kind === 'blocked'
+      ? 'The name was not saved. Use Check account above if requests remain paused, then Rename board again. Your canvas is unchanged.'
+      : 'The name could not be saved. Check your connection and name, then Rename board again. Your canvas is unchanged.'); }
     finally { if (!signal?.aborted) setBusy(false); }
   }
   async function remove() {
@@ -161,7 +163,9 @@ function EditableBoard({ board, authority, theme, coordinator }: { board: Board;
       if (signal?.aborted) return;
       coordinator.dispose();
       window.location.assign('/boards');
-    } catch { if (!signal?.aborted) { setError('The board could not be deleted. Check your connection and try Delete board again.'); setBusy(false); dialog.current?.close(); } }
+    } catch (failure) { if (!signal?.aborted) { setError(failure instanceof BoardSaveError && failure.kind === 'blocked'
+      ? 'The board was not deleted. Use Check account above if requests remain paused, then Delete board again.'
+      : 'The board could not be deleted. Check your connection and try Delete board again.'); setBusy(false); dialog.current?.close(); } }
   }
   async function retrySave() {
     if (retryInProgress || !authority.ready) return;

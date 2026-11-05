@@ -208,3 +208,99 @@ for (const target of ['list', 'load']) {
     await other.close();
   });
 }
+
+test('an edit queued during a failed native save cannot replay until explicit retry', async ({ page }, testInfo) => {
+  await signIn(page);
+  const board = await create(page, 'Queued failed save');
+  await page.goto(`/boards/${board.id}`); await draw(page);
+  const before = await read(page, board.id);
+  const now = Date.now();
+  await page.clock.install({ time: now }); await page.clock.pauseAt(now + 1000);
+  let first: Route | undefined;
+  let writes = 0;
+  await page.route(`**/api/boards/${board.id}`, async (route) => {
+    if (route.request().method() !== 'PUT') return await route.continue();
+    writes += 1;
+    if (writes === 1) first = route; else await route.continue();
+  });
+  await nudge(page, 'ArrowRight'); await page.clock.runFor(350);
+  await expect.poll(() => Boolean(first)).toBe(true);
+  await nudge(page, 'ArrowDown');
+  if (!first) throw new Error('Missing pending first save');
+  await first.abort('connectionfailed');
+  await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toBeEnabled();
+  await page.clock.runFor(1000);
+  expect(writes).toBe(1);
+  expect((await read(page, board.id)).revision).toBe(before.revision);
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'unsaved');
+  await page.screenshot({ path: testInfo.outputPath('queued-failure-awaiting-explicit-retry.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Retry save', exact: true }).click();
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+  const saved = await read(page, board.id);
+  expect(writes).toBe(2); expect(saved.revision).toBe(before.revision + 1);
+  expect(geometry(saved)).toEqual({ x: geometry(before).x + 1, y: geometry(before).y + 1 });
+});
+
+test('dirty Sign out and real Stay retain a truthfully blocked native draft until explicit same-user recovery', async ({ page, context }, testInfo) => {
+  await signIn(page);
+  const board = await create(page, 'Signed-out retained draft');
+  await page.goto(`/boards/${board.id}`); await draw(page);
+  const before = await read(page, board.id);
+  const original = await page.locator('.tl-container').elementHandle();
+  if (!original) throw new Error('Missing mounted canvas');
+  const now = Date.now();
+  await page.clock.install({ time: now }); await page.clock.pauseAt(now + 1000);
+  let pending: Route | undefined;
+  let writes = 0;
+  await page.route(`**/api/boards/${board.id}`, async (route) => {
+    if (route.request().method() !== 'PUT') return await route.continue();
+    writes += 1;
+    if (writes === 1) pending = route; else await route.continue();
+  });
+  await nudge(page, 'ArrowRight'); await page.clock.runFor(350);
+  await expect.poll(() => Boolean(pending)).toBe(true);
+  const leaving = page.waitForEvent('dialog');
+  const signedOut = page.waitForResponse((response) => response.url().endsWith('/api/auth/logout'));
+  const click = page.getByRole('button', { name: 'Sign out', exact: true }).click({ noWaitAfter: true });
+  const warning = await leaving; expect(warning.type()).toBe('beforeunload'); await warning.dismiss(); await click;
+  expect((await signedOut).ok()).toBe(true);
+  expect((await currentSession(page.request)).status).toBe('signed-out');
+  await expect(page).toHaveURL(new RegExp(`/boards/${board.id}$`));
+  await expect(page.getByRole('region', { name: 'Account check', exact: true })).toHaveAttribute('aria-busy', 'false');
+  await expect(page.getByRole('button', { name: 'Check account', exact: true })).toBeEnabled();
+  expect(await original.evaluate((element) => element.isConnected)).toBe(true);
+  if (!pending) throw new Error('Missing dirty pending save');
+  await pending.abort('connectionfailed'); await page.clock.runFor(1000);
+  expect(writes).toBe(1);
+  await testInfo.attach('retained-logout-state.json', { contentType: 'application/json', body: JSON.stringify(await page.evaluate(() => ({
+    identity: document.querySelector('.application-account')?.textContent,
+    status: document.querySelector('.account-context-status')?.textContent,
+    signOutLabel: document.querySelector('.application-nav button')?.textContent,
+    editorMounted: Boolean(document.querySelector('.tl-container')),
+  }))) });
+  for (const theme of ['light', 'dark']) {
+    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await page.screenshot({ path: testInfo.outputPath(`logout-stay-${theme}-desktop.png`), fullPage: true });
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const control of [page.getByRole('button', { name: 'Check account', exact: true }), page.getByRole('link', { name: 'Renew sign-in in a new tab', exact: true })]) {
+      const box = await control.boundingBox(); expect(box && box.x >= 0 && box.x + box.width <= 320).toBe(true);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`logout-stay-${theme}-narrow.png`), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  }
+  const other = await context.newPage(); await authorize(other, 'Alice');
+  await page.getByRole('button', { name: 'Check account', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Account check', exact: true })).toHaveCount(0);
+  await page.clock.runFor(1000); expect(writes).toBe(1);
+  expect(await original.evaluate((element) => element.isConnected)).toBe(true);
+  expect((await read(page, board.id)).revision).toBe(before.revision);
+  await page.getByRole('button', { name: 'Retry save', exact: true }).click();
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+  const saved = await read(page, board.id);
+  expect(saved.revision).toBe(before.revision + 1);
+  expect(geometry(saved)).toEqual({ x: geometry(before).x + 1, y: geometry(before).y });
+  await other.close();
+});

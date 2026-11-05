@@ -110,8 +110,12 @@ tab. A transient account-check failure also retains local work and offers
 A **confirmed different user** clears/unmounts the previous account state before
 the new account's private reads; it does not migrate the old draft to that account.
 Navigation with unacknowledged edits invokes the browser's leave warning where
-supported. There is no browser-persisted private draft, automatic conflict merge,
-or save-as-copy yet (recovery is a later ticket).
+supported. If **Sign out** ends the server session but you choose **Stay** in that
+warning, the same local editor remains available as a blocked draft. The account
+is labeled **Last checked**, not connected, and protected requests are paused.
+Renew sign-in in another tab, then **Check account** and explicitly **Retry save**.
+There is no browser-persisted private draft, automatic conflict merge or save-as-copy
+yet (recovery is a later ticket).
 
 SQLite remains authoritative across browser reloads and real server restarts.
 For a straightforward local backup, stop the server cleanly, copy the entire data

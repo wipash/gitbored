@@ -108,7 +108,9 @@ export function AuthLanding() {
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-CSRF-Token': view.csrfToken } });
       if (!response.ok && response.status !== 401) throw new Error('Cannot sign out');
-      // Full navigation clears all account-scoped React state and outstanding requests.
+      setBusy(false);
+      setAccountCheck({ status: 'blocked', message: 'You signed out. Local canvas work remains in this tab if you choose to stay. Renew sign-in in another tab, then Check account here and explicitly Retry save.' });
+      // Full navigation clears account state; a canceled dirty-leave prompt retains a truthful blocked draft.
       window.location.replace('/');
     } catch {
       setBusy(false);
@@ -143,7 +145,7 @@ export function AuthLanding() {
           <a href="/boards" aria-current={inBoard ? 'page' : undefined}>Boards</a>
           <a href="/sources" aria-current={inSources ? 'page' : undefined}>Sources</a>
           <a href="/account" aria-current={inAccount ? 'page' : undefined}>Account</a>
-          <span className="application-account">Account: @{view.user.login}</span>
+          <span className="application-account">{accountCheck.status === 'ready' ? 'Account' : 'Last checked'}: @{view.user.login}</span>
           {!inAccount && <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>}
         </nav>}
         {!inAccount && busy && <p role="status">Signing out…</p>}
