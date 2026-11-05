@@ -25,6 +25,7 @@ export interface NativeWorkspaceProps {
   theme: 'light' | 'dark';
   onDocumentChange(document: NativeDocument): void;
   onMount?(editor: Editor): void | (() => void);
+  onNativeHistory?(editor: Editor, direction: 'undo' | 'redo'): void;
   children?: ReactNode;
 }
 
@@ -88,13 +89,18 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.repeat) uiOwnedCodes.delete(event.code);
       if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Alt' || event.key === 'Meta' || event.key === 'AltGraph') return;
-      const inCards = event.target instanceof Node && !!listRef.current?.contains(event.target);
+      const ui = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-native-ui]') : null;
+      const inCards = ui !== null && editor.getContainer().contains(ui);
       if (!event.repeat) {
         if (!inCards) return;
         uiOwnedCodes.add(event.code);
       } else if (!uiOwnedCodes.has(event.code) && !inCards) return;
       event.stopPropagation();
       if (event.key === 'Escape' && inCards && uiOwnedCodes.has(event.code)) {
+        if (ui?.dataset['nativeUi'] === 'incoming') {
+          ui.querySelector<HTMLButtonElement>('[data-native-dismiss]')?.click();
+          return;
+        }
         const list = listRef.current;
         if (list) {
           list.open = false;
@@ -105,11 +111,14 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
     const onKeyUp = (event: KeyboardEvent) => {
       if (uiOwnedCodes.delete(event.code)) event.stopPropagation();
     };
+    const onBlur = () => uiOwnedCodes.clear();
+    ownerDocument.defaultView?.addEventListener('blur', onBlur);
     ownerDocument.addEventListener('keydown', onKeyDown, true);
     ownerDocument.addEventListener('keyup', onKeyUp, true);
     return () => {
       ownerDocument.removeEventListener('keydown', onKeyDown, true);
       ownerDocument.removeEventListener('keyup', onKeyUp, true);
+      ownerDocument.defaultView?.removeEventListener('blur', onBlur);
       uiOwnedCodes.clear();
     };
   }, [editor]);
@@ -121,7 +130,7 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
     return () => document.removeEventListener('pointerdown', dismiss, true);
   }, []);
   const cards = useValue('Workspace cards', () => editor.getCurrentPageShapes().filter((shape) => shape.type === ITEM_CARD_TYPE), [editor]);
-  return <details className="workspace-cards" ref={listRef}>
+  return <details className="workspace-cards" ref={listRef} data-native-ui="cards">
     <summary>Cards <span>{cards.length}</span></summary>
     <section aria-label="Cards on this page">
       <p>Select a card here, then use the arrow keys to move it on the canvas. Native menus provide grouping, stacking and duplication.</p>
@@ -195,7 +204,12 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
     <MetadataContext value={props.metadata}>
-      <Tldraw store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions}>
+      <Tldraw store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={(name) => {
+        if (name !== 'undo' && name !== 'redo') return;
+        // The supported UI event precedes the synchronous native command. Observe its
+        // completed document in a microtask, before deferred store-listener delivery.
+        queueMicrotask(() => { const editor = editorRef.current; if (editor) latest.current.onNativeHistory?.(editor, name); });
+      }}>
         <WorkspaceCards metadata={props.metadata} />
         <div className="workspace-status" role="status">{pasteError}</div>
         {props.children}

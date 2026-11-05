@@ -8,6 +8,12 @@ import { githubItemUrl } from '../shared/items';
 import './sources.css';
 
 type SignedInSession = Extract<SessionResponse, { status: 'signed-in' }>;
+export interface SourceBrowserBoardActions {
+  selectSource: (repository: RepositorySource) => void;
+  addCandidate: (item: SourceItem) => void;
+  accessLost?: (scope?: string) => void;
+}
+interface BoardActionProps { boardActions?: SourceBrowserBoardActions | undefined }
 class SourceReadError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string) { super(message); }
 }
@@ -100,15 +106,16 @@ function ItemDetails({ item }: { item: SourceItem }) {
     </div>
   </details>;
 }
-function ItemRow({ item }: { item: SourceItem }) {
+function ItemRow({ item, boardActions }: { item: SourceItem } & BoardActionProps) {
   const value = item.metadata;
   return <li className="source-item"><p className="source-locator"><bdi>{value.locator.owner}/{value.locator.repository} #{value.locator.number}</bdi> · {value.kind === 'issue' ? 'Issue' : 'Pull request'} · {value.state === 'unknown' ? 'State unknown' : value.state}</p>
     <h3 className="source-title">{value.title}</h3>
     <p className="source-preview">{value.labels.length} labels · {value.assignees.length} assignees. {value.labels.slice(0, 3).join(', ')}</p>
     <ItemDetails item={item} />
+    {boardActions && <button type="button" onClick={() => boardActions.addCandidate(item)}>Send to Incoming</button>}
   </li>;
 }
-function RepositoryItems({ repository, session, onAccessLoss }: SourceSessionProps & { repository: RepositorySource }) {
+function RepositoryItems({ repository, session, onAccessLoss, boardActions }: SourceSessionProps & { repository: RepositorySource } & BoardActionProps) {
   const pages = usePages(`/api/sources/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/items`, session, itemIdentity, readSourceItem, onAccessLoss, repositoryScope(repository.owner, repository.name));
   const [query, setQuery] = useState(''); const [kind, setKind] = useState('all');
   const queryInput = useRef<HTMLInputElement>(null);
@@ -116,6 +123,7 @@ function RepositoryItems({ repository, session, onAccessLoss }: SourceSessionPro
     && `${item.metadata.title} ${item.metadata.locator.number}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return <section aria-labelledby="source-items-heading" data-source-scope={repositoryScope(repository.owner, repository.name)}><h2 id="source-items-heading"><bdi>{repository.owner}/{repository.name}</bdi></h2>
     <p>Browse mixed issues and pull requests. Discovery does not add anything to a board.</p>
+    {boardActions && <button type="button" onClick={() => boardActions.selectSource(repository)}>Use repository for Incoming</button>}
     <div className="source-filters"><label>Filter loaded titles or numbers<input ref={queryInput} type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
       <label>Kind in loaded results<select value={kind} onChange={(event) => setKind(event.currentTarget.value)}><option value="all">Issues and pull requests</option><option value="issue">Issues</option><option value="pull-request">Pull requests</option></select></label></div>
     <p className="source-subset" role="status">Showing {matches.length} of {pages.items.length} loaded items. This filters the loaded subset only, not the whole repository.</p>
@@ -125,7 +133,7 @@ function RepositoryItems({ repository, session, onAccessLoss }: SourceSessionPro
         ? 'No issues or pull requests were returned. Browse another repository or resolve a URL below.'
         : 'No items returned on the loaded pages. Load the next page below to continue.'}</p>}
     {(query || kind !== 'all') && <button type="button" onClick={() => { setQuery(''); setKind('all'); queryInput.current?.focus(); }}>Clear filters</button>}
-    <ul className="source-items">{matches.map((item) => <ItemRow key={item.reference.id} item={item} />)}</ul>
+    <ul className="source-items">{matches.map((item) => <ItemRow key={item.reference.id} item={item} boardActions={boardActions} />)}</ul>
     <PageProgress {...pages} />
   </section>;
 }
@@ -144,7 +152,8 @@ function Installations({ session, onSelect, onAccessLoss }: SourceSessionProps &
     <ul className="source-choices">{pages.items.map((item) => <li key={item.id}><button type="button" onClick={() => onSelect(item)}><bdi>{item.owner}</bdi> · {item.ownerType === 'Organization' ? 'Organization' : 'Personal'} · {item.repositorySelection === 'all' ? 'All repositories' : 'Selected repositories'}{item.suspended ? ' · Installation suspended' : ''}</button></li>)}</ul><PageProgress {...pages} />
   </section>;
 }
-export function SourceBrowser({ session }: { session: SignedInSession }) {
+export function SourceBrowser({ session, boardActions }: { session: SignedInSession } & BoardActionProps) {
+  const onBoardAccessLoss = boardActions?.accessLost;
   const [installation, setInstallation] = useState<Installation | null>(null);
   const [repository, setRepository] = useState<RepositorySource | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -161,6 +170,8 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
   const denialMessage = selectedScope === undefined ? undefined : repositoryDenials.get(selectedScope);
   const loseAccess = useCallback((failure: SourceReadError, scope?: string): void => {
     const contextLost = isSessionContextFailure(failure.status, failure.code);
+    if (contextLost) onBoardAccessLoss?.();
+    else if (scope !== undefined) onBoardAccessLoss?.(scope);
     const focused = document.activeElement;
     const focusedScope = focused?.closest('[data-source-scope]')?.getAttribute('data-source-scope');
     if (focused && (contextLost
@@ -179,7 +190,7 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
       });
       setResolved((current) => current && repositoryScope(current.metadata.locator.owner, current.metadata.locator.repository) === scope ? null : current);
     }
-  }, []);
+  }, [onBoardAccessLoss]);
   useLayoutEffect(() => {
     const previous = removedFocus.current;
     removedFocus.current = null;
@@ -217,7 +228,7 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
       heading.current?.focus();
     }}>Retry repository</button>
   </section>;
-  else if (repository) browsing = <RepositoryItems key={`${session.user.id}:${repository.nodeId}`} repository={repository} session={session} onAccessLoss={loseAccess} />;
+  else if (repository) browsing = <RepositoryItems key={`${session.user.id}:${repository.nodeId}`} repository={repository} session={session} onAccessLoss={loseAccess} boardActions={boardActions} />;
   else if (installation) browsing = <Repositories key={`${session.user.id}:${installation.id}`} installation={installation} session={session} onAccessLoss={loseAccess} onSelect={(repo) => navigate(() => setRepository(repo))} />;
   else browsing = <Installations key={`${session.user.id}:${generation}`} session={session} onAccessLoss={loseAccess} onSelect={(item) => navigate(() => setInstallation(item))} />;
   return <section className="source-browser runtime-panel" aria-labelledby="sources-heading" ref={panel}>
@@ -238,7 +249,7 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
       </form>
       <p role="status">{busy ? 'Resolving GitHub URL…' : resolved ? 'Item resolved. No canvas placement was created.' : ''}</p>
       {error && <p id="source-url-error" className="auth-error" role="alert" tabIndex={-1}>{error} <a href="/api/auth/github">Reconnect GitHub</a> if needed, then retry.</p>}
-      {resolved && <ul className="source-items" data-source-scope={repositoryScope(resolved.metadata.locator.owner, resolved.metadata.locator.repository)}><ItemRow item={resolved} /></ul>}
+      {resolved && <ul className="source-items" data-source-scope={repositoryScope(resolved.metadata.locator.owner, resolved.metadata.locator.repository)}><ItemRow item={resolved} boardActions={boardActions} /></ul>}
     </section>}
   </section>;
 }

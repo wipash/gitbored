@@ -1,5 +1,6 @@
 import type { NativeDocument } from '../../shared/nativeDocument';
 import type { BoardSave } from '../../shared/boards';
+import type { IncomingState } from '../../shared/incoming';
 
 export interface SaveState { status: 'saved' | 'saving' | 'unsaved' | 'conflict'; message: string; retryable?: true }
 export class BoardSaveError extends Error {
@@ -9,20 +10,20 @@ export class BoardSaveError extends Error {
 export class SaveCoordinator {
   private generation = 0;
   private acknowledged = 0;
-  private pending: NativeDocument | null = null;
+  private pending: { document: NativeDocument; incoming: IncomingState };
   private flight = false;
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private listeners = new Set<() => void>();
   private state: SaveState = { status: 'saved', message: 'Saved' };
-  constructor(private revision: number, private readonly send: (save: BoardSave) => Promise<number>) {}
+  constructor(private revision: number, private readonly send: (save: BoardSave) => Promise<number>, initial: { document: NativeDocument; incoming: IncomingState }) { this.pending = initial; }
   getSnapshot = (): SaveState => this.state;
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private publish(state: SaveState): void { if (this.stopped) return; this.state = state; for (const listener of this.listeners) listener(); }
   get dirty(): boolean { return !this.stopped && this.generation !== this.acknowledged; }
-  change = (document: NativeDocument): void => {
+  change = (document: NativeDocument, incoming = this.pending.incoming): void => {
     if (this.stopped) return;
-    this.pending = document;
+    this.pending = { document, incoming };
     this.generation += 1;
     if (this.state.status === 'conflict' || this.state.retryable) return;
     this.publish({ status: this.flight ? 'saving' : 'unsaved', message: this.flight ? 'Saving… Newer changes are waiting.' : 'Unsaved changes' });
@@ -37,11 +38,11 @@ export class SaveCoordinator {
     clearTimeout(this.timer);
     if (this.stopped || this.flight || !this.pending || !this.dirty || this.state.status === 'conflict' || (!explicitRetry && this.state.retryable)) return;
     const generation = this.generation;
-    const document = this.pending;
+    const operation = this.pending;
     this.flight = true;
     this.publish({ status: 'saving', message: 'Saving…' });
     try {
-      const revision = await this.send({ expectedRevision: this.revision, document });
+      const revision = await this.send({ expectedRevision: this.revision, ...operation });
       if (this.stopped) return;
       this.revision = revision;
       this.acknowledged = generation;

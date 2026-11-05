@@ -1,6 +1,7 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { emptyIncoming } from '../shared/incoming.js';
 import { initializeSources } from './sources.js';
 
 export async function openStorage(directory: string): Promise<DatabaseSync> {
@@ -37,6 +38,10 @@ export async function openStorage(directory: string): Promise<DatabaseSync> {
       CREATE INDEX IF NOT EXISTS boards_owner_updated ON boards(owner_id, updated_at DESC);
     `);
     initializeSources(database);
+    // SQLite retains this canonical default for existing rows and future inserts.
+    if (!database.prepare('PRAGMA table_info(boards)').all().some((column) => column['name'] === 'incoming')) {
+      database.exec(`ALTER TABLE boards ADD COLUMN incoming TEXT NOT NULL DEFAULT '${JSON.stringify(emptyIncoming())}'`);
+    }
     return database;
   } catch (cause) {
     database.close();
