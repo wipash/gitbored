@@ -84,6 +84,13 @@ card; a fresh comma down/up and the next card drag recover normal interaction.
 These patches preserve the existing SDK blur handler and do not inject releases.
 Report this limitation separately from the Cards release matrix.
 
+The original SDK also skips a Shift press begun on a focused button. Moving focus
+to the canvas while still holding that press leaves arrow nudges at one unit,
+instead of the ten units produced by a canvas-origin Shift press. This also
+occurs with the SDK's own focus button, not only Cards. Release Shift and press
+it again on the canvas to establish native membership. These ownership patches
+do not broaden the SDK's original keydown eligibility.
+
 `pnpm install --frozen-lockfile` applies the committed patches. Any SDK upgrade
 must update or remove the exact-version patch registrations and regenerate
 coherent source, ESM/CJS runtime artifacts and source maps. Remove these patches
