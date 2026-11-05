@@ -88,12 +88,18 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
     return () => document.removeEventListener('pointerdown', dismiss, true);
   }, []);
   const cards = useValue('Workspace cards', () => editor.getCurrentPageShapes().filter((shape) => shape.type === ITEM_CARD_TYPE), [editor]);
-  return <details className="workspace-cards" ref={listRef} onKeyDown={(event) => {
-    // Let disclosure/list controls handle their keys without invoking canvas shortcuts.
+  return <details className="workspace-cards" ref={listRef} onKeyDownCapture={(event) => {
+    // Capture before the SDK container's native bubble listeners; keep browser defaults.
     event.stopPropagation();
     if (event.key === 'Escape') {
       event.currentTarget.open = false;
       event.currentTarget.querySelector('summary')?.focus();
+    }
+  }} onKeyUpCapture={(event) => {
+    // Release modifiers held before entering Cards, without invoking canvas action keys.
+    switch (event.key) {
+      case 'Shift': case 'Control': case 'Alt': case 'Meta': return;
+      default: event.stopPropagation();
     }
   }}>
     <summary>Cards <span>{cards.length}</span></summary>
