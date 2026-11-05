@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { APIResponse, Page, Route } from '@playwright/test';
 import { createEmptyBoardDocument, validateBoard, type Board } from '../../src/shared/boards.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
+import { emptyIncoming } from '../../src/shared/incoming.js';
 import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn } from './auth-support.js';
 import { expectNativePoint } from './board-gestures.js';
 
@@ -51,18 +52,18 @@ test('owners alone control boards and one atomic revision wins a concurrent save
   expect(bobList).toEqual({ boards: expect.not.arrayContaining([expect.objectContaining({ id: board.id })]) });
   for (const method of ['GET', 'PUT', 'PATCH', 'DELETE']) {
     const response = await bob.request.fetch(`/api/boards/${board.id}`, { method, headers: bobHeaders,
-      ...(method === 'PUT' ? { data: { expectedRevision: 0, document: board.document } } : method === 'PATCH' ? { data: { title: 'Stolen' } } : {}) });
+      ...(method === 'PUT' ? { data: { expectedRevision: 0, document: board.document, incoming: board.incoming } } : method === 'PATCH' ? { data: { title: 'Stolen' } } : {}) });
     expect(response.status()).toBe(404);
   }
   const ownerHeaders = await headers(page);
-  expect((await page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document: { ...board.document, version: 99 } } })).status()).toBe(400);
+  expect((await page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document: { ...board.document, version: 99 }, incoming: board.incoming } })).status()).toBe(400);
   const document = mixedDocument();
-  const responses = await Promise.all([0, 1].map(() => page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document } })));
+  const responses = await Promise.all([0, 1].map(() => page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document, incoming: board.incoming } })));
   expect(responses.map((response) => response.status()).sort((a, b) => a - b)).toEqual([200, 409]);
   const saved = await read(page, board.id);
   expect(saved.revision).toBe(1);
   expect(saved.document).toEqual(document);
-  expect((await page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document: board.document } })).status()).toBe(409);
+  expect((await page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document: board.document, incoming: board.incoming } })).status()).toBe(409);
   expect((await read(page, board.id)).document).toEqual(document);
   expect((await page.request.delete(`/api/boards/${board.id}`, { headers: ownerHeaders })).status()).toBe(204);
   expect((await page.request.get(`/api/boards/${board.id}`, { headers: ownerHeaders })).status()).toBe(404);
@@ -80,7 +81,7 @@ test('authenticated board controls and mixed native geometry survive reload and 
   if (!id) throw new Error('Missing created board ID');
   const ownerHeaders = await headers(page);
   const seed = mixedDocument();
-  expect((await page.request.put(`/api/boards/${id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document: seed } })).ok()).toBe(true);
+  expect((await page.request.put(`/api/boards/${id}`, { headers: ownerHeaders, data: { expectedRevision: 0, document: seed, incoming: emptyIncoming() } })).ok()).toBe(true);
   await page.reload();
   await expect(page.locator('[data-shape-id="shape:text"]').getByText('Durable native note', { exact: true })).toBeVisible();
   // Add a real freehand drawing through the mounted SDK, not an internal editor hook.
@@ -193,7 +194,7 @@ test('failed and delayed saves retain newer local work, then a conflict preserve
   await page.unroute(`**/api/boards/${board.id}`);
   const saved = await read(page, board.id);
   const ownerHeaders = await headers(page);
-  expect((await page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: saved.revision, document: saved.document } })).ok()).toBe(true);
+  expect((await page.request.put(`/api/boards/${board.id}`, { headers: ownerHeaders, data: { expectedRevision: saved.revision, document: saved.document, incoming: saved.incoming } })).ok()).toBe(true);
   await canvas.focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'conflict');

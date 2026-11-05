@@ -2,27 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { T } from '@tldraw/validate';
 import { boardSummaryValidator, validateBoard, type Board, type BoardSummary } from '../../shared/boards';
 import type { SessionResponse } from '../../shared/session';
-import { isSessionContextFailure } from '../../shared/session';
-import { NativeWorkspace } from '../workspace/NativeWorkspace';
 import { BoardSaveError, SaveCoordinator } from './saveCoordinator';
+import { requestBoard, type BoardAuthority } from './boardRequest';
+import { IncomingWorkspace } from './IncomingWorkspace';
 import './boards.css';
 
 type Session = Extract<SessionResponse, { status: 'signed-in' }>;
-const emptyMetadata = new Map();
-interface BoardAuthority { session: Session; ready: boolean; reconcile(): Promise<void> }
-async function requestBoard(url: string, authority: BoardAuthority, method: string, data?: unknown, signal?: AbortSignal): Promise<Response> {
-  if (!authority.ready) throw new BoardSaveError('blocked');
-  const response = await fetch(url, { method, cache: 'no-store', ...(signal ? { signal } : {}), headers: { 'X-CSRF-Token': authority.session.csrfToken, ...(data === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
-  if (!response.ok) {
-    const failure: unknown = await response.json().catch(() => null);
-    const code = typeof failure === 'object' && failure !== null && 'error' in failure && typeof failure.error === 'string' ? failure.error : '';
-    if (isSessionContextFailure(response.status, code)) {
-      await authority.reconcile();
-      throw new BoardSaveError('blocked');
-    }
-  }
-  return response;
-}
 export function Boards({ session, ready, reconcileAccount, theme }: { session: Session; ready: boolean; reconcileAccount: (expectedUserId: string) => Promise<void>; theme: 'light' | 'dark' }) {
   const authority = useMemo(() => ({ session, ready, reconcile: () => reconcileAccount(session.user.id) }), [session, ready, reconcileAccount]);
   const boardId = /^\/boards\/([^/]+)\/?$/.exec(window.location.pathname)?.[1];
@@ -113,7 +98,7 @@ function BoardEditor({ initialBoard, authority, theme }: { initialBoard: Board; 
       const value = T.object({ revision: T.number }).validate(await response.json());
       if (value.revision !== save.expectedRevision + 1) throw new BoardSaveError('failed');
       return value.revision;
-    });
+    }, initialBoard);
     // The coordinator owns an abortable request lifetime; recreate it after StrictMode's cleanup.
     // oxlint-disable-next-line react/set-state-in-effect
     setCoordinator(saves);
@@ -179,7 +164,7 @@ function EditableBoard({ board, authority, theme, coordinator }: { board: Board;
     <div className="board-save" data-save-state={save.status}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress || !authority.ready} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{save.status === 'conflict' && <button type="button" onClick={() => { if (window.confirm('Reload the server version? Your unsaved local changes will be discarded.')) window.location.reload(); }}>Reload server version</button>}</div>
     <details className="board-settings"><summary>Board settings</summary><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name (1–160 characters)</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></details>
     {error && <p className="board-error" role="alert">{error}</p>}
-    <div className="board-canvas"><NativeWorkspace initialDocument={board.document} metadata={emptyMetadata} theme={theme} onDocumentChange={coordinator.change} /></div>
+    <div className="board-canvas"><IncomingWorkspace board={board} authority={authority} coordinator={coordinator} theme={theme} /></div>
     <dialog ref={dialog} className="board-dialog" aria-labelledby="delete-board-heading" onClose={() => {
       if (confirmation.current) { confirmation.current.value = ''; confirmation.current.setCustomValidity(''); }
     }}><h2 id="delete-board-heading">Delete “{title}”?</h2><p>This permanently deletes the board and all its notes, drawings and placements. It cannot be undone.</p><form aria-busy={busy} onSubmit={(event) => {

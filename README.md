@@ -6,9 +6,9 @@ A local-first issue-board application in development. Product scope lives in
 The runnable application provides GitHub App user sign-in, encrypted server-side
 credentials, private sessions, authorized GitHub source browsing, owner-only durable
 boards and persistent light/dark/system theme selection. Boards mount the native
-canvas for notes, drawings, frames, groups and reference placements. The separate
-`/runtime` diagnostic checks Fastify and real SQLite. Incoming placement is not
-implemented yet.
+canvas for notes, drawings, frames, groups and deliberately placed references.
+Each board has a durable **Incoming** tray for selected sources and unplaced work.
+The separate `/runtime` diagnostic checks Fastify and real SQLite.
 
 ## Requirements
 
@@ -80,9 +80,10 @@ an acknowledged retry returning focus to the save status.
 
 `src/shared/boards.ts` owns the board/save contract. `GET /api/boards` lists only
 the current owner's summaries; `POST` creates an empty native board with `{title}`.
-`GET /api/boards/:id` returns its validated document and revision. `PUT` accepts
-`{expectedRevision, document}` and atomically advances the document revision with
-a conditional SQLite update. A stale save returns409 and cannot overwrite content.
+`GET /api/boards/:id` returns its validated document, Incoming state and revision.
+`PUT` requires `{expectedRevision, document, incoming}` and atomically advances the
+document/Incoming revision with one conditional SQLite update. A stale save returns
+409 and cannot overwrite either half of the operation.
 `PATCH {title}` updates the display name independently of the document revision;
 `DELETE` permanently removes the owner's board. Cross-owner IDs are404 for every
 operation. Every board request, including GET, requires the current session's
@@ -124,6 +125,59 @@ Restore with the server stopped, replace the data directory with that backup,
 restore the same key, then restart and reopen a board. Do not copy only the main
 SQLite file while a WAL-mode server is writing.
 
+
+## Incoming discovery and placement
+
+Open a board and select **Incoming**. **Choose sources or add a URL** reuses the
+authorized source browser: browse an installation/repository and select **Use
+repository for Incoming**, or resolve a supported GitHub URL and select **Send to
+Incoming**. These actions never create canvas shapes. Sources are selected per
+owner and board, using the provider's immutable repository node ID; mutable owner
+and repository names are request locators, not identity.
+
+**Discover first page** and **Discover next page** each read one bounded mixed
+issue/PR page. PR-only pages still advance the cursor. The tray distinguishes
+loading, partial, complete and failed progress, including an interrupted pass
+after reopen. **Retry discovery** repeats only the retained failed page.
+**Reconcile source again** explicitly starts another bounded pass after completion;
+already seen references are deduplicated, not requeued. Removing a selected source
+stops future discovery without deleting its existing candidates or canvas objects.
+Seen references remain known after ordinary canvas deletion. Explicit source
+browsing or a URL can send an intentionally deleted reference to Incoming again.
+
+Drag a candidate's **Drag to canvas** handle onto the native canvas. A successful
+drop uses the editor's screen-to-page and native receiving-parent transforms, so
+pan, zoom and rotated frames do not change the intended drop point. Cancelled,
+outside and invalid drops do not change the document or queue. **Add to board** is
+the keyboard/single-pointer alternative: its labelled **Receiving row** starts at
+page x=0 below existing work, never moves existing objects, reveals/selects the new
+card, closes Incoming and returns native canvas focus. Native drops may leave
+Incoming open. Sending an already placed reference through ordinary browsing
+focuses its existing placement; native duplicate/copy actions create explicit
+additional placements.
+
+First placement consumes its queue entry in the same revisioned save as the native
+document. On failure the local placement and consumed local queue remain a single
+recoverable unsaved operation; the server retains its previous complete pair.
+Further edits do not replay failed writes. Keep the tab open and explicitly
+**Retry save**, or resolve a **Conflict** using the existing board controls.
+Native undo of the first placement restores Incoming only when no other placement
+remains; redo consumes it again. Ordinary deletion and explicit duplication do not
+manufacture queue entries. The integration follows native stopping marks, not a
+separate undo stack; as with the native editor, history does not survive reload.
+
+Selected sources, bounded cursors, queue and seen IDs live in SQLite alongside the
+native document. Existing databases receive an additive Incoming-column migration.
+Incoming and native content are validated independently with bounded collections,
+owner-scoped reference/source checks and no queued/placed overlap. GitHub titles,
+labels and assignees are hydrated under the current authorization into an immutable
+in-memory map shared by all placements, never saved in Incoming, SDK history or
+browser storage. Account checks withhold fetched values while retaining same-owner
+unsaved work; a confirmed other user clears the previous workspace before private
+reads. Incoming is a non-modal region: Escape/Close returns to its trigger, outside
+pointer dismissal does not consume the canvas action, and its controls remain
+scrollable at narrow widths. Board view filters and contextual card details are
+separate later features, not fabricated controls in this tray.
 
 ## Native workspace keyboard boundary
 
