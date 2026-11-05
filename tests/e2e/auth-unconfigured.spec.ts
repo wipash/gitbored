@@ -18,6 +18,20 @@ test('an unconfigured deployment explains setup and has no fake sign-in path in 
   await page.setViewportSize({ width: 320, height: 700 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const retry = page.getByRole('button', { name: 'Check configuration again' });
+  const labelBounds = await retry.evaluate((button) => {
+    const panel = button.closest('.auth-panel');
+    if (!panel) throw new Error('Expected account panel');
+    const control = button.getBoundingClientRect();
+    const container = panel.getBoundingClientRect();
+    const label = document.createRange();
+    label.selectNodeContents(button);
+    return {
+      labelWithinControl: [...label.getClientRects()].every((line) => line.left >= control.left && line.right <= control.right),
+      controlWithinPanel: control.left >= container.left && control.right <= container.right,
+    };
+  });
+  expect(labelBounds).toEqual({ labelWithinControl: true, controlWithinPanel: true });
   await page.getByRole('button', { name: 'Check configuration again' }).click();
   await expect(page.getByRole('button', { name: 'Check configuration again' })).toBeVisible();
 });

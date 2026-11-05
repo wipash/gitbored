@@ -59,6 +59,33 @@ test('unsafe requests require a session, exact same origin and the current CSRF 
   expect((await currentSession(page.request)).status).toBe('signed-out');
 });
 
+test('encoded API routes retain the same CSRF and private-response policy as their matched routes', async ({ page, request }) => {
+  expect((await request.post('/%61pi/auth/logout')).status()).toBe(401);
+  await signIn(page);
+  const session = await currentSession(page.request);
+  if (session.status !== 'signed-in') throw new Error('Expected session');
+  const encodedSession = await page.request.get('/%61pi/session');
+  expect(encodedSession.headers()['cache-control']).toBe('no-store');
+  expect(encodedSession.headers()['referrer-policy']).toBe('no-referrer');
+  const wrongRequests = [{}, { origin: applicationOrigin }, { 'x-csrf-token': session.csrfToken },
+    { origin: 'https://evil.example', 'x-csrf-token': session.csrfToken },
+    { origin: applicationOrigin, 'x-csrf-token': 'wrong' }];
+  for (const path of ['/%61pi/auth/logout', '/api/%61uth/logout']) {
+    for (const headers of wrongRequests) {
+      const rejected = await page.request.post(path, { headers });
+      expect(rejected.status()).toBe(403);
+      expect(rejected.headers()['cache-control']).toBe('no-store');
+      expect(rejected.headers()['referrer-policy']).toBe('no-referrer');
+    }
+  }
+  expect((await currentSession(page.request)).status).toBe('signed-in');
+  const accepted = await page.request.post('/%61pi/auth/logout', {
+    headers: { origin: applicationOrigin, 'x-csrf-token': session.csrfToken },
+  });
+  expect(accepted.status()).toBe(204);
+  expect((await currentSession(page.request)).status).toBe('signed-out');
+});
+
 test('invalid, browser-unbound and replayed state cannot exchange a code', async ({ request, browser }) => {
   const start = await request.get('/api/auth/github', { maxRedirects: 0 });
   const authorize = new URL(start.headers()['location'] ?? '');

@@ -131,6 +131,19 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
       access_expires = NULL, refresh_expires = NULL WHERE id = ?`).run(userId);
   }
 
+  function decryptCredential(userId: string, value: string, purpose: 'access' | 'refresh'): string {
+    if (!config) throw new Error('Authentication is not configured.');
+    let credential: string;
+    try {
+      credential = decrypt(value, `${userId}:${purpose}`);
+    } catch {
+      // Only credential decoding/authentication is inside this boundary, not provider or storage work.
+      invalidateAuthorization(userId);
+      throw new AuthenticationError(401, 'reauthorize', 'Saved GitHub credentials cannot be read. Sign in again to reconnect.');
+    }
+    return credential;
+  }
+
   async function exchange(parameters: URLSearchParams): Promise<ProviderTokens> {
     if (!config) throw new Error('Authentication is not configured.');
     let response: Response;
@@ -177,14 +190,14 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
     if (!config || user.reauthorize || !user.accessToken) {
       throw new AuthenticationError(401, 'reauthorize', 'Sign in again to reconnect GitHub.');
     }
-    if (user.accessExpires === null || user.accessExpires > Date.now()) return decrypt(user.accessToken, `${userId}:access`);
+    if (user.accessExpires === null || user.accessExpires > Date.now()) return decryptCredential(userId, user.accessToken, 'access');
     if (!user.refreshToken || (user.refreshExpires !== null && user.refreshExpires <= Date.now())) {
       invalidateAuthorization(userId);
       throw new AuthenticationError(401, 'reauthorize', 'GitHub authorization expired. Sign in again to reconnect.');
     }
     try {
       const tokens = await exchange(new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret,
-        grant_type: 'refresh_token', refresh_token: decrypt(user.refreshToken, `${userId}:refresh`) }));
+        grant_type: 'refresh_token', refresh_token: decryptCredential(userId, user.refreshToken, 'refresh') }));
       // Never revive credentials removed by a concurrent revocation or reauthorization.
       if (storedUser(userId).refreshToken !== user.refreshToken) {
         return await refreshToken(userId);
@@ -230,7 +243,8 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
   }
 
   app.addHook('onRequest', async (request, reply) => {
-    if (!request.url.startsWith('/api/')) return;
+    // Use the router's matched contract: raw paths may encode otherwise identical API routes.
+    if (!request.routeOptions.url?.startsWith('/api/')) return;
     reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer');
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
     const user = requireUser(request);
@@ -259,7 +273,14 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
     } catch (error) {
       if (!(error instanceof AuthenticationError) || error.code !== 'reauthorize') throw error;
       const current = storedUser(user.id).accessToken;
-      if (accessToken && current && decrypt(current, `${user.id}:access`) === accessToken) invalidateAuthorization(user.id);
+      if (accessToken && current) {
+        try {
+          if (decryptCredential(user.id, current, 'access') === accessToken) invalidateAuthorization(user.id);
+        } catch (credentialError) {
+          // Unreadable credentials were invalidated at the token boundary; retain the reconnect response.
+          if (!(credentialError instanceof AuthenticationError) || credentialError.code !== 'reauthorize') throw credentialError;
+        }
+      }
       authorization = 'reauthorize';
     }
     return { status: 'signed-in', user: { id: user.id, githubId: user.githubId, login: user.login, name: user.name },

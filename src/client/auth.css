@@ -1,5 +1,6 @@
 .auth-shell a { color: var(--color-accent-fill); text-underline-offset: 0.2em; }
 .auth-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+.auth-panel button { overflow-wrap: anywhere; }
 .auth-panel .connection-detail { margin-block-start: 0; }
 .auth-status:empty { display: none; }
 .auth-error { color: var(--color-text-error); }

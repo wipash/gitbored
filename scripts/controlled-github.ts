@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
+import type { FastifyInstance } from 'fastify';
 
 interface ProviderSettings {
   login: string;
@@ -11,10 +12,10 @@ interface ProviderSettings {
 }
 
 /** External HTTP seam only. Imported by the E2E runner, never the application. */
-export async function startControlledGitHub(port = 3101) {
+export async function startControlledGitHub(port = 3101, configure?: (app: FastifyInstance) => void) {
   const app = Fastify({ logger: false });
   const codes = new Map<string, { id: number; challenge: string; redirect: string }>();
-  const tokens = new Map<string, { id: number; revoked: boolean }>();
+  const tokens = new Map<string, { id: number; revoked: boolean; expires: number }>();
   const refreshTokens = new Map<string, number>();
   let settings: ProviderSettings = { login: 'alice', expiresIn: 28800, refreshExpiresIn: 15897600, fail: false, deny: false, rateLimit: false };
   let refreshCount = 0;
@@ -39,7 +40,8 @@ export async function startControlledGitHub(port = 3101) {
     if ('revokeRefresh' in value) refreshTokens.clear();
     return { ok: true };
   });
-  app.get('/__stats', () => ({ refreshCount, exchangeCount }));
+  app.get('/__stats', () => ({ refreshCount, exchangeCount,
+    expiredAccessCount: [...tokens.values()].filter((token) => token.expires <= Date.now()).length }));
   app.get('/login/oauth/authorize', (request, reply) => {
     const url = new URL(request.url, `http://127.0.0.1:${port}`);
     if (url.searchParams.get('code_challenge_method') !== 'S256' || !url.searchParams.get('code_challenge')) {
@@ -88,7 +90,8 @@ export async function startControlledGitHub(port = 3101) {
     if (!id) return reply.code(400).send({ error: 'invalid_grant', error_description: 'SENSITIVE_PROVIDER_PAYLOAD' });
     const accessToken = `controlled-access-${randomUUID()}`;
     const refreshToken = `controlled-refresh-${randomUUID()}`;
-    tokens.set(accessToken, { id, revoked: false }); refreshTokens.set(refreshToken, id);
+    tokens.set(accessToken, { id, revoked: false, expires: Date.now() + settings.expiresIn * 1000 });
+    refreshTokens.set(refreshToken, id);
     return { access_token: accessToken, token_type: 'bearer', expires_in: settings.expiresIn,
       refresh_token: refreshToken, refresh_token_expires_in: settings.refreshExpiresIn };
   });
@@ -99,6 +102,7 @@ export async function startControlledGitHub(port = 3101) {
     if (!token || token.revoked) return reply.code(401).send({ error: 'SENSITIVE_PROVIDER_PAYLOAD' });
     return { id: token.id, login: token.id === 101 ? settings.login : 'bob', name: token.id === 101 ? 'Alice Example' : 'Bob Example' };
   });
+  configure?.(app);
   await app.listen({ host: '127.0.0.1', port });
   return app;
 }

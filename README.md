@@ -88,8 +88,10 @@ pnpm dev
 Generate the encryption key once, store it securely and keep it stable across
 restarts. Never put secrets in `VITE_*`, commits, browser storage or logs. Back up
 the encryption key separately from the SQLite database; losing or changing it
-makes saved credentials unreadable and requires signing in again. For HTTPS use
-`APP_ORIGIN=https://your-host` and omit `ALLOW_LOOPBACK_HTTP`. HTTPS sessions use
+makes saved credentials unreadable. Existing sessions then offer **Reconnect
+GitHub**; reauthorizing replaces the unusable credentials without changing your
+application identity. For HTTPS use `APP_ORIGIN=https://your-host` and omit
+`ALLOW_LOOPBACK_HTTP`. HTTPS sessions use
 Secure, HttpOnly, SameSite=Lax, host-only cookies; plain HTTP is permitted only for
 explicit loopback operation. Partial or invalid credential configuration fails
 startup; missing configuration renders an actionable unconfigured screen.
@@ -130,13 +132,18 @@ of bearer session cookies and OAuth state are stored.
 
 Production E2E starts the real application on 3100, real temporary SQLite, and the
 external controlled HTTP provider on 3101. `scripts/controlled-github.ts` exports
-`startControlledGitHub(port)`, returning its Fastify instance so later source tests
-can add controlled GitHub endpoints. `tests/e2e/auth-support.ts` exports `signIn`,
-`currentSession`, `controlProvider`, `applicationOrigin` and `providerOrigin`.
+`startControlledGitHub(port, configure?)`; add future controlled GitHub endpoints
+in the optional Fastify configuration callback before it starts listening.
+`tests/e2e/auth-support.ts` exports `signIn`, `currentSession`, `controlProvider`,
+`restartApplication`, `applicationOrigin` and `providerOrigin`.
 The provider's `/__control` accepts `reset`, `login`, `expiresIn`,
 `refreshExpiresIn`, `fail`, `deny`, `rateLimit`, `revoke` and `revokeRefresh`;
-`/__stats` reports exchange and refresh counts. These are provider routes, never
-application test backdoors. The runner uses ten-second sessions to exercise
+`/__stats` reports exchange/refresh counts and expired controlled access tokens.
+The test runner separately registers `/__runner/restart` on the controlled service;
+it restarts the actual application against the same temporary SQLite database
+using an original or replacement test encryption key. This is test-process
+orchestration only: production application routes, authentication and stored
+records are not bypassed or mutated. The runner uses ten-second sessions to exercise
 server-side expiry. Longer source suites may set `CONTROLLED_SESSION_SECONDS`;
 the short-session expiry test explicitly skips in that mode and must also be
 run in the default mode. Run `E2E_AUTH_MODE=unconfigured pnpm test:e2e` separately
