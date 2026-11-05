@@ -141,6 +141,7 @@ test('refresh rejection and refresh expiry are actionable without substituting a
   await page.reload();
   await expect(page.getByRole('link', { name: 'Reconnect GitHub' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
   await controlProvider(page.request, { expiresIn: 1, refreshExpiresIn: 28800 });
   await signIn(page);
   await controlProvider(page.request, { revokeRefresh: true });
