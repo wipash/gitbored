@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
-import { boardNameValidator, boardSaveValidator, boardSummaryValidator, createEmptyBoardDocument, type Board } from '../shared/boards.js';
+import { boardCopyValidator, boardNameValidator, boardSaveValidator, boardSummaryValidator, createEmptyBoardDocument, type Board } from '../shared/boards.js';
 import { emptyIncoming, validateIncoming } from '../shared/incoming.js';
 import { getDocumentReferenceIds, MAX_NATIVE_DOCUMENT_BYTES, validateNativeDocument, type NativeDocument } from '../shared/nativeDocument.js';
 import { AuthenticationError } from './auth.js';
@@ -64,6 +64,25 @@ export function registerBoards(app: FastifyInstance, database: DatabaseSync): vo
     return reply.code(201).send(load(id, user.id));
   });
   app.get<{ Params: { id: string } }>('/api/boards/:id', (request) => load(request.params.id, app.authentication.requireUserContext(request).id));
+  app.post<{ Params: { id: string } }>('/api/boards/:id/copy', { bodyLimit: MAX_NATIVE_DOCUMENT_BYTES + MAX_INCOMING_BYTES + 1024 }, (request, reply) => {
+    const user = app.authentication.requireUserContext(request);
+    // Copy is a private owner operation, not an import or a revision overwrite.
+    ownedRevision(request.params.id, user.id);
+    let title;
+    let document;
+    let incoming;
+    try {
+      const value = boardCopyValidator.validate(request.body);
+      title = value.title.trim();
+      document = validateNativeDocument(value.document);
+      incoming = incomingState(value.incoming, user.id, document);
+    } catch { return invalid(); }
+    const id = randomUUID();
+    const now = Date.now();
+    database.prepare('INSERT INTO boards (id, owner_id, title, document, incoming, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
+      .run(id, user.id, title, JSON.stringify(document), JSON.stringify(incoming), now, now);
+    return reply.code(201).send(load(id, user.id));
+  });
   app.patch<{ Params: { id: string } }>('/api/boards/:id', (request) => {
     const user = app.authentication.requireUserContext(request);
     ownedRevision(request.params.id, user.id);

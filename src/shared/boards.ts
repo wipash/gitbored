@@ -19,6 +19,7 @@ export const boardTitle = T.string.check((value) => {
 export const boardSummaryValidator = T.object({ id: T.string, title: boardTitle, revision, createdAt: T.number, updatedAt: T.number });
 export const boardSaveValidator = T.object({ expectedRevision: revision, document: T.unknown, incoming: T.unknown });
 export const boardNameValidator = T.object({ title: boardTitle });
+export const boardCopyValidator = T.object({ title: boardTitle, document: T.unknown, incoming: T.unknown });
 export function validateBoard(input: unknown): Board {
   const value = T.object({ id: T.string, title: boardTitle, revision, createdAt: T.number, updatedAt: T.number, document: T.unknown, incoming: T.unknown }).validate(input);
   return { ...value, document: validateNativeDocument(value.document), incoming: validateIncoming(value.incoming) };

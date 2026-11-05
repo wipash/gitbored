@@ -84,6 +84,10 @@ the current owner's summaries; `POST` creates an empty native board with `{title
 `PUT` requires `{expectedRevision, document, incoming}` and atomically advances the
 document/Incoming revision with one conditional SQLite update. A stale save returns
 409 and cannot overwrite either half of the operation.
+`POST /api/boards/:id/copy` accepts `{title, document, incoming}` under the same
+owner/session/Origin/CSRF checks and validation as save, creating a private board
+at revision zero without modifying the source board. It deliberately does not
+require the stale source revision to match: copying preserves both versions.
 `PATCH {title}` updates the display name independently of the document revision;
 `DELETE` permanently removes the owner's board. Cross-owner IDs are404 for every
 operation. Every board request, including GET, requires the current session's
@@ -98,8 +102,11 @@ Selection, camera movement, theme and metadata maps are not document saves. Fail
 saves and conflicts leave the current editor mounted and usable. Check the
 connection and select **Retry save** after a failure. Failures and conflicts stop
 automatic writes even as local editing continues; failed writes never replay
-automatically. **Reload server version** explicitly confirms discarding local edits.
-Keep this tab open to retain them.
+automatically. **Save as copy** keeps the latest complete native/Incoming pair as a
+new private board with a UTC-timestamped copy name. Edits made during a copy remain
+in the original tab and are not acknowledged by that copy; **Open saved copy (new
+tab)** opens the captured version separately. **Reload server version** confirms
+discarding this tab’s edits; it does not clear another editor’s recovery key.
 
 On session-context failure, protected requests pause while the existing
 `/api/session` authority is checked. A renewed session for the **same application
@@ -115,8 +122,49 @@ supported. If **Sign out** ends the server session but you choose **Stay** in th
 warning, the same local editor remains available as a blocked draft. The account
 is labeled **Last checked**, not connected, and protected requests are paused.
 Renew sign-in in another tab, then **Check account** and explicitly **Retry save**.
-There is no browser-persisted private draft, automatic conflict merge or save-as-copy
-yet (recovery is a later ticket).
+Recovery uses version-1 `gitbored:recovery:1:` localStorage envelopes scoped by
+application account, board and a fresh editor writer ID. Each edit records only
+the native reference document and consistent Incoming sources/cursors/queue/seen
+state with the expected revision. Fetched titles, bodies, labels, metadata maps,
+board names, sessions and credentials are excluded. User-authored notes/drawings
+and source/reference identity can still be sensitive; recovery is local work,
+not a private metadata cache or an encrypted backup. Logout/account change never
+loads the previous owner’s recovery into another account.
+
+Reopening first loads the authorized server board, then offers explicit recovery
+choices. A draft based on a different revision can only become a new copy, never
+silently overwrite the server. At the same revision, **Review local draft** opens
+it without saving; **Retry save** is still explicit and retains compare-and-swap.
+The recovery screen’s **Reload server version** opens the server without clearing
+other tabs’ work. A successful current save clears only its writer key (and an
+explicitly reviewed predecessor if that exact captured predecessor is unchanged).
+An acknowledgement for older work keeps the newer pair at the acknowledged base
+revision. Browser storage is best effort and may fail, be cleared or be evicted;
+when a write fails, keep the tab open until save/copy succeeds. SQLite and operator
+backups remain the durable authority. No automatic conflict merge is attempted.
+
+Copying a recovered draft or opening the server does not clear the predecessor’s
+key: it may still belong to another live editor. After a successful copy, a
+separate version-1 `gitbored:recovery-copy:1:` receipt remembers only the copied
+board ID, server creation time and SHA-256 digest of the exact native/Incoming
+pair, scoped to the account, source board and writer. Reopening an unchanged
+draft shows its historical private-copy link; changed work does not inherit that
+receipt. Receipts do not acknowledge the original board or authorize access to
+the copy, which still requires the normal owned-board request. If remembering
+the receipt fails, the private copy still opens with a notice that the original
+draft may appear unmarked. No source draft is removed to attach a receipt.
+Before copy, retry, acknowledgement and leaving, a native checkpoint captures any
+edit whose SDK store notification is still waiting for an animation frame, using
+the same capture boundary and placed-reference queue filtering as ordinary saves.
+Checkpoint capture and normal native notifications share content deduplication:
+the same deferred document is not a newer edit, while real Incoming operations
+still advance the atomic pair. A quota/storage failure announces that the newest
+work may exist only in this tab even when saving is paused after failure/conflict;
+showing that warning never retries or posts a save.
+The warning clears only after an actual successful recovery write or acknowledged
+cleanup, not merely a status change or freeing browser storage. Copy, review and
+reload controls keep keyboard focus while busy; their guarded actions do not
+repeat a request during a held key.
 
 SQLite remains authoritative across browser reloads and real server restarts.
 Use the consistent database backup and separate key recovery procedure below;
