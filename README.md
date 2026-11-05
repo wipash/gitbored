@@ -113,6 +113,11 @@ Repository browsing loads mixed issue/PR pages, including PR-only and empty page
 **Load next page** advances explicitly; a transient failure retains loaded results
 and **Retry page** retries the failed cursor. Provider access loss clears affected
 repository values, aborts their pending reads and offers **Retry repository**.
+Denials are remembered per repository for this source/session lifetime, regardless
+of which repository was selected when the failed request began. Back/navigation,
+**Reload installations**, unrelated denials and successful URL reads do not forget
+them. **Retry repository** clears only the selected repository's block and starts
+fresh page 1; it never restores old rows or recovers another repository.
 An unrelated unavailable URL does not revoke other repositories. Account/session
 context loss clears all source representations and offers explicit **Reload current
 account** through application composition; SourceBrowser does not own another auth
@@ -126,6 +131,10 @@ Pagination and URL controls stay focusable while busy and ignore repeat activati
 After the final page, the same pagination button displays **All pages loaded** as
 unavailable, preserving keyboard focus. Completion never steals focus if you move
 to another control while a request is pending.
+If access loss removes the content you currently focused, focus moves to its
+access notice after removal. Focus in the URL form, an unaffected repository or
+another live control is left alone. A fresh URL submission may show a newly
+authorized item without clearing that repository's separate browsing block.
 
 **Resolve URL** accepts canonical HTTPS `github.com/owner/repository/issues/123`
 and `/pull/123` URLs, optionally ending in `/`, without credentials, ports, encoded
@@ -266,11 +275,16 @@ and nonzero primary quota), and `sourceDelayMs` (0–5000).
 evidence; `POST /__source-stats/reset` clears it. Fixtures contain raw JSON numeric
 IDs beyond `Number.MAX_SAFE_INTEGER`, mixed/PR-only pages, multiple repository
 owners and public-outside-installation/private access scenarios.
-`POST /__source-gate` with `{ "action": "arm", "target": "…" }` holds one supported
-external response (`repositories-page-2`, `items-page-2`, `issue-detail` or
-`old-token-401`). `GET /__source-gate` reports whether it entered; POST with
-`action: release` or `reset` settles it. These gates prove races without sleeps,
-application mutation or exposing tokens; normal provider shutdown releases them.
+`POST /__source-gate` with `{ "action": "arm", "target": "…" }` holds a supported
+external response (`repositories-page-2`, `items-page-2`, `issue-detail`,
+`issue-detail-next`, `repository-denial` or `old-token-401`). Different targets can
+be held independently to exercise overlapping real requests. `repository-denial`
+captures the configured real denial before waiting, so later fixture restoration
+does not change that held response's status.
+`GET /__source-gate?target=…` reports entered/released/completed state; without a
+target it reports the latest armed gate. POST with `action: release` or `reset`
+settles that target, or all targets when omitted. These gates prove races without
+sleeps, application mutation or exposing tokens; normal shutdown releases them.
 The test runner separately registers `/__runner/restart` on the controlled service;
 it restarts the actual application against the same temporary SQLite database
 using an original or replacement test encryption key. This is test-process

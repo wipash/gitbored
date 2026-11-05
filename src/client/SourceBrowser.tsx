@@ -11,7 +11,7 @@ type SignedInSession = Extract<SessionResponse, { status: 'signed-in' }>;
 class SourceReadError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string) { super(message); }
 }
-interface SourceSessionProps { session: SignedInSession; onAccessLoss: (failure: SourceReadError, scope?: string, origin?: Element | null) => void }
+interface SourceSessionProps { session: SignedInSession; onAccessLoss: (failure: SourceReadError, scope?: string) => void }
 async function requestJson<T>(path: string, signal: AbortSignal, session: SignedInSession, decode: (value: unknown) => T, url?: string): Promise<T> {
   const response = await fetch(path, { signal, cache: 'no-store', headers: {
     'X-CSRF-Token': session.csrfToken, ...(url === undefined ? {} : { 'Content-Type': 'application/json' }),
@@ -43,10 +43,8 @@ function usePages<T>(path: string, session: SignedInSession, identify: (item: T)
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [requested, setRequested] = useState({ page: 1, attempt: 0 });
-  const focusOrigin = useRef<Element | null>(null);
   function load(page: number): void {
     if (busy) return;
-    focusOrigin.current = document.activeElement;
     setBusy(true); setError('');
     setRequested((previous) => ({ page, attempt: previous.attempt + 1 }));
   }
@@ -66,7 +64,7 @@ function usePages<T>(path: string, session: SignedInSession, identify: (item: T)
         if (active.signal.aborted) return;
         const accessLost = failure instanceof SourceReadError
           && (isSessionContextFailure(failure.status, failure.code) || failure.status === 403 || failure.status === 404);
-        if (accessLost) { setItems([]); setLoadedPage(0); setNextPage(1); onAccessLoss(failure, scope, focusOrigin.current); }
+        if (accessLost) { onAccessLoss(failure, scope); setItems([]); setLoadedPage(0); setNextPage(1); }
         const message = failure instanceof Error ? failure.message : 'Unable to load this page. Retry shortly.';
         setError(`${message} ${accessLost ? 'Previously loaded values were cleared. Retry from page 1 after restoring access.' : 'Already loaded results are retained and may be stale.'}`);
       } finally {
@@ -116,7 +114,7 @@ function RepositoryItems({ repository, session, onAccessLoss }: SourceSessionPro
   const queryInput = useRef<HTMLInputElement>(null);
   const matches = pages.items.filter((item) => (kind === 'all' || item.metadata.kind === kind)
     && `${item.metadata.title} ${item.metadata.locator.number}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-  return <section aria-labelledby="source-items-heading"><h2 id="source-items-heading"><bdi>{repository.owner}/{repository.name}</bdi></h2>
+  return <section aria-labelledby="source-items-heading" data-source-scope={repositoryScope(repository.owner, repository.name)}><h2 id="source-items-heading"><bdi>{repository.owner}/{repository.name}</bdi></h2>
     <p>Browse mixed issues and pull requests. Discovery does not add anything to a board.</p>
     <div className="source-filters"><label>Filter loaded titles or numbers<input ref={queryInput} type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
       <label>Kind in loaded results<select value={kind} onChange={(event) => setKind(event.currentTarget.value)}><option value="all">Issues and pull requests</option><option value="issue">Issues</option><option value="pull-request">Pull requests</option></select></label></div>
@@ -154,56 +152,75 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const controller = useRef<{ controller: AbortController; scope: string | undefined } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const panel = useRef<HTMLElement>(null);
   const accessNotice = useRef<HTMLParagraphElement>(null);
-  const recoverFocus = useRef(false);
+  const removedFocus = useRef<Element | null>(null);
   const [authorizationLost, setAuthorizationLost] = useState(false);
-  const [blockedRepository, setBlockedRepository] = useState<{ scope: string; message: string } | null>(null);
+  const [repositoryDenials, setRepositoryDenials] = useState<ReadonlyMap<string, string>>(() => new Map<string, string>());
   const selectedScope = repository ? repositoryScope(repository.owner, repository.name) : undefined;
-  const loseAccess = useCallback((failure: SourceReadError, scope?: string, origin?: Element | null): void => {
+  const denialMessage = selectedScope === undefined ? undefined : repositoryDenials.get(selectedScope);
+  const loseAccess = useCallback((failure: SourceReadError, scope?: string): void => {
     const contextLost = isSessionContextFailure(failure.status, failure.code);
+    const focused = document.activeElement;
+    const focusedScope = focused?.closest('[data-source-scope]')?.getAttribute('data-source-scope');
+    if (focused && (contextLost
+      ? panel.current?.contains(focused) && focused !== heading.current
+      : scope !== undefined && focusedScope === scope)) removedFocus.current = focused;
     if (contextLost || (scope !== undefined && controller.current?.scope === scope)) {
       controller.current?.controller.abort(); setBusy(false);
     }
     if (contextLost) {
       setAuthorizationLost(true); setInstallation(null); setRepository(null); setResolved(null); setUrl(''); setError('');
+      setRepositoryDenials(new Map<string, string>());
     } else if (scope !== undefined) {
-      if (scope === selectedScope) setBlockedRepository({ scope, message: failure.message });
+      setRepositoryDenials((previous) => {
+        if (previous.get(scope) === failure.message) return previous;
+        const next = new Map(previous); next.set(scope, failure.message); return next;
+      });
       setResolved((current) => current && repositoryScope(current.metadata.locator.owner, current.metadata.locator.repository) === scope ? null : current);
     }
-    if ((contextLost || (scope !== undefined && scope === selectedScope)) && origin && document.activeElement === origin) recoverFocus.current = true;
-  }, [selectedScope]);
+  }, []);
   useLayoutEffect(() => {
-    if (!recoverFocus.current) return;
-    recoverFocus.current = false;
-    if (document.activeElement === document.body) accessNotice.current?.focus();
-  }, [authorizationLost, blockedRepository]);
+    const previous = removedFocus.current;
+    removedFocus.current = null;
+    if (!previous || previous.isConnected || document.activeElement !== document.body) return;
+    const notice = accessNotice.current ?? panel.current?.querySelector<HTMLElement>('#source-url-error');
+    notice?.focus();
+  }, [authorizationLost, repositoryDenials, resolved]);
   useEffect(() => () => controller.current?.controller.abort(), []);
   async function resolve(): Promise<void> {
     if (busy) return;
     controller.current?.controller.abort();
-    const active = new AbortController(); const scope = urlScope(url); const origin = document.activeElement;
-    controller.current = { controller: active, scope };
+    const active = new AbortController(); const scope = urlScope(url);
+    const operation = { controller: active, scope }; controller.current = operation;
     setBusy(true); setError(''); setResolved(null);
-    try { const item = await requestJson('/api/sources/resolve', active.signal, session, readSourceItem, url); if (!active.signal.aborted) setResolved(item); }
+    try {
+      const item = await requestJson('/api/sources/resolve', active.signal, session, readSourceItem, url);
+      if (controller.current === operation && !active.signal.aborted) setResolved(item);
+    }
     catch (failure) {
-      if (!active.signal.aborted) {
-        if (failure instanceof SourceReadError && (isSessionContextFailure(failure.status, failure.code) || failure.status === 403 || failure.status === 404)) loseAccess(failure, scope, origin);
+      if (controller.current === operation && !active.signal.aborted) {
+        if (failure instanceof SourceReadError && (isSessionContextFailure(failure.status, failure.code) || failure.status === 403 || failure.status === 404)) loseAccess(failure, scope);
         setError(failure instanceof Error ? failure.message : 'Unable to resolve this URL. Check it and retry.');
       }
     }
-    finally { if (!active.signal.aborted) setBusy(false); }
+    finally { if (controller.current === operation && !active.signal.aborted) setBusy(false); }
   }
   function navigate(action: () => void): void { action(); heading.current?.focus(); }
   let browsing: ReactNode;
   if (authorizationLost) browsing = <p className="auth-error" role="alert" ref={accessNotice} tabIndex={-1}>Your account, session or GitHub authorization changed. Loaded source values were cleared. <a href="/">Reload current account</a> to reconcile the signed-in account, or <a href="/api/auth/github">Reconnect GitHub</a> if authorization ended.</p>;
-  else if (repository && blockedRepository?.scope === repositoryScope(repository.owner, repository.name)) browsing = <section>
-    <p className="auth-error" role="alert" ref={accessNotice} tabIndex={-1}>{blockedRepository.message} Previously loaded values were cleared. Restore access, then retry this repository.</p>
-    <button type="button" onClick={() => { setBlockedRepository(null); heading.current?.focus(); }}>Retry repository</button>
+  else if (repository && denialMessage !== undefined) browsing = <section>
+    <p className="auth-error" role="alert" ref={accessNotice} tabIndex={-1}>{denialMessage} Previously loaded values were cleared. Restore access, then retry this repository.</p>
+    <button type="button" onClick={() => {
+      const scope = repositoryScope(repository.owner, repository.name);
+      setRepositoryDenials((previous) => { const next = new Map(previous); next.delete(scope); return next; });
+      heading.current?.focus();
+    }}>Retry repository</button>
   </section>;
   else if (repository) browsing = <RepositoryItems key={`${session.user.id}:${repository.nodeId}`} repository={repository} session={session} onAccessLoss={loseAccess} />;
   else if (installation) browsing = <Repositories key={`${session.user.id}:${installation.id}`} installation={installation} session={session} onAccessLoss={loseAccess} onSelect={(repo) => navigate(() => setRepository(repo))} />;
   else browsing = <Installations key={`${session.user.id}:${generation}`} session={session} onAccessLoss={loseAccess} onSelect={(item) => navigate(() => setInstallation(item))} />;
-  return <section className="source-browser runtime-panel" aria-labelledby="sources-heading">
+  return <section className="source-browser runtime-panel" aria-labelledby="sources-heading" ref={panel}>
     <h2 id="sources-heading" ref={heading} tabIndex={-1}>Browse GitHub sources</h2>
     <p>Sign-in identifies you; it does not install the app or approve organization access. A repository owner must install the app and select private repositories. An organization may also need to approve it.</p>
     <p>Public issue and pull request URLs can be available even when their repository is not an installed source. URL access does not imply installation or webhook coverage.</p>
@@ -220,8 +237,8 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
         <button type="submit" aria-disabled={busy}>Resolve URL</button>
       </form>
       <p role="status">{busy ? 'Resolving GitHub URL…' : resolved ? 'Item resolved. No canvas placement was created.' : ''}</p>
-      {error && <p id="source-url-error" className="auth-error" role="alert">{error} <a href="/api/auth/github">Reconnect GitHub</a> if needed, then retry.</p>}
-      {resolved && <ul className="source-items"><ItemRow item={resolved} /></ul>}
+      {error && <p id="source-url-error" className="auth-error" role="alert" tabIndex={-1}>{error} <a href="/api/auth/github">Reconnect GitHub</a> if needed, then retry.</p>}
+      {resolved && <ul className="source-items" data-source-scope={repositoryScope(resolved.metadata.locator.owner, resolved.metadata.locator.repository)}><ItemRow item={resolved} /></ul>}
     </section>}
   </section>;
 }

@@ -13,31 +13,44 @@ export interface ControlledSourceSettings {
 export function registerControlledSources(app: FastifyInstance, port: number, identity: (request: FastifyRequest) => number | null,
   settings: () => ControlledSourceSettings) {
   const requests: { user: number; path: string }[] = [];
-  type GateTarget = 'repositories-page-2' | 'items-page-2' | 'old-token-401' | 'issue-detail';
-  let gate: { target: GateTarget; entered: boolean; released: boolean; promise: Promise<void>; release: () => void } | null = null;
+  type GateTarget = 'repositories-page-2' | 'items-page-2' | 'old-token-401' | 'issue-detail' | 'issue-detail-next' | 'repository-denial';
+  const gates = new Map<string, { target: GateTarget; entered: boolean; released: boolean; completed: boolean; promise: Promise<void>; release: () => void }>();
+  let latestGate: string | null = null;
   app.post('/__source-gate', (request, reply) => {
     const body = request.body;
     if (typeof body !== 'object' || body === null || !('action' in body)) return reply.code(400).send({ error: 'Choose a gate action.' });
     if (body.action === 'release' || body.action === 'reset') {
-      if (gate) { gate.released = true; gate.release(); }
-      if (body.action === 'reset') gate = null;
+      if ('target' in body && typeof body.target !== 'string') return reply.code(400).send({ error: 'Choose a supported gate target.' });
+      for (const [target, current] of gates) {
+        if ('target' in body && body.target !== target) continue;
+        current.released = true; current.release();
+        if (body.action === 'reset') gates.delete(target);
+      }
+      if (body.action === 'reset' && !('target' in body)) latestGate = null;
       return { ok: true };
     }
-    if (body.action !== 'arm' || !('target' in body) || (body.target !== 'repositories-page-2' && body.target !== 'items-page-2' && body.target !== 'old-token-401' && body.target !== 'issue-detail')) return reply.code(400).send({ error: 'Choose a supported gate target.' });
-    if (gate && !gate.released) return reply.code(409).send({ error: 'Release the active gate first.' });
+    if (body.action !== 'arm' || !('target' in body) || (body.target !== 'repositories-page-2' && body.target !== 'items-page-2' && body.target !== 'old-token-401' && body.target !== 'issue-detail' && body.target !== 'issue-detail-next' && body.target !== 'repository-denial')) return reply.code(400).send({ error: 'Choose a supported gate target.' });
+    const existing = gates.get(body.target);
+    if (existing && !existing.released) return reply.code(409).send({ error: 'Release this active gate first.' });
     let release: (() => void) | undefined;
     const promise = new Promise<void>((resolve) => { release = resolve; });
     if (!release) throw new Error('The controlled gate must initialize its release synchronously.');
-    gate = { target: body.target, entered: false, released: false, promise, release };
+    gates.set(body.target, { target: body.target, entered: false, released: false, completed: false, promise, release });
+    latestGate = body.target;
     return { ok: true };
   });
-  app.get('/__source-gate', () => ({ target: gate?.target ?? null, entered: gate?.entered ?? false, released: gate?.released ?? false }));
-  app.addHook('preClose', async () => { gate?.release(); });
+  app.get('/__source-gate', (request) => {
+    const target = new URL(request.url, `http://127.0.0.1:${port}`).searchParams.get('target') ?? latestGate;
+    const current = target ? gates.get(target) : undefined;
+    return { target: current?.target ?? null, entered: current?.entered ?? false, released: current?.released ?? false, completed: current?.completed ?? false };
+  });
+  app.addHook('preClose', async () => { for (const current of gates.values()) current.release(); });
   async function hold(target: GateTarget): Promise<boolean> {
-    const current = gate;
-    if (!current || current.target !== target || current.entered) return false;
+    const current = gates.get(target);
+    if (!current || current.entered) return false;
     current.entered = true;
     await current.promise;
+    current.completed = true;
     return true;
   }
   app.addHook('onRequest', async (request) => {
@@ -55,11 +68,11 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     labels: Array.from({ length: 8 }, (_, index) => ({ name: `Label ${index + 1} ${'extended '.repeat(4)}` })),
     assignees: [{ login: owner }, { login: 'another-contributor' }], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', closed_at: pull ? '2026-11-01T00:00:00Z' : null });
   const raw = (reply: FastifyReply, value: unknown) => reply.type('application/json').send(JSON.stringify(value).replace(/"raw:([0-9]+)"/g, '$1'));
-  function authorize(request: FastifyRequest, reply: FastifyReply): number | null {
+  function authorize(request: FastifyRequest, reply: FastifyReply, checkDenial = true): number | null {
     const user = identity(request);
     if (!user) { void reply.code(401).send({ message: 'Controlled unauthorized' }); return null; }
     requests.push({ user, path: request.url });
-    if (settings().sourceDenied) { void reply.code(settings().sourceDenialStatus).send({ message: 'Controlled missing approval' }); return null; }
+    if (checkDenial && settings().sourceDenied) { void reply.code(settings().sourceDenialStatus).send({ message: 'Controlled missing approval' }); return null; }
     return user;
   }
   function next(reply: FastifyReply, request: FastifyRequest, page: number, hasNext: boolean): void {
@@ -91,8 +104,13 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (page === 2) await hold('repositories-page-2');
     return raw(reply, { total_count: 2, repositories: [repo(owner, page === 1 ? 'project' : 'other')] });
   });
-  app.get<{ Params: { owner: string; name: string } }>('/repos/:owner/:name', (request, reply) => {
-    const user = authorize(request, reply); if (!user) return reply;
+  app.get<{ Params: { owner: string; name: string } }>('/repos/:owner/:name', async (request, reply) => {
+    const denied = settings().sourceDenied; const denialStatus = settings().sourceDenialStatus;
+    const user = authorize(request, reply, false); if (!user) return reply;
+    if (denied) {
+      await hold('repository-denial');
+      return reply.code(denialStatus).send({ message: 'Controlled missing approval' });
+    }
     const { owner, name } = request.params;
     if (owner === 'missing' || (name !== 'outside' && owner !== (user === 101 ? 'alice' : 'bob') && owner !== 'example-org')) return reply.code(404).send({ message: 'Private access denied' });
     if (owner === 'approval') return reply.code(403).send({ message: 'Organization approval required' });
@@ -115,7 +133,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
   app.get<{ Params: { owner: string; name: string; number: string } }>('/repos/:owner/:name/issues/:number', async (request, reply) => {
     if (!authorize(request, reply)) return reply;
     const { owner, name, number } = request.params;
-    await hold('issue-detail');
+    if (!await hold('issue-detail')) await hold('issue-detail-next');
     return raw(reply, issue(owner, name, Number(number), Number(number) % 2 === 0));
   });
   app.get<{ Params: { owner: string; name: string; number: string } }>('/repos/:owner/:name/pulls/:number', (request, reply) => {
