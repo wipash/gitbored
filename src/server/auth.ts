@@ -11,6 +11,40 @@ export class AuthenticationError extends Error {
   }
 }
 
+interface ProviderFailureDiagnostic {
+  operation: 'token_exchange' | 'identity_lookup';
+  category: 'http' | 'network' | 'invalid_json' | 'invalid_response' | 'rate_limited';
+  httpStatus?: number;
+  networkCode?: string;
+}
+
+class ProviderAuthenticationError extends AuthenticationError {
+  constructor(statusCode: number, code: string, message: string, readonly diagnostic: ProviderFailureDiagnostic) {
+    super(statusCode, code, message);
+  }
+}
+
+const networkFailureCodes: Record<string, true> = {
+  ECONNREFUSED: true, ECONNRESET: true, ENOTFOUND: true, EAI_AGAIN: true, ETIMEDOUT: true,
+  ENETUNREACH: true, EHOSTUNREACH: true, EPIPE: true,
+  CERT_HAS_EXPIRED: true, CERT_NOT_YET_VALID: true, DEPTH_ZERO_SELF_SIGNED_CERT: true,
+  SELF_SIGNED_CERT_IN_CHAIN: true, UNABLE_TO_VERIFY_LEAF_SIGNATURE: true,
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: true, ERR_TLS_CERT_ALTNAME_INVALID: true,
+  ERR_SSL_WRONG_VERSION_NUMBER: true, ERR_SSL_TLSV1_ALERT_PROTOCOL_VERSION: true,
+  UND_ERR_CONNECT_TIMEOUT: true, UND_ERR_HEADERS_TIMEOUT: true, UND_ERR_BODY_TIMEOUT: true, UND_ERR_SOCKET: true,
+};
+
+function providerNetworkCode(error: unknown): string {
+  let cause = error;
+  for (let depth = 0; depth < 4 && record(cause); depth += 1) {
+    if (cause['name'] === 'TimeoutError') return 'TIMEOUT';
+    const code = cause['code'];
+    if (typeof code === 'string' && networkFailureCodes[code] === true) return code;
+    cause = cause['cause'];
+  }
+  return 'UNKNOWN';
+}
+
 export interface AuthenticatedUser extends SessionUser {
   csrfToken: string;
 }
@@ -181,18 +215,23 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
         method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
         body: parameters, signal: AbortSignal.timeout(10_000), redirect: 'error',
       });
-    } catch {
-      throw new AuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.');
+    } catch (error) {
+      throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.',
+        { operation: 'token_exchange', category: 'network', networkCode: providerNetworkCode(error) });
     }
     let value: unknown;
-    try { value = await response.json(); } catch {
-      throw new AuthenticationError(502, 'provider_unavailable', 'GitHub returned an unreadable response. Try again shortly.');
+    try { value = await response.json(); } catch (error) {
+      throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub returned an unreadable response. Try again shortly.',
+        { operation: 'token_exchange', category: error instanceof SyntaxError ? 'invalid_json' : 'network',
+          httpStatus: response.status, ...(error instanceof SyntaxError ? {} : { networkCode: providerNetworkCode(error) }) });
     }
     if (!response.ok || !record(value) || typeof value['access_token'] !== 'string' || !value['access_token']) {
+      const diagnostic: ProviderFailureDiagnostic = { operation: 'token_exchange',
+        category: response.ok ? 'invalid_response' : 'http', httpStatus: response.status };
       if (response.status === 429 || response.status >= 500) {
-        throw new AuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.');
+        throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.', diagnostic);
       }
-      throw new AuthenticationError(401, 'reauthorize', 'GitHub authorization ended. Sign in again to reconnect.');
+      throw new ProviderAuthenticationError(401, 'reauthorize', 'GitHub authorization ended. Sign in again to reconnect.', diagnostic);
     }
     const expires = value['expires_in'];
     const refreshExpires = value['refresh_token_expires_in'];
@@ -200,7 +239,8 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
     if ((expires !== undefined && (typeof expires !== 'number' || !Number.isSafeInteger(expires) || expires < 1))
       || (refreshExpires !== undefined && (typeof refreshExpires !== 'number' || !Number.isSafeInteger(refreshExpires) || refreshExpires < 1))
       || (refreshToken !== undefined && (typeof refreshToken !== 'string' || !refreshToken))) {
-      throw new AuthenticationError(502, 'provider_unavailable', 'GitHub returned invalid credentials. Try signing in again.');
+      throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub returned invalid credentials. Try signing in again.',
+        { operation: 'token_exchange', category: 'invalid_response', httpStatus: response.status });
     }
     return { accessToken: value['access_token'], refreshToken: typeof refreshToken === 'string' ? refreshToken : null,
       accessExpires: typeof expires === 'number' ? Date.now() + expires * 1000 : null,
@@ -255,19 +295,28 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
       response = await fetch(`${config.apiOrigin}/user`, { headers: { Authorization: `Bearer ${accessToken}`,
         Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
       redirect: 'error', signal: AbortSignal.timeout(10_000) });
-    } catch {
-      throw new AuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.');
+    } catch (error) {
+      throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.',
+        { operation: 'identity_lookup', category: 'network', networkCode: providerNetworkCode(error) });
     }
     if (response.status === 403 && (response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after'))) {
-      throw new AuthenticationError(502, 'provider_unavailable', 'GitHub is temporarily limiting requests. Try again shortly.');
+      throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub is temporarily limiting requests. Try again shortly.',
+        { operation: 'identity_lookup', category: 'rate_limited', httpStatus: response.status });
     }
     if (response.status === 401 || response.status === 403) {
-      throw new AuthenticationError(401, 'reauthorize', 'GitHub authorization was revoked. Sign in again to reconnect.');
+      throw new ProviderAuthenticationError(401, 'reauthorize', 'GitHub authorization was revoked. Sign in again to reconnect.',
+        { operation: 'identity_lookup', category: 'http', httpStatus: response.status });
     }
-    if (!response.ok) throw new AuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.');
+    if (!response.ok) throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub is unavailable. Try again shortly.',
+      { operation: 'identity_lookup', category: 'http', httpStatus: response.status });
     try { return providerIdentity(await response.json()); } catch (error) {
-      if (error instanceof AuthenticationError) throw error;
-      throw new AuthenticationError(502, 'provider_unavailable', 'GitHub returned an unreadable identity. Try again shortly.');
+      if (error instanceof AuthenticationError) {
+        throw new ProviderAuthenticationError(error.statusCode, error.code, error.message,
+          { operation: 'identity_lookup', category: 'invalid_response', httpStatus: response.status });
+      }
+      throw new ProviderAuthenticationError(502, 'provider_unavailable', 'GitHub returned an unreadable identity. Try again shortly.',
+        { operation: 'identity_lookup', category: error instanceof SyntaxError ? 'invalid_json' : 'network',
+          httpStatus: response.status, ...(error instanceof SyntaxError ? {} : { networkCode: providerNetworkCode(error) }) });
     }
   }
 
@@ -362,6 +411,10 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
         `${sessionCookie}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${config.sessionSeconds}${config.secure ? '; Secure' : ''}` ]);
       return reply.redirect('/');
     } catch (error) {
+      if (error instanceof ProviderAuthenticationError) {
+        // Log once at the callback boundary, never the request, provider payload or raw exception.
+        console.warn(JSON.stringify({ event: 'github_oauth_callback_failed', ...error.diagnostic }));
+      }
       if (error instanceof AuthenticationError) return reply.redirect(`/?authError=${error.code === 'reauthorize' ? 'denied' : 'provider'}`);
       throw error;
     }
