@@ -20,15 +20,16 @@ function readTheme(): ThemeState {
   }
 }
 
-export function useTheme(): ThemeState & { selectTheme: (preference: ThemePreference) => void } {
+export function useTheme(): ThemeState & { resolved: 'light' | 'dark'; selectTheme: (preference: ThemePreference) => void } {
   const [theme, setTheme] = useState(readTheme);
+  const [resolved, setResolved] = useState<'light' | 'dark'>('light');
 
   useLayoutEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     function applyTheme(): void {
-      document.documentElement.dataset['theme'] = theme.preference === 'system'
-        ? media.matches ? 'dark' : 'light'
-        : theme.preference;
+      const value = theme.preference === 'system' ? media.matches ? 'dark' : 'light' : theme.preference;
+      document.documentElement.dataset['theme'] = value;
+      setResolved(value);
     }
     applyTheme();
     media.addEventListener('change', applyTheme);
@@ -44,5 +45,5 @@ export function useTheme(): ThemeState & { selectTheme: (preference: ThemePrefer
     }
   }
 
-  return { ...theme, selectTheme };
+  return { ...theme, resolved, selectTheme };
 }

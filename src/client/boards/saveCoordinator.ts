@@ -1,0 +1,57 @@
+import type { NativeDocument } from '../../shared/nativeDocument';
+import type { BoardSave } from '../../shared/boards';
+
+export interface SaveState { status: 'saved' | 'saving' | 'unsaved' | 'conflict'; message: string; retryable?: true }
+export class BoardSaveError extends Error {
+  constructor(public readonly kind: 'conflict' | 'failed') { super(kind); }
+}
+/** A single flight owns its captured generation. Acknowledging it cannot acknowledge later edits. */
+export class SaveCoordinator {
+  private generation = 0;
+  private acknowledged = 0;
+  private pending: NativeDocument | null = null;
+  private flight = false;
+  private stopped = false;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private listeners = new Set<() => void>();
+  private state: SaveState = { status: 'saved', message: 'Saved' };
+  constructor(private revision: number, private readonly send: (save: BoardSave) => Promise<number>) {}
+  getSnapshot = (): SaveState => this.state;
+  subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  private publish(state: SaveState): void { if (this.stopped) return; this.state = state; for (const listener of this.listeners) listener(); }
+  get dirty(): boolean { return !this.stopped && this.generation !== this.acknowledged; }
+  change = (document: NativeDocument): void => {
+    if (this.stopped) return;
+    this.pending = document;
+    this.generation += 1;
+    if (this.state.status === 'conflict') return;
+    this.publish({ status: this.flight ? 'saving' : 'unsaved', message: this.flight ? 'Saving… Newer changes are waiting.' : 'Unsaved changes' });
+    this.schedule();
+  };
+  private schedule(): void {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => { void this.save(); }, 300);
+  }
+  retry = (): void => { if (this.state.status !== 'conflict') void this.save(); };
+  private async save(): Promise<void> {
+    clearTimeout(this.timer);
+    if (this.stopped || this.flight || !this.pending || !this.dirty || this.state.status === 'conflict') return;
+    const generation = this.generation;
+    const document = this.pending;
+    this.flight = true;
+    this.publish({ status: 'saving', message: 'Saving…' });
+    try {
+      const revision = await this.send({ expectedRevision: this.revision, document });
+      if (this.stopped) return;
+      this.revision = revision;
+      this.acknowledged = generation;
+      this.publish(this.dirty ? { status: 'unsaved', message: 'Unsaved changes' } : { status: 'saved', message: 'Saved' });
+      if (this.dirty) this.schedule();
+    } catch (error) {
+      this.publish(error instanceof BoardSaveError && error.kind === 'conflict'
+        ? { status: 'conflict', message: 'Conflict — another tab saved a newer version. Your current work is still here. Keep this tab open; reloading discards these local changes.' }
+        : { status: 'unsaved', retryable: true, message: 'Unsaved — saving failed. Your current work is still here. Check your connection, then Retry save. If your session ended, sign in in another tab first.' });
+    } finally { this.flight = false; }
+  }
+  dispose(): void { this.stopped = true; clearTimeout(this.timer); this.listeners.clear(); }
+}

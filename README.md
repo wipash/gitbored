@@ -4,9 +4,11 @@ A local-first issue-board application in development. Product scope lives in
 [the issue-canvas specification](.scratch/issue-canvas/spec.md).
 
 The runnable application provides GitHub App user sign-in, encrypted server-side
-credentials, private sessions, authorized GitHub source browsing and persistent
-light/dark/system theme selection. The separate `/runtime` diagnostic checks
-Fastify and real SQLite. Incoming and board editing are not implemented yet.
+credentials, private sessions, authorized GitHub source browsing, owner-only durable
+boards and persistent light/dark/system theme selection. Boards mount the native
+canvas for notes, drawings, frames, groups and reference placements. The separate
+`/runtime` diagnostic checks Fastify and real SQLite. Incoming placement is not
+implemented yet.
 
 ## Requirements
 
@@ -28,8 +30,8 @@ pnpm dev
 Open <http://127.0.0.1:3001>. Vite serves the client and proxies `/api` to
 Fastify on port 3002. Ctrl+C stops both development processes.
 
-The server creates `.data/gitbored.sqlite` with authentication and user-scoped
-repository-source/reference-registry tables. `DATA_DIR`
+The server creates `.data/gitbored.sqlite` with authentication, private board and
+user-scoped repository-source/reference-registry tables. `DATA_DIR`
 changes that directory; relative paths resolve from the repository root. The
 directory is restricted to the server account and runtime data is ignored by Git.
 
@@ -59,9 +61,46 @@ default. Stop the development server before starting it, or set a different
 Unknown API routes and missing assets return errors, not the application HTML.
 
 
+## Private durable boards
+
+Sign in, open **Boards**, enter a name and select **Create board**. Each board is
+private to its signed-in creator. **Board settings** renames the board or opens a
+permanent-deletion confirmation requiring the exact board name. Deleting a board
+does not change GitHub. The list and workspace support both themes and keyboard
+controls; the spatial canvas scrolls independently of the surrounding document.
+
+`src/shared/boards.ts` owns the board/save contract. `GET /api/boards` lists only
+the current owner's summaries; `POST` creates an empty native board with `{title}`.
+`GET /api/boards/:id` returns its validated document and revision. `PUT` accepts
+`{expectedRevision, document}` and atomically advances the document revision with
+a conditional SQLite update. A stale save returns409 and cannot overwrite content.
+`PATCH {title}` updates the display name independently of the document revision;
+`DELETE` permanently removes the owner's board. Cross-owner IDs are404 for every
+operation. Unsafe operations retain exact-Origin/session/CSRF checks.
+
+Document changes are coalesced and saved one flight at a time. **Saved** means the
+server acknowledged all current edits; **Saving**, **Unsaved** and **Conflict**
+do not claim durability. Later edits cannot be acknowledged by an older response.
+Selection, camera movement, theme and metadata maps are not document saves. Failed
+saves and conflicts leave the current editor mounted and usable. Check the
+connection and select **Retry save** after a failure; expired sessions can be
+renewed in another tab. A conflict stops automatic writes. **Reload server version**
+explicitly confirms discarding local edits; keep the tab open to retain them.
+Navigation with unacknowledged edits invokes the browser's leave warning where
+supported. There is no browser-persisted private draft, automatic conflict merge,
+or save-as-copy yet (recovery is a later ticket).
+
+SQLite remains authoritative across browser reloads and real server restarts.
+For a straightforward local backup, stop the server cleanly, copy the entire data
+directory to protected storage, and retain the token-encryption key separately.
+Restore with the server stopped, replace the data directory with that backup,
+restore the same key, then restart and reopen a board. Do not copy only the main
+SQLite file while a WAL-mode server is writing.
+
+
 ## Native workspace keyboard boundary
 
-The reusable native workspace is not yet mounted as an authenticated board.
+The native workspace is mounted at authenticated `/boards/:id` routes.
 Its SDK is pinned to 5.6.0. Two version-specific pnpm patches in `patches/`,
 registered in `pnpm-workspace.yaml`, correct accepted-key releases in
 `@tldraw/editor` and tldraw's body-owned comma shortcut. A native press must finish

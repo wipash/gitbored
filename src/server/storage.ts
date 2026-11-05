@@ -28,6 +28,13 @@ export async function openStorage(directory: string): Promise<DatabaseSync> {
         state_hash TEXT PRIMARY KEY, binding_hash TEXT NOT NULL,
         verifier TEXT NOT NULL, expires INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS boards (
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id),
+        title TEXT NOT NULL, document TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS boards_owner_updated ON boards(owner_id, updated_at DESC);
     `);
     initializeSources(database);
     return database;
