@@ -1,3 +1,4 @@
+/// <reference lib="es2024.promise" />
 import { expect, test } from '@playwright/test';
 import type { Page, Route, APIResponse } from '@playwright/test';
 import { T } from '@tldraw/validate';
