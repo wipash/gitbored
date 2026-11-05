@@ -1,0 +1,36 @@
+{
+  "name": "gitbored",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=26.8.1 <27"
+  },
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "build": "tsx scripts/locked.ts build",
+    "start": "NODE_ENV=production node dist/server/server/main.js",
+    "lint": "oxlint --type-aware --tsconfig tsconfig.lint.json --deny-warnings && tsx scripts/check-boundaries.ts",
+    "type-check": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.tools.json",
+    "test:e2e": "tsx scripts/locked.ts e2e",
+    "gate": "pnpm lint && pnpm type-check && pnpm test:e2e"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.10",
+    "fastify": "5.12.8",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "oxlint": "1.91.0",
+    "oxlint-tsgolint": "7.0.2005",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vite": "8.3.6"
+  }
+}
