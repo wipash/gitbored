@@ -7,10 +7,39 @@ export interface ControlledSourceSettings {
   pullUnavailable: boolean;
   sourceDelayMs: number;
   sourceDenied: boolean;
+  sourceDenialStatus: 403 | 404;
+  sourceThrottlePage: number;
 }
 export function registerControlledSources(app: FastifyInstance, port: number, identity: (request: FastifyRequest) => number | null,
   settings: () => ControlledSourceSettings) {
   const requests: { user: number; path: string }[] = [];
+  type GateTarget = 'repositories-page-2' | 'items-page-2' | 'old-token-401' | 'issue-detail';
+  let gate: { target: GateTarget; entered: boolean; released: boolean; promise: Promise<void>; release: () => void } | null = null;
+  app.post('/__source-gate', (request, reply) => {
+    const body = request.body;
+    if (typeof body !== 'object' || body === null || !('action' in body)) return reply.code(400).send({ error: 'Choose a gate action.' });
+    if (body.action === 'release' || body.action === 'reset') {
+      if (gate) { gate.released = true; gate.release(); }
+      if (body.action === 'reset') gate = null;
+      return { ok: true };
+    }
+    if (body.action !== 'arm' || !('target' in body) || (body.target !== 'repositories-page-2' && body.target !== 'items-page-2' && body.target !== 'old-token-401' && body.target !== 'issue-detail')) return reply.code(400).send({ error: 'Choose a supported gate target.' });
+    if (gate && !gate.released) return reply.code(409).send({ error: 'Release the active gate first.' });
+    let release: (() => void) | undefined;
+    const promise = new Promise<void>((resolve) => { release = resolve; });
+    if (!release) throw new Error('The controlled gate must initialize its release synchronously.');
+    gate = { target: body.target, entered: false, released: false, promise, release };
+    return { ok: true };
+  });
+  app.get('/__source-gate', () => ({ target: gate?.target ?? null, entered: gate?.entered ?? false, released: gate?.released ?? false }));
+  app.addHook('preClose', async () => { gate?.release(); });
+  async function hold(target: GateTarget): Promise<boolean> {
+    const current = gate;
+    if (!current || current.target !== target || current.entered) return false;
+    current.entered = true;
+    await current.promise;
+    return true;
+  }
   app.addHook('onRequest', async (request) => {
     if ((request.routeOptions.url?.startsWith('/repos/') || request.routeOptions.url?.startsWith('/user/installations')) && settings().sourceDelayMs > 0) {
       await delay(settings().sourceDelayMs);
@@ -30,7 +59,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     const user = identity(request);
     if (!user) { void reply.code(401).send({ message: 'Controlled unauthorized' }); return null; }
     requests.push({ user, path: request.url });
-    if (settings().sourceDenied) { void reply.code(403).send({ message: 'Controlled missing approval' }); return null; }
+    if (settings().sourceDenied) { void reply.code(settings().sourceDenialStatus).send({ message: 'Controlled missing approval' }); return null; }
     return user;
   }
   function next(reply: FastifyReply, request: FastifyRequest, page: number, hasNext: boolean): void {
@@ -52,13 +81,14 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
       account: { login: page === 1 ? user === 101 ? 'alice' : 'bob' : 'example-org', type: page === 1 ? 'User' : 'Organization' },
       repository_selection: page === 1 ? 'all' : 'selected', suspended_at: null }] });
   });
-  app.get<{ Params: { id: string } }>('/user/installations/:id/repositories', (request, reply) => {
+  app.get<{ Params: { id: string } }>('/user/installations/:id/repositories', async (request, reply) => {
     const user = authorize(request, reply); if (!user) return reply;
     if (!['9007199254740993', '9007199254740995'].includes(request.params.id)) return reply.code(404).send({ message: 'Unknown installation' });
     const page = Number(new URL(request.url, `http://127.0.0.1:${port}`).searchParams.get('page') ?? '1');
     next(reply, request, page, page === 1);
     const own = user === 101 ? 'alice' : 'bob';
     const owner = request.params.id === '9007199254740995' ? 'example-org' : own;
+    if (page === 2) await hold('repositories-page-2');
     return raw(reply, { total_count: 2, repositories: [repo(owner, page === 1 ? 'project' : 'other')] });
   });
   app.get<{ Params: { owner: string; name: string } }>('/repos/:owner/:name', (request, reply) => {
@@ -68,20 +98,24 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (owner === 'approval') return reply.code(403).send({ message: 'Organization approval required' });
     return raw(reply, repo(owner, name));
   });
-  app.get<{ Params: { owner: string; name: string } }>('/repos/:owner/:name/issues', (request, reply) => {
+  app.get<{ Params: { owner: string; name: string } }>('/repos/:owner/:name/issues', async (request, reply) => {
     if (!authorize(request, reply)) return reply;
     const page = Number(new URL(request.url, `http://127.0.0.1:${port}`).searchParams.get('page') ?? '1');
     if (page === settings().sourceFailurePage) return reply.code(503).send({ message: 'Controlled failed page' });
+    if (page === settings().sourceThrottlePage) return reply.header('Retry-After', '1').header('X-RateLimit-Remaining', '4999').code(403).send({ message: 'Controlled secondary rate limit' });
+    if (page === 2 && await hold('old-token-401')) return reply.code(401).send({ message: 'Controlled delayed rejection' });
     if (settings().sourceMode === 'malformed') return [{ id: 2, title: 'Malformed row' }];
     if (settings().sourceMode === 'empty') return raw(reply, []);
     next(reply, request, page, page < 3);
     const { owner, name } = request.params;
+    if (page === 2) await hold('items-page-2');
     return raw(reply, page === 1 ? [issue(owner, name, 1), issue(owner, name, 2, true)]
       : page === 2 ? [issue(owner, name, 3, true), issue(owner, name, 4, true)] : [issue(owner, name, 5)]);
   });
-  app.get<{ Params: { owner: string; name: string; number: string } }>('/repos/:owner/:name/issues/:number', (request, reply) => {
+  app.get<{ Params: { owner: string; name: string; number: string } }>('/repos/:owner/:name/issues/:number', async (request, reply) => {
     if (!authorize(request, reply)) return reply;
     const { owner, name, number } = request.params;
+    await hold('issue-detail');
     return raw(reply, issue(owner, name, Number(number), Number(number) % 2 === 0));
   });
   app.get<{ Params: { owner: string; name: string; number: string } }>('/repos/:owner/:name/pulls/:number', (request, reply) => {

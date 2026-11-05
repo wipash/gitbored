@@ -19,7 +19,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
   const tokens = new Map<string, { id: number; revoked: boolean; expires: number }>();
   const refreshTokens = new Map<string, number>();
   const defaults = (): ProviderSettings => ({ login: 'alice', expiresIn: 28800, refreshExpiresIn: 15897600,
-    fail: false, deny: false, rateLimit: false, sourceMode: 'normal', sourceFailurePage: 0, pullUnavailable: false, sourceDelayMs: 0, sourceDenied: false });
+    fail: false, deny: false, rateLimit: false, sourceMode: 'normal', sourceFailurePage: 0, pullUnavailable: false, sourceDelayMs: 0, sourceDenied: false, sourceDenialStatus: 403, sourceThrottlePage: 0 });
   let settings = defaults();
   let refreshCount = 0;
   let exchangeCount = 0;
@@ -46,6 +46,8 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
     if ('pullUnavailable' in value && typeof value.pullUnavailable === 'boolean') settings.pullUnavailable = value.pullUnavailable;
     if ('sourceDelayMs' in value && typeof value.sourceDelayMs === 'number' && value.sourceDelayMs >= 0 && value.sourceDelayMs <= 5000) settings.sourceDelayMs = value.sourceDelayMs;
     if ('sourceDenied' in value && typeof value.sourceDenied === 'boolean') settings.sourceDenied = value.sourceDenied;
+    if ('sourceDenialStatus' in value && (value.sourceDenialStatus === 403 || value.sourceDenialStatus === 404)) settings.sourceDenialStatus = value.sourceDenialStatus;
+    if ('sourceThrottlePage' in value && typeof value.sourceThrottlePage === 'number') settings.sourceThrottlePage = value.sourceThrottlePage;
     return { ok: true };
   });
   app.get('/__stats', () => ({ refreshCount, exchangeCount,

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SessionResponse } from '../shared/session';
+import { isSessionContextFailure } from '../shared/session';
 import type { Installation, RepositorySource, SourceItem } from '../shared/sources';
 import { readInstallation, readRepository, readSourceItem, readSourcePage } from '../shared/sources';
 import { githubItemUrl } from '../shared/items';
@@ -8,33 +9,44 @@ import './sources.css';
 
 type SignedInSession = Extract<SessionResponse, { status: 'signed-in' }>;
 class SourceReadError extends Error {
-  constructor(public readonly status: number, message: string) { super(message); }
+  constructor(public readonly status: number, public readonly code: string, message: string) { super(message); }
 }
-interface SourceSessionProps { session: SignedInSession; onAccessLoss: (status: number) => void }
+interface SourceSessionProps { session: SignedInSession; onAccessLoss: (failure: SourceReadError, scope?: string, origin?: Element | null) => void }
 async function requestJson<T>(path: string, signal: AbortSignal, session: SignedInSession, decode: (value: unknown) => T, url?: string): Promise<T> {
-  const response = await fetch(path, { signal, cache: 'no-store', ...(url === undefined ? {} : {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrfToken }, body: JSON.stringify({ url }),
-  }) });
+  const response = await fetch(path, { signal, cache: 'no-store', headers: {
+    'X-CSRF-Token': session.csrfToken, ...(url === undefined ? {} : { 'Content-Type': 'application/json' }),
+  }, ...(url === undefined ? {} : { method: 'POST', body: JSON.stringify({ url }) }) });
   const value: unknown = await response.json();
   if (!response.ok) {
     const message = typeof value === 'object' && value !== null && 'message' in value && typeof value.message === 'string'
       ? value.message : 'This read could not be completed. Check your connection and retry.';
-    throw new SourceReadError(response.status, message);
+    const code = typeof value === 'object' && value !== null && 'error' in value && typeof value.error === 'string' ? value.error : '';
+    throw new SourceReadError(response.status, code, message);
   }
   return decode(value);
 }
 const itemIdentity = (item: SourceItem) => item.reference.id;
 const repositoryIdentity = (item: RepositorySource) => item.nodeId;
 const installationIdentity = (item: Installation) => item.id;
-function usePages<T>(path: string, session: SignedInSession, identify: (item: T) => string, decode: (value: unknown) => T, onAccessLoss: (status: number) => void) {
+function repositoryScope(owner: string, name: string): string { return `${owner.toLowerCase()}/${name.toLowerCase()}`; }
+function urlScope(input: string): string | undefined {
+  // Error attribution only; the server owns supported-URL validation and all API construction.
+  try {
+    const parts = new URL(input).pathname.split('/');
+    return parts[1] && parts[2] ? repositoryScope(parts[1], parts[2]) : undefined;
+  } catch { return undefined; }
+}
+function usePages<T>(path: string, session: SignedInSession, identify: (item: T) => string, decode: (value: unknown) => T, onAccessLoss: SourceSessionProps['onAccessLoss'], scope?: string) {
   const [items, setItems] = useState<T[]>([]);
   const [nextPage, setNextPage] = useState<number | null>(1);
   const [loadedPage, setLoadedPage] = useState(0);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [requested, setRequested] = useState({ page: 1, attempt: 0 });
+  const focusOrigin = useRef<Element | null>(null);
   function load(page: number): void {
     if (busy) return;
+    focusOrigin.current = document.activeElement;
     setBusy(true); setError('');
     setRequested((previous) => ({ page, attempt: previous.attempt + 1 }));
   }
@@ -52,8 +64,9 @@ function usePages<T>(path: string, session: SignedInSession, identify: (item: T)
         setNextPage(result.nextPage); setLoadedPage(requested.page);
       } catch (failure) {
         if (active.signal.aborted) return;
-        const accessLost = failure instanceof SourceReadError && [401, 403, 404].includes(failure.status);
-        if (accessLost) { setItems([]); setLoadedPage(0); setNextPage(1); onAccessLoss(failure.status); }
+        const accessLost = failure instanceof SourceReadError
+          && (isSessionContextFailure(failure.status, failure.code) || failure.status === 403 || failure.status === 404);
+        if (accessLost) { setItems([]); setLoadedPage(0); setNextPage(1); onAccessLoss(failure, scope, focusOrigin.current); }
         const message = failure instanceof Error ? failure.message : 'Unable to load this page. Retry shortly.';
         setError(`${message} ${accessLost ? 'Previously loaded values were cleared. Retry from page 1 after restoring access.' : 'Already loaded results are retained and may be stale.'}`);
       } finally {
@@ -62,7 +75,7 @@ function usePages<T>(path: string, session: SignedInSession, identify: (item: T)
     };
     void fetchPage();
     return () => active.abort();
-  }, [path, requested, session, identify, decode, onAccessLoss]);
+  }, [path, requested, session, identify, decode, onAccessLoss, scope]);
   return { items, nextPage, loadedPage, busy, error, load };
 }
 interface ProgressProps { busy: boolean; error: string; loadedPage: number; nextPage: number | null; load: (page: number) => void }
@@ -70,7 +83,7 @@ function PageProgress({ busy, error, loadedPage, nextPage, load }: ProgressProps
   return <div className="source-progress">
     <p role="status">{busy ? `Loading page ${nextPage ?? 1}…` : loadedPage === 0 ? '' : nextPage === null ? `All pages loaded (${loadedPage}).` : `Loaded through page ${loadedPage}. More pages are available.`}</p>
     {error && <p className="auth-error" role="alert">{error} <a href="/api/auth/github">Reconnect GitHub</a> if your authorization ended.</p>}
-    {nextPage !== null && <button type="button" disabled={busy} onClick={() => load(nextPage)}>{error ? `Retry page ${nextPage}` : loadedPage === 0 ? 'Load first page' : 'Load next page'}</button>}
+    <button type="button" aria-disabled={busy || nextPage === null} onClick={() => { if (!busy && nextPage !== null) load(nextPage); }}>{nextPage === null ? 'All pages loaded' : error ? `Retry page ${nextPage}` : loadedPage === 0 ? 'Load first page' : 'Load next page'}</button>
   </div>;
 }
 function ItemDetails({ item }: { item: SourceItem }) {
@@ -98,7 +111,7 @@ function ItemRow({ item }: { item: SourceItem }) {
   </li>;
 }
 function RepositoryItems({ repository, session, onAccessLoss }: SourceSessionProps & { repository: RepositorySource }) {
-  const pages = usePages(`/api/sources/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/items`, session, itemIdentity, readSourceItem, onAccessLoss);
+  const pages = usePages(`/api/sources/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/items`, session, itemIdentity, readSourceItem, onAccessLoss, repositoryScope(repository.owner, repository.name));
   const [query, setQuery] = useState(''); const [kind, setKind] = useState('all');
   const queryInput = useRef<HTMLInputElement>(null);
   const matches = pages.items.filter((item) => (kind === 'all' || item.metadata.kind === kind)
@@ -139,21 +152,42 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
   const [generation, setGeneration] = useState(0);
   const [url, setUrl] = useState(''); const [resolved, setResolved] = useState<SourceItem | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const controller = useRef<AbortController | null>(null);
+  const controller = useRef<{ controller: AbortController; scope: string | undefined } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const accessNotice = useRef<HTMLParagraphElement>(null);
+  const recoverFocus = useRef(false);
   const [authorizationLost, setAuthorizationLost] = useState(false);
-  const loseAccess = useCallback((status: number): void => {
-    controller.current?.abort(); setBusy(false); setResolved(null);
-    if (status === 401) { setAuthorizationLost(true); setInstallation(null); setRepository(null); }
-  }, []);
-  useEffect(() => () => controller.current?.abort(), []);
+  const [blockedRepository, setBlockedRepository] = useState<{ scope: string; message: string } | null>(null);
+  const selectedScope = repository ? repositoryScope(repository.owner, repository.name) : undefined;
+  const loseAccess = useCallback((failure: SourceReadError, scope?: string, origin?: Element | null): void => {
+    const contextLost = isSessionContextFailure(failure.status, failure.code);
+    if (contextLost || (scope !== undefined && controller.current?.scope === scope)) {
+      controller.current?.controller.abort(); setBusy(false);
+    }
+    if (contextLost) {
+      setAuthorizationLost(true); setInstallation(null); setRepository(null); setResolved(null); setUrl(''); setError('');
+    } else if (scope !== undefined) {
+      if (scope === selectedScope) setBlockedRepository({ scope, message: failure.message });
+      setResolved((current) => current && repositoryScope(current.metadata.locator.owner, current.metadata.locator.repository) === scope ? null : current);
+    }
+    if ((contextLost || (scope !== undefined && scope === selectedScope)) && origin && document.activeElement === origin) recoverFocus.current = true;
+  }, [selectedScope]);
+  useLayoutEffect(() => {
+    if (!recoverFocus.current) return;
+    recoverFocus.current = false;
+    if (document.activeElement === document.body) accessNotice.current?.focus();
+  }, [authorizationLost, blockedRepository]);
+  useEffect(() => () => controller.current?.controller.abort(), []);
   async function resolve(): Promise<void> {
-    controller.current?.abort(); const active = new AbortController(); controller.current = active;
+    if (busy) return;
+    controller.current?.controller.abort();
+    const active = new AbortController(); const scope = urlScope(url); const origin = document.activeElement;
+    controller.current = { controller: active, scope };
     setBusy(true); setError(''); setResolved(null);
     try { const item = await requestJson('/api/sources/resolve', active.signal, session, readSourceItem, url); if (!active.signal.aborted) setResolved(item); }
     catch (failure) {
       if (!active.signal.aborted) {
-        if (failure instanceof SourceReadError && [401, 403, 404].includes(failure.status)) loseAccess(failure.status);
+        if (failure instanceof SourceReadError && (isSessionContextFailure(failure.status, failure.code) || failure.status === 403 || failure.status === 404)) loseAccess(failure, scope, origin);
         setError(failure instanceof Error ? failure.message : 'Unable to resolve this URL. Check it and retry.');
       }
     }
@@ -161,7 +195,11 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
   }
   function navigate(action: () => void): void { action(); heading.current?.focus(); }
   let browsing: ReactNode;
-  if (authorizationLost) browsing = <p className="auth-error" role="alert">Your GitHub authorization or session ended. Loaded source values were cleared. <a href="/api/auth/github">Reconnect GitHub</a> to resume browsing.</p>;
+  if (authorizationLost) browsing = <p className="auth-error" role="alert" ref={accessNotice} tabIndex={-1}>Your account, session or GitHub authorization changed. Loaded source values were cleared. <a href="/">Reload current account</a> to reconcile the signed-in account, or <a href="/api/auth/github">Reconnect GitHub</a> if authorization ended.</p>;
+  else if (repository && blockedRepository?.scope === repositoryScope(repository.owner, repository.name)) browsing = <section>
+    <p className="auth-error" role="alert" ref={accessNotice} tabIndex={-1}>{blockedRepository.message} Previously loaded values were cleared. Restore access, then retry this repository.</p>
+    <button type="button" onClick={() => { setBlockedRepository(null); heading.current?.focus(); }}>Retry repository</button>
+  </section>;
   else if (repository) browsing = <RepositoryItems key={`${session.user.id}:${repository.nodeId}`} repository={repository} session={session} onAccessLoss={loseAccess} />;
   else if (installation) browsing = <Repositories key={`${session.user.id}:${installation.id}`} installation={installation} session={session} onAccessLoss={loseAccess} onSelect={(repo) => navigate(() => setRepository(repo))} />;
   else browsing = <Installations key={`${session.user.id}:${generation}`} session={session} onAccessLoss={loseAccess} onSelect={(item) => navigate(() => setInstallation(item))} />;
@@ -179,7 +217,7 @@ export function SourceBrowser({ session }: { session: SignedInSession }) {
       <form onSubmit={(event) => { event.preventDefault(); void resolve(); }}>
         <label htmlFor="source-url">GitHub item URL</label><p id="source-url-hint">Use https://github.com/owner/repository/issues/123 or /pull/123, without a query or fragment. Public and authorized private items are supported.</p>
         <input id="source-url" name="url" type="url" required value={url} aria-describedby={`source-url-hint${error ? ' source-url-error' : ''}`} aria-invalid={error ? true : undefined} onChange={(event) => setUrl(event.currentTarget.value)} placeholder="https://github.com/octo/project/issues/123" />
-        <button type="submit" disabled={busy}>Resolve URL</button>
+        <button type="submit" aria-disabled={busy}>Resolve URL</button>
       </form>
       <p role="status">{busy ? 'Resolving GitHub URL…' : resolved ? 'Item resolved. No canvas placement was created.' : ''}</p>
       {error && <p id="source-url-error" className="auth-error" role="alert">{error} <a href="/api/auth/github">Reconnect GitHub</a> if needed, then retry.</p>}

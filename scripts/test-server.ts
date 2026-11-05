@@ -21,7 +21,7 @@ let finish: (() => void) | undefined;
 const stopped = new Promise<void>((resolve) => { finish = resolve; });
 
 async function startApplication(encryptionKey: string): Promise<ChildProcess> {
-  const application = spawn(process.execPath, sourceMode ? ['--import', 'tsx', 'src/server/main.ts'] : ['dist/server/server/main.js'], {
+  const application = spawn(process.execPath, sourceMode ? ['--import', 'tsx', process.env['E2E_SOURCE_ENTRY'] ?? 'src/server/main.ts'] : ['dist/server/server/main.js'], {
     stdio: ['ignore', 'pipe', 'inherit'],
     env: { ...process.env, NODE_ENV: sourceMode ? 'development' : 'production', HOST: '127.0.0.1', PORT: appPort, DATA_DIR: directory,
       APP_ORIGIN: `http://127.0.0.1:${frontendPort}`, ALLOW_LOOPBACK_HTTP: 'true',

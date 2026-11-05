@@ -28,3 +28,4 @@
 .source-url form p { min-inline-size: 0; max-inline-size: 100%; overflow-wrap: anywhere; font-size: .875rem; color: var(--color-text-secondary); }
 .source-url input { max-inline-size: 100%; }
 .source-browser a { overflow-wrap: anywhere; }
+.source-browser button[aria-disabled="true"] { color: var(--color-text-secondary); background: var(--color-bg-subtle); cursor: default; }

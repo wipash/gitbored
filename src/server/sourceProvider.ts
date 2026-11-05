@@ -87,7 +87,7 @@ export async function providerRead(origin: string, token: string, path: string, 
     await response.body?.cancel();
     if (response.status === 401) throw new AuthenticationError(401, 'reauthorize', 'GitHub authorization ended. Reconnect GitHub to continue.');
     if (response.status === 403 || response.status === 429) {
-      const rate = response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0';
+      const rate = response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after');
       throw new AuthenticationError(rate ? 429 : 403, rate ? 'rate_limit' : 'missing_access', rate
         ? 'GitHub is limiting requests. Wait before retrying this page.'
         : 'GitHub denied this read. Check the app installation, selected repositories and organization approval, then retry.');

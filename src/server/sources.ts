@@ -7,7 +7,7 @@ import { AuthenticationError, type AuthenticatedUser } from './auth.js';
 import type { AuthConfig } from './config.js';
 import { boolean, id, installation, invalidProvider, list, number, object, opaque, parseItemUrl, providerRead, repository, text } from './sourceProvider.js';
 
-interface SourceContext { user: AuthenticatedUser; token: string; origin: string }
+interface SourceContext { request: FastifyRequest; user: AuthenticatedUser; token: string; origin: string }
 interface NormalizedItem {
   item: Omit<SourceItem, 'reference'>;
   nodeId: string;
@@ -95,15 +95,23 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     return { reference, metadata: normalized.item.metadata };
   }
   async function context(request: FastifyRequest): Promise<SourceContext> {
-    const user = app.authentication.requireUser(request);
+    const user = app.authentication.requireUserContext(request);
     if (!config) throw new AuthenticationError(503, 'unconfigured', 'Configure GitHub sign-in, then reload.');
     const token = await app.authentication.getAuthorizedUserToken(user.id);
-    return { user, token, origin: config.apiOrigin };
+    app.authentication.assertUserContext(request, user);
+    return { request, user, token, origin: config.apiOrigin };
   }
   async function read(ctx: SourceContext, path: string, page?: number) {
-    try { return await providerRead(ctx.origin, ctx.token, path, page); }
+    try {
+      const result = await providerRead(ctx.origin, ctx.token, path, page);
+      app.authentication.assertUserContext(ctx.request, ctx.user);
+      return result;
+    }
     catch (error) {
-      if (error instanceof AuthenticationError && error.code === 'reauthorize') app.authentication.invalidateAuthorization(ctx.user.id);
+      if (error instanceof AuthenticationError && error.code === 'reauthorize') {
+        app.authentication.invalidateAuthorizationIfCurrent(ctx.user.id, ctx.token);
+      }
+      app.authentication.assertUserContext(ctx.request, ctx.user);
       throw error;
     }
   }
@@ -118,6 +126,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     if (!/^[1-9][0-9]{0,127}$/.test(installationId)) return badRequest('Choose a valid installation.');
     const result = await read(ctx, `/user/installations/${installationId}/repositories`, page);
     const items = list(object(result.value)['repositories'], 30).map(repository);
+    app.authentication.assertUserContext(request, ctx.user);
     for (const repo of items) persistRepository(ctx.user.id, repo);
     return { items, page, nextPage: result.nextPage };
   });
@@ -129,6 +138,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const result = await read(ctx, `${path}/issues?state=all&sort=created&direction=asc`, page);
     // Validate the whole page before committing progress or references.
     const normalized = list(result.value, 30).map((item) => normalize(item, repo));
+    app.authentication.assertUserContext(request, ctx.user);
     database.exec('BEGIN IMMEDIATE');
     try {
       const items = normalized.map((item) => persistItem(ctx.user.id, repo, item));
@@ -155,6 +165,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       }
     }
     const normalized = detail === undefined ? common : normalize(issue, repo, detail);
+    app.authentication.assertUserContext(ctx.request, ctx.user);
     persistRepository(ctx.user.id, repo);
     return persistItem(ctx.user.id, repo, normalized);
   }

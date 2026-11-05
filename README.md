@@ -111,12 +111,21 @@ An empty picker does not prove that public URLs are unavailable.
 
 Repository browsing loads mixed issue/PR pages, including PR-only and empty pages.
 **Load next page** advances explicitly; a transient failure retains loaded results
-and **Retry page** retries the failed cursor. Detected access loss clears loaded
-values. Title/number and kind filters apply only to the loaded subset, never to a
+and **Retry page** retries the failed cursor. Provider access loss clears affected
+repository values, aborts their pending reads and offers **Retry repository**.
+An unrelated unavailable URL does not revoke other repositories. Account/session
+context loss clears all source representations and offers explicit **Reload current
+account** through application composition; SourceBrowser does not own another auth
+flow. Title/number and kind filters apply only to the loaded subset, never to a
 complete repository search. Two-line row titles and bounded previews expand
 through native, keyboard-accessible **View full available details** disclosures.
 Full titles, labels, assignees, state reason and available timestamps are retained;
 no bodies or comments are requested for rows or details.
+
+Pagination and URL controls stay focusable while busy and ignore repeat activation.
+After the final page, the same pagination button displays **All pages loaded** as
+unavailable, preserving keyboard focus. Completion never steals focus if you move
+to another control while a request is pending.
 
 **Resolve URL** accepts canonical HTTPS `github.com/owner/repository/issues/123`
 and `/pull/123` URLs, optionally ending in `/`, without credentials, ports, encoded
@@ -133,7 +142,8 @@ and mutable locators remain separate. Issue and PR REST IDs have distinct fields
 Only selected URL/reference reads request PR enrichment. Without it, PR workflow
 state stays **unknown**; old enrichment is not reused to imply authority.
 
-Public HTTP contracts (all authenticated, no-store):
+Public HTTP contracts (all authenticated, no-store, requiring the current session's
+`X-CSRF-Token` on **GET as well as POST** to bind reads to the supplied account context):
 
 - `GET /api/sources/installations?page=1`
 - `GET /api/sources/installations/:installationId/repositories?page=1`
@@ -143,6 +153,14 @@ Public HTTP contracts (all authenticated, no-store):
 - `GET /api/references/:id` checks reference ownership and reads its current
   representation using the current user's provider token. A saved locator that
   resolves to a different node is unresolved, not silently reassigned.
+
+A valid cookie paired with another session's context returns `409 session_changed`
+before provider access. Unsafe requests with a stale CSRF value retain the existing
+`403 csrf` guard; clients treat that as session-context loss, not repository denial.
+The original session is revalidated after asynchronous reads, before delivery and
+registry/progress writes. A late result cannot survive its superseded session.
+`isSessionContextFailure(status, code)` in `src/shared/session.ts` centralizes the
+client distinction; an ordinary revision-conflict 409 is not session-context loss.
 
 Pages contain at most 30 rows; page inputs are 1–10,000 and only validated next
 page numbers are used, never provider-supplied Link URLs. Provider responses are
@@ -204,14 +222,21 @@ Provider outages return a safe HTTP 502, not a successful-looking signed-out sta
 
 - `requireUser(request): AuthenticatedUser` throws HTTP 401 without a valid
   session. Use its **id**, never client-supplied identity, for owner queries.
+- `requireUserContext(request): AuthenticatedUser` also binds the request's
+  `X-CSRF-Token` to that session, including protected GETs. A valid-cookie/context
+  mismatch throws HTTP 409 `session_changed`.
+- `assertUserContext(request, expected): void` revalidates the captured original
+  session/context after awaits, before protected delivery or persistence.
 - `getAuthorizedUserToken(userId): Promise<string>` returns only that user's
   decrypted access token, refreshing expired access once per user in flight.
   It throws `AuthenticationError` (401 `reauthorize` or 502 `provider_unavailable`);
   there is no installation-credential fallback.
-- `invalidateAuthorization(userId): void` removes saved credentials. Call it on
-  a downstream GitHub authorization rejection and stop private reads; do not
-  invalidate on transient/rate-limit errors. `/api/session` detects rejected
-  identity authorization itself.
+- `invalidateAuthorizationIfCurrent(userId, rejectedAccessToken): void` removes
+  saved credentials only if the rejected token is still current. Both source
+  reads and `/api/session` use this conditional boundary, so a late old-token
+  rejection cannot erase refreshed/re-authorized credentials. Do not invalidate
+  on transient/rate-limit errors; a 403 carrying `Retry-After` is throttling even
+  if primary quota remains.
 
 Every unsafe `/api/*` request is checked globally for an authenticated session,
 an exact `Origin: APP_ORIGIN` and `X-CSRF-Token` from that session. Future owner
@@ -234,11 +259,18 @@ The provider's `/__control` accepts `reset`, `login`, `expiresIn`,
 `refreshExpiresIn`, `fail`, `deny`, `rateLimit`, `revoke` and `revokeRefresh`;
 `/__stats` reports exchange/refresh counts and expired controlled access tokens.
 Source controls also accept `sourceMode` (`normal`, `empty`, `malformed`,
-`untrusted-link`), `sourceFailurePage`, `pullUnavailable`, `sourceDenied` and
-`sourceDelayMs` (0–5000). `/__source-stats` reports token-free user/path request
+`untrusted-link`), `sourceFailurePage`, `pullUnavailable`, `sourceDenied`,
+`sourceDenialStatus` (403/404), `sourceThrottlePage` (secondary 403 with Retry-After
+and nonzero primary quota), and `sourceDelayMs` (0–5000).
+`/__source-stats` reports token-free user/path request
 evidence; `POST /__source-stats/reset` clears it. Fixtures contain raw JSON numeric
 IDs beyond `Number.MAX_SAFE_INTEGER`, mixed/PR-only pages, multiple repository
 owners and public-outside-installation/private access scenarios.
+`POST /__source-gate` with `{ "action": "arm", "target": "…" }` holds one supported
+external response (`repositories-page-2`, `items-page-2`, `issue-detail` or
+`old-token-401`). `GET /__source-gate` reports whether it entered; POST with
+`action: release` or `reset` settles it. These gates prove races without sleeps,
+application mutation or exposing tokens; normal provider shutdown releases them.
 The test runner separately registers `/__runner/restart` on the controlled service;
 it restarts the actual application against the same temporary SQLite database
 using an original or replacement test encryption key. This is test-process
@@ -267,6 +299,10 @@ starts/stops the preview automatically. Omit `CONTROLLED_SESSION_SECONDS` to
 retain the default ten-second expiry proof. The runner supports the same port
 variables for other isolated worktrees (test callbacks allow only 3001/3005/3100).
 Ctrl+C stops owned processes and removes its temporary SQLite directory.
+For bounded before/after regressions, `E2E_SOURCE_ENTRY` can select a separately
+extracted baseline application's source entry in source mode only. The controlled
+provider and public application seam remain real; production entry selection is
+unchanged.
 
 Provider replacement requires **both** `ENABLE_CONTROLLED_GITHUB=true` and
 `CONTROLLED_GITHUB_ORIGIN=http://127.0.0.1:3101`, plus a loopback `APP_ORIGIN`.

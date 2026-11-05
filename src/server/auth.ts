@@ -17,8 +17,10 @@ export interface AuthenticatedUser extends SessionUser {
 
 export interface Authentication {
   requireUser(request: FastifyRequest): AuthenticatedUser;
+  requireUserContext(request: FastifyRequest): AuthenticatedUser;
+  assertUserContext(request: FastifyRequest, expected: AuthenticatedUser): void;
   getAuthorizedUserToken(userId: string): Promise<string>;
-  invalidateAuthorization(userId: string): void;
+  invalidateAuthorizationIfCurrent(userId: string, rejectedAccessToken: string): void;
 }
 
 declare module 'fastify' {
@@ -126,6 +128,22 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
     return { id: row.id, githubId: row.githubId, login: row.login, name: row.name, csrfToken: row['csrfToken'] };
   }
 
+  function requireUserContext(request: FastifyRequest): AuthenticatedUser {
+    const user = requireUser(request);
+    const csrf = request.headers['x-csrf-token'];
+    if (typeof csrf !== 'string' || !timingSafeEqual(Buffer.from(hash(csrf)), Buffer.from(hash(user.csrfToken)))) {
+      throw new AuthenticationError(409, 'session_changed', 'Your account or session changed. Reload GitBored to use the current account.');
+    }
+    return user;
+  }
+
+  function assertUserContext(request: FastifyRequest, expected: AuthenticatedUser): void {
+    const current = requireUserContext(request);
+    if (current.id !== expected.id || current.csrfToken !== expected.csrfToken) {
+      throw new AuthenticationError(409, 'session_changed', 'Your account or session changed. Reload GitBored to use the current account.');
+    }
+  }
+
   function invalidateAuthorization(userId: string): void {
     database.prepare(`UPDATE users SET reauthorize = 1, access_token = NULL, refresh_token = NULL,
       access_expires = NULL, refresh_expires = NULL WHERE id = ?`).run(userId);
@@ -142,6 +160,17 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
       throw new AuthenticationError(401, 'reauthorize', 'Saved GitHub credentials cannot be read. Sign in again to reconnect.');
     }
     return credential;
+  }
+
+  function invalidateAuthorizationIfCurrent(userId: string, rejectedAccessToken: string): void {
+    const current = storedUser(userId).accessToken;
+    if (!current) return;
+    try {
+      if (decryptCredential(userId, current, 'access') === rejectedAccessToken) invalidateAuthorization(userId);
+    } catch (error) {
+      // Unreadable current credentials are invalidated by decryptCredential itself.
+      if (!(error instanceof AuthenticationError) || error.code !== 'reauthorize') throw error;
+    }
   }
 
   async function exchange(parameters: URLSearchParams): Promise<ProviderTokens> {
@@ -272,15 +301,7 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
       if (provider.githubId !== user.githubId) throw new AuthenticationError(401, 'reauthorize', 'Sign in again to reconnect GitHub.');
     } catch (error) {
       if (!(error instanceof AuthenticationError) || error.code !== 'reauthorize') throw error;
-      const current = storedUser(user.id).accessToken;
-      if (accessToken && current) {
-        try {
-          if (decryptCredential(user.id, current, 'access') === accessToken) invalidateAuthorization(user.id);
-        } catch (credentialError) {
-          // Unreadable credentials were invalidated at the token boundary; retain the reconnect response.
-          if (!(credentialError instanceof AuthenticationError) || credentialError.code !== 'reauthorize') throw credentialError;
-        }
-      }
+      if (accessToken) invalidateAuthorizationIfCurrent(user.id, accessToken);
       authorization = 'reauthorize';
     }
     return { status: 'signed-in', user: { id: user.id, githubId: user.githubId, login: user.login, name: user.name },
@@ -354,5 +375,5 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
     return reply.code(204).send();
   });
 
-  return { requireUser, getAuthorizedUserToken, invalidateAuthorization };
+  return { requireUser, requireUserContext, assertUserContext, getAuthorizedUserToken, invalidateAuthorizationIfCurrent };
 }
