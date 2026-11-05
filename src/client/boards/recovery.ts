@@ -1,15 +1,67 @@
 import { T } from '@tldraw/validate';
-import { boardSaveValidator, type BoardSave } from '../../shared/boards';
+import { boardSaveValidator, type Board, type BoardSave } from '../../shared/boards';
 import { validateIncoming } from '../../shared/incoming';
 import { getDocumentReferenceIds, validateNativeDocument } from '../../shared/nativeDocument';
 
 export interface RecoveryDraft extends BoardSave { version: 1; accountId: string; boardId: string; writerId: string; updatedAt: number }
 export interface StoredRecovery { key: string; draft: RecoveryDraft }
 const prefix = 'gitbored:recovery:1:';
+const copyPrefix = 'gitbored:recovery-copy:1:';
 const timestamp = T.number.check((value) => { if (!Number.isSafeInteger(value) || value < 0 || value > 8.64e15) throw new Error('Invalid recovery timestamp'); });
 const envelope = T.object({ version: T.literal(1), accountId: T.string, boardId: T.string, writerId: T.string, updatedAt: timestamp,
   expectedRevision: T.number, document: T.unknown, incoming: T.unknown });
 function scope(accountId: string, boardId: string): string { return `${prefix}${encodeURIComponent(accountId)}:${encodeURIComponent(boardId)}:`; }
+function copyScope(accountId: string, boardId: string, writerId?: string): string {
+  return `${copyPrefix}${encodeURIComponent(accountId)}:${encodeURIComponent(boardId)}:${writerId === undefined ? '' : `${encodeURIComponent(writerId)}:`}`;
+}
+export interface RecoveryCopyReceipt { version: 1; copiedBoardId: string; copiedAt: number; pairDigest: string }
+const copyReceipt = T.object({ version: T.literal(1), copiedBoardId: T.string, copiedAt: timestamp,
+  pairDigest: T.string.check((value) => { if (!/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid recovery pair digest'); }) });
+function pairJSON(pair: Pick<BoardSave, 'document' | 'incoming'>): string { return JSON.stringify({ document: pair.document, incoming: pair.incoming }); }
+async function digestPair(serialized: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+export function recoveryStorageChanged(key: string | null, accountId: string, boardId: string): boolean {
+  return key === null || key.startsWith(scope(accountId, boardId)) || key.startsWith(copyScope(accountId, boardId));
+}
+/** A receipt remembers a successful copy, not a save to the original board. */
+export async function rememberRecoveryCopy(stored: StoredRecovery, pair: Pick<BoardSave, 'document' | 'incoming'>, copied: Pick<Board, 'id' | 'createdAt'>, signal: AbortSignal): Promise<boolean> {
+  try {
+    const serialized = pairJSON(pair);
+    // Reviewing and editing a predecessor does not copy that predecessor's exact work.
+    if (serialized !== pairJSON(stored.draft)) return true;
+    const pairDigest = await digestPair(serialized);
+    if (signal.aborted) return false;
+    const receipt: RecoveryCopyReceipt = { version: 1, copiedBoardId: copied.id, copiedAt: copied.createdAt, pairDigest };
+    // The server-assigned copy ID makes each acknowledgement immutable, so a
+    // late copy cannot replace another tab's newer receipt or its recovery draft.
+    localStorage.setItem(`${copyScope(stored.draft.accountId, stored.draft.boardId, stored.draft.writerId)}${encodeURIComponent(copied.id)}`, JSON.stringify(receipt));
+    return true;
+  } catch { return false; }
+}
+export async function readRecoveryCopy(stored: StoredRecovery, signal: AbortSignal): Promise<RecoveryCopyReceipt | null> {
+  try {
+    const start = copyScope(stored.draft.accountId, stored.draft.boardId, stored.draft.writerId);
+    const receipts: RecoveryCopyReceipt[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith(start)) continue;
+      try {
+        const receipt = copyReceipt.validate(JSON.parse(localStorage.getItem(key) ?? 'null'));
+        if (receipt.copiedBoardId && key === `${start}${encodeURIComponent(receipt.copiedBoardId)}`) receipts.push(receipt);
+      } catch { /* Unsupported receipts cannot acknowledge a draft. */ }
+    }
+    if (!receipts.length || signal.aborted) return null;
+    const pairDigest = await digestPair(pairJSON(stored.draft));
+    // A live sibling may have changed the source while hashing. Do not attach
+    // the captured draft's badge to that writer's newer work.
+    if (signal.aborted || localStorage.getItem(stored.key) !== JSON.stringify(stored.draft)) return null;
+    let latest: RecoveryCopyReceipt | null = null;
+    for (const receipt of receipts) if (receipt.pairDigest === pairDigest && (!latest || receipt.copiedAt > latest.copiedAt)) latest = receipt;
+    return latest;
+  } catch { return null; }
+}
 function validate(input: unknown): RecoveryDraft {
   const value = envelope.validate(input);
   const save = boardSaveValidator.validate({ expectedRevision: value.expectedRevision, document: value.document, incoming: value.incoming });

@@ -33,11 +33,18 @@ export class SaveCoordinator {
   }
   getOperation = (): BoardSave => ({ expectedRevision: this.revision, ...this.pending });
   private persist(): void {
-    if (this.recovery && !this.recovery.write(this.getOperation()) && !this.state.recoveryUnavailable) {
-      // Paused saves still need to announce that the newest local work could
-      // not be recovered. Publishing must not schedule or replay a write.
-      this.publish({ ...this.state, recoveryUnavailable: true });
-    }
+    if (this.recovery) this.recoveryAvailability(this.recovery.write(this.getOperation()));
+  }
+  private recoveryAvailability(available: boolean): void {
+    const unavailable = !available;
+    if (Boolean(this.state.recoveryUnavailable) === unavailable) return;
+    const state = { ...this.state };
+    if (unavailable) state.recoveryUnavailable = true;
+    else delete state.recoveryUnavailable;
+    // Only a real write/acknowledged cleanup can change this warning. Paused
+    // failures publish immediately without scheduling or replaying a save.
+    this.state = state;
+    this.publish(state);
   }
   /** Copy acknowledges only the captured pair, never edits made while it was sent. */
   completeCopy(operation: BoardSave): boolean {
@@ -85,7 +92,7 @@ export class SaveCoordinator {
       this.revision = revision;
       this.acknowledged = generation;
       if (this.dirty) this.persist();
-      else if (this.recovery && !this.recovery.clear(true)) this.state = { ...this.state, recoveryUnavailable: true };
+      else if (this.recovery) this.recoveryAvailability(this.recovery.clear(true));
       this.publish(this.dirty ? { status: 'unsaved', message: 'Unsaved changes' } : { status: 'saved', message: 'Saved' });
       if (this.dirty) this.schedule();
     } catch (error) {

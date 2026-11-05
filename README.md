@@ -103,9 +103,10 @@ saves and conflicts leave the current editor mounted and usable. Check the
 connection and select **Retry save** after a failure. Failures and conflicts stop
 automatic writes even as local editing continues; failed writes never replay
 automatically. **Save as copy** keeps the latest complete native/Incoming pair as a
-new private board. Edits made during a copy remain in the original tab and are
-not acknowledged by that copy. **Reload server version** confirms discarding this
-tab’s edits; it does not clear another editor’s recovery key.
+new private board with a UTC-timestamped copy name. Edits made during a copy remain
+in the original tab and are not acknowledged by that copy; **Open saved copy (new
+tab)** opens the captured version separately. **Reload server version** confirms
+discarding this tab’s edits; it does not clear another editor’s recovery key.
 
 On session-context failure, protected requests pause while the existing
 `/api/session` authority is checked. A renewed session for the **same application
@@ -143,8 +144,15 @@ when a write fails, keep the tab open until save/copy succeeds. SQLite and opera
 backups remain the durable authority. No automatic conflict merge is attempted.
 
 Copying a recovered draft or opening the server does not clear the predecessor’s
-key: it may still belong to another live editor. That draft can appear again when
-the original board is reopened; the new private copy remains independently saved.
+key: it may still belong to another live editor. After a successful copy, a
+separate version-1 `gitbored:recovery-copy:1:` receipt remembers only the copied
+board ID, server creation time and SHA-256 digest of the exact native/Incoming
+pair, scoped to the account, source board and writer. Reopening an unchanged
+draft shows its historical private-copy link; changed work does not inherit that
+receipt. Receipts do not acknowledge the original board or authorize access to
+the copy, which still requires the normal owned-board request. If remembering
+the receipt fails, the private copy still opens with a notice that the original
+draft may appear unmarked. No source draft is removed to attach a receipt.
 Before copy, retry, acknowledgement and leaving, a native checkpoint captures any
 edit whose SDK store notification is still waiting for an animation frame, using
 the same capture boundary and placed-reference queue filtering as ordinary saves.
@@ -153,6 +161,10 @@ the same deferred document is not a newer edit, while real Incoming operations
 still advance the atomic pair. A quota/storage failure announces that the newest
 work may exist only in this tab even when saving is paused after failure/conflict;
 showing that warning never retries or posts a save.
+The warning clears only after an actual successful recovery write or acknowledged
+cleanup, not merely a status change or freeing browser storage. Copy, review and
+reload controls keep keyboard focus while busy; their guarded actions do not
+repeat a request during a held key.
 
 SQLite remains authoritative across browser reloads and real server restarts.
 Use the consistent database backup and separate key recovery procedure below;

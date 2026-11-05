@@ -65,6 +65,26 @@ async function draw(page: Page, offset = 0) {
   await expectNativePoint(page, start); await expectNativePoint(page, end);
   await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 6 }); await page.mouse.up();
 }
+async function fillQuota(page: Page) {
+  return page.evaluate(() => {
+    let index = 0; let filled = 0; const errors: string[] = [];
+    for (let size = 1024 * 1024; size >= 1; size = Math.floor(size / 2)) {
+      const value = 'q'.repeat(size);
+      for (;;) {
+        try { localStorage.setItem(`ticket11-quota:${index}`, value); filled += size; index += 1; }
+        catch (error) {
+          if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
+          errors.push(error.name); break;
+        }
+      }
+    }
+    return { filled, errors };
+  });
+}
+async function copyReceipts(page: Page) {
+  const entries = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.startsWith('gitbored:recovery-copy:1:')));
+  return entries.map(([key, value]) => ({ key, value: T.object({ version: T.literal(1), copiedBoardId: T.string, copiedAt: T.number, pairDigest: T.string }).validate(JSON.parse(value)) }));
+}
 async function seedMixed(page: Page, board: Board) {
   const response = await page.request.get('/api/sources/repositories/alice/project/items?page=1', { headers: await headers(page) });
   expect(response.status()).toBe(200);
@@ -157,6 +177,7 @@ test('failed saves persist the newest pair across real server restart and browse
   try {
     const reopened = await reopenedContext.newPage(); await reopened.goto(`/boards/${board.id}`);
     await expect(reopened.getByRole('heading', { name: 'Recover local work' })).toBeFocused();
+    await expect(reopened).toHaveTitle(`Recover local work · ${board.title} · GitBored`);
     await reopened.keyboard.press('Tab');
     await expect(reopened.getByRole('button', { name: 'Save as copy', exact: true })).toBeFocused();
     expect(await reopened.getByRole('button', { name: 'Save as copy', exact: true }).evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
@@ -284,8 +305,9 @@ test('a real copy acknowledgement never consumes edits made while the private co
   const latest = (await stored(page))[0]; if (!latest) throw new Error('Missing newer copy-time edits');
   const flight = held.shift(); if (!flight) throw new Error('Missing actual copy acknowledgement');
   await flight.route.fulfill({ response: flight.response });
-  const link = page.getByRole('link', { name: 'Open saved copy', exact: true });
+  const link = page.getByRole('link', { name: 'Open saved copy (new tab)', exact: true });
   await expect(link).toBeVisible(); await expect(page).toHaveURL(new RegExp(`${board.id}$`));
+  await expect(link).toHaveAttribute('target', '_blank');
   expect(await stored(page)).toEqual([latest]);
   expect(await read(page, board.id)).toEqual(board);
   const href = await link.getAttribute('href'); if (!href) throw new Error('No created copy destination');
@@ -431,20 +453,7 @@ for (const paused of ['failed', 'conflict']) {
     expect(localRevisions).toEqual([board.revision]);
     const older = (await stored(page))[0]; if (!older) throw new Error('No older recoverable pair');
     expect(await read(page, board.id)).toEqual(original);
-    const quota = await page.evaluate(() => {
-      let index = 0; let filled = 0; const errors: string[] = [];
-      for (let size = 1024 * 1024; size >= 1; size = Math.floor(size / 2)) {
-        const value = 'q'.repeat(size);
-        for (;;) {
-          try { localStorage.setItem(`ticket11-quota:${index}`, value); filled += size; index += 1; }
-          catch (error) {
-            if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
-            errors.push(error.name); break;
-          }
-        }
-      }
-      return { filled, errors };
-    });
+    const quota = await fillQuota(page);
     expect(quota.filled).toBeGreaterThan(1024 * 1024);
     expect(quota.errors.every((name) => name === 'QuotaExceededError')).toBe(true);
     await draw(page, 150);
@@ -456,7 +465,6 @@ for (const paused of ['failed', 'conflict']) {
     // publication must not replay the paused write.
     await page.waitForTimeout(650);
     expect(writes).toBe(1);
-    await page.evaluate(() => { for (const key of Object.keys(localStorage)) if (key.startsWith('ticket11-quota:')) localStorage.removeItem(key); });
     for (const theme of ['light', 'dark']) {
       await page.getByLabel('Theme', { exact: true }).selectOption(theme);
       await page.screenshot({ path: testInfo.outputPath(`quota-${paused}-${theme}-desktop.png`), fullPage: true });
@@ -465,16 +473,28 @@ for (const paused of ['failed', 'conflict']) {
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`quota-${paused}-dark-320-enlarged.png`), fullPage: true });
+    await expect(warning).toBeVisible();
+    await page.evaluate(() => { for (const key of Object.keys(localStorage)) if (key.startsWith('ticket11-quota:')) localStorage.removeItem(key); });
+    await expect(warning).toBeVisible();
     if (paused === 'failed') {
       await page.unroute(`**/api/boards/${board.id}`);
       await page.getByRole('button', { name: 'Retry save' }).click();
       await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+      await expect(warning).toHaveCount(0);
       expect(Object.values((await read(page, board.id)).document.snapshot.store).filter((record) => record.typeName === 'shape')).toHaveLength(2);
     } else {
+      await page.setViewportSize({ width: 1440, height: 1100 });
+      await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+      await draw(page, 280);
+      await expect(warning).toHaveCount(0);
+      expect(Object.values((await stored(page))[0]?.value.document.snapshot.store ?? {}).filter((record) => record.typeName === 'shape')).toHaveLength(3);
+      await page.waitForTimeout(650);
+      expect(writes).toBe(1);
+      expect(await read(page, board.id)).toEqual(original);
       await page.getByRole('button', { name: 'Save as copy', exact: true }).click();
       await expect(page).not.toHaveURL(new RegExp(`${board.id}$`));
       const copyId = page.url().split('/').pop(); if (!copyId) throw new Error('No recovered copy ID');
-      expect(Object.values((await read(page, copyId)).document.snapshot.store).filter((record) => record.typeName === 'shape')).toHaveLength(2);
+      expect(Object.values((await read(page, copyId)).document.snapshot.store).filter((record) => record.typeName === 'shape')).toHaveLength(3);
       expect(await read(page, board.id)).toEqual(original);
     }
     expect(await stored(page)).toEqual([]);
@@ -516,4 +536,190 @@ test('provider read authorization loss does not block application-session native
   expect(await read(page, board.id)).toEqual(winner);
   const after = await currentSession(page.request);
   expect(after.status === 'signed-in' && after.authorization).toBe('reauthorize');
+});
+
+for (const surface of ['editor', 'recovery']) {
+  test(`held Enter keeps ${surface} copy focus and starts only one request until the real abort`, async ({ page }) => {
+    await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
+    await page.route(`**/api/boards/${board.id}`, async (route) => route.request().method() === 'PUT' ? route.abort('connectionfailed') : route.continue());
+    await draw(page); await expect(page.getByRole('button', { name: 'Retry save' })).toBeVisible();
+    const draft = (await stored(page))[0]; if (!draft) throw new Error('Missing focus-test recovery');
+    if (surface === 'recovery') {
+      page.on('dialog', (dialog) => { void dialog.accept(); });
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Recover local work' })).toBeFocused();
+      await expect(page).toHaveTitle(`Recover local work · ${board.title} · GitBored`);
+      await page.keyboard.press('Tab');
+    } else {
+      // Real pointer entry into the focusable status, followed by native Tab.
+      // No test-side focus repair is used before or after the request.
+      await page.locator('.board-save > p').click();
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('button', { name: 'Retry save' })).toBeFocused();
+      await page.keyboard.press('Tab');
+    }
+    const button = page.getByRole('button', { name: /^(Save as copy|Saving copy…)$/ });
+    await expect(button).toBeFocused();
+    const held: Route[] = [];
+    await page.route(`**/api/boards/${board.id}/copy`, (route) => { held.push(route); });
+    await page.keyboard.down('Enter');
+    await expect.poll(() => held.length).toBe(1);
+    await expect(button).toHaveAttribute('aria-disabled', 'true');
+    await expect(button).toHaveAttribute('aria-busy', 'true');
+    for (let repeat = 0; repeat < 6; repeat += 1) await page.keyboard.down('Enter');
+    expect(held).toHaveLength(1);
+    await expect(button).toBeFocused();
+    await page.keyboard.up('Enter');
+    const firstRequest = held[0]; if (!firstRequest) throw new Error('No held copy request');
+    await firstRequest.abort('connectionfailed');
+    await expect(page.getByRole('alert').filter({ hasText: 'copy could not be saved' })).toBeVisible();
+    await expect(button).toBeFocused();
+    await expect(button).toHaveAttribute('aria-disabled', 'false');
+    expect(await stored(page)).toEqual([draft]);
+    expect(await read(page, board.id)).toEqual(board);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => held.length).toBe(2);
+    const secondRequest = held[1]; if (!secondRequest) throw new Error('No fresh copy request');
+    await secondRequest.abort('connectionfailed');
+    await expect(button).toHaveAttribute('aria-disabled', 'false');
+    await expect(button).toBeFocused();
+  });
+}
+
+test('copied recovery receipts follow only the exact retained writer pair and live changes invalidate its badge', async ({ page, context }, testInfo) => {
+  await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
+  await page.route(`**/api/boards/${board.id}`, async (route) => route.request().method() === 'PUT' ? route.abort('connectionfailed') : route.continue());
+  await draw(page); await expect(page.getByRole('button', { name: 'Retry save' })).toBeVisible();
+  const first = (await stored(page))[0]; if (!first) throw new Error('No live source draft');
+  const recovery = await context.newPage();
+  try {
+    await recovery.goto(`/boards/${board.id}`);
+    await expect(recovery).toHaveTitle(`Recover local work · ${board.title} · GitBored`);
+    await expect(recovery.getByRole('heading', { name: 'Recover local work' })).toBeFocused();
+    await recovery.getByRole('button', { name: 'Save as copy', exact: true }).click();
+    await expect(recovery).not.toHaveURL(new RegExp(`${board.id}$`));
+    const firstId = new URL(recovery.url()).pathname.split('/').pop(); if (!firstId) throw new Error('No first receipt copy');
+    const firstCopy = await read(recovery, firstId);
+    expect(firstCopy.document).toEqual(first.value.document); expect(firstCopy.incoming).toEqual(first.value.incoming);
+    expect(firstCopy.title).toMatch(/ \(copy \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\)$/);
+    expect(firstCopy.title.length).toBeLessThanOrEqual(160);
+    expect(await stored(recovery)).toEqual([first]);
+    await recovery.goto(`/boards/${board.id}`);
+    const savedLink = recovery.getByRole('link', { name: 'Open saved private copy', exact: true });
+    await expect(savedLink).toHaveAttribute('href', `/boards/${firstId}`);
+    await expect(recovery.getByText('This exact local draft was saved as a private copy on', { exact: false })).toBeVisible();
+    const receipts = await copyReceipts(recovery);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]?.value).toMatchObject({ version: 1, copiedBoardId: firstId, copiedAt: firstCopy.createdAt, pairDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    const receipt = receipts[0]; if (!receipt) throw new Error('No successful-copy receipt');
+    expect(Object.keys(receipt.value).sort()).toEqual(['copiedAt', 'copiedBoardId', 'pairDigest', 'version']);
+    expect(JSON.stringify(receipts)).not.toContain(board.title);
+    const session = await currentSession(page.request); if (session.status !== 'signed-in') throw new Error('No receipt account');
+    expect(JSON.stringify(receipts)).not.toContain(session.csrfToken);
+    for (const theme of ['light', 'dark']) {
+      await recovery.getByLabel('Theme', { exact: true }).selectOption(theme);
+      await recovery.screenshot({ path: testInfo.outputPath(`receipt-${theme}-desktop.png`), fullPage: true });
+    }
+    await recovery.setViewportSize({ width: 320, height: 1000 });
+    await recovery.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await recovery.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await recovery.screenshot({ path: testInfo.outputPath('receipt-dark-320-enlarged.png'), fullPage: true });
+    // Only real native editing updates the live writer; the recovery page keeps
+    // its captured draft and merely withdraws the obsolete receipt badge.
+    await draw(page, 150);
+    await expect.poll(async () => Object.values((await stored(page))[0]?.value.document.snapshot.store ?? {}).filter((record) => record.typeName === 'shape').length).toBe(2);
+    const newer = (await stored(page))[0]; if (!newer) throw new Error('No changed live source');
+    await expect(savedLink).toHaveCount(0);
+    await expect(recovery.getByRole('heading', { name: 'Recover local work' })).toBeVisible();
+    await expect(recovery.locator('.tl-container')).toHaveCount(0);
+    expect(await read(page, board.id)).toEqual(board);
+    await recovery.reload();
+    await expect(recovery.getByRole('heading', { name: 'Recover local work' })).toBeFocused();
+    await expect(savedLink).toHaveCount(0);
+    await recovery.getByRole('button', { name: 'Save as copy', exact: true }).click();
+    await expect(recovery).not.toHaveURL(new RegExp(`${board.id}$`));
+    const secondId = new URL(recovery.url()).pathname.split('/').pop(); if (!secondId) throw new Error('No newer receipt copy');
+    const secondCopy = await read(recovery, secondId);
+    expect(secondCopy.document).toEqual(newer.value.document); expect(secondCopy.incoming).toEqual(newer.value.incoming);
+    expect(secondCopy.title).not.toBe(firstCopy.title);
+    expect((await read(page, firstId)).document).toEqual(first.value.document);
+    expect(await read(page, board.id)).toEqual(board);
+    expect(await stored(recovery)).toEqual([newer]);
+    expect(await copyReceipts(recovery)).toHaveLength(2);
+    await recovery.goto(`/boards/${board.id}`);
+    await expect(savedLink).toHaveAttribute('href', `/boards/${secondId}`);
+  } finally { await recovery.close(); }
+});
+
+for (const edited of [false, true]) {
+  test(`reviewed recovery copy ${edited ? 'does not mark an edited successor as its predecessor' : 'remembers its unchanged predecessor without deleting it'}`, async ({ page }) => {
+    await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
+    await page.route(`**/api/boards/${board.id}`, async (route) => route.request().method() === 'PUT' ? route.abort('connectionfailed') : route.continue());
+    await draw(page); await expect(page.getByRole('button', { name: 'Retry save' })).toBeVisible();
+    const source = (await stored(page))[0]; if (!source) throw new Error('No reviewed predecessor');
+    page.on('dialog', (dialog) => { void dialog.accept(); });
+    await page.reload();
+    await page.getByRole('button', { name: 'Review local draft', exact: true }).click();
+    await expect(page.locator('.tl-container')).toBeVisible();
+    await expect(page).toHaveTitle(`${board.title} · GitBored`);
+    await expect(page.getByRole('button', { name: 'Retry save' })).toBeVisible();
+    if (edited) {
+      await draw(page, 150);
+      // Sample the final real native gesture, not an intermediate deferred
+      // pointer-move envelope that the copy checkpoint correctly supersedes.
+      await expect.poll(async () => {
+        const latest = (await stored(page)).find((entry) => entry.key !== source.key);
+        return Object.values(latest?.value.document.snapshot.store ?? {}).find((record) => record.typeName === 'shape' && !(record.id in source.value.document.snapshot.store));
+      }).toMatchObject({ type: 'geo', props: { w: 110, h: 85 } });
+    }
+    const own = (await stored(page)).find((entry) => entry.key !== source.key); if (!own) throw new Error('No reviewed writer');
+    await page.getByRole('button', { name: 'Save as copy', exact: true }).click();
+    await expect(page).not.toHaveURL(new RegExp(`${board.id}$`));
+    const id = new URL(page.url()).pathname.split('/').pop(); if (!id) throw new Error('No reviewed private copy');
+    const copy = await read(page, id);
+    expect(copy.document).toEqual(own.value.document); expect(copy.incoming).toEqual(own.value.incoming);
+    expect(await read(page, board.id)).toEqual(board);
+    expect(await stored(page)).toEqual([source]);
+    expect(await copyReceipts(page)).toHaveLength(edited ? 0 : 1);
+    await page.goto(`/boards/${board.id}`);
+    const link = page.getByRole('link', { name: 'Open saved private copy', exact: true });
+    if (edited) await expect(link).toHaveCount(0);
+    else await expect(link).toHaveAttribute('href', `/boards/${id}`);
+  });
+}
+
+test('real quota loss after a successful recovery copy keeps current-pair navigation and truthful destination acknowledgement', async ({ page }) => {
+  await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
+  await page.route(`**/api/boards/${board.id}`, async (route) => route.request().method() === 'PUT' ? route.abort('connectionfailed') : route.continue());
+  await draw(page); await expect(page.getByRole('button', { name: 'Retry save' })).toBeVisible();
+  const source = (await stored(page))[0]; if (!source) throw new Error('No quota predecessor');
+  page.on('dialog', (dialog) => { void dialog.accept(); });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Recover local work' })).toBeVisible();
+  const quota = await fillQuota(page);
+  expect(quota.filled).toBeGreaterThan(1024 * 1024);
+  expect(quota.errors.every((name) => name === 'QuotaExceededError')).toBe(true);
+  const acknowledged: Board[] = [];
+  await page.route(`**/api/boards/${board.id}/copy`, async (route) => {
+    // Read the real server response before forwarding it; successful copy
+    // navigation otherwise legitimately releases the page's response body.
+    const response = await route.fetch(); expect(response.status()).toBe(201);
+    acknowledged.push(validateBoard(await response.json()));
+    await route.fulfill({ response });
+  });
+  await page.getByRole('button', { name: 'Save as copy', exact: true }).click();
+  await expect.poll(() => acknowledged.length).toBe(1);
+  const copy = acknowledged[0]; if (!copy) throw new Error('No real copy acknowledgement');
+  await expect(page).toHaveURL(`${applicationOrigin}/boards/${copy.id}?copyReceipt=unavailable`);
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+  await expect(page.getByRole('status').filter({ hasText: 'Browser storage could not remember its link on the original recovery draft' })).toBeVisible();
+  expect((await read(page, copy.id)).document).toEqual(source.value.document);
+  expect((await read(page, copy.id)).incoming).toEqual(source.value.incoming);
+  expect(await read(page, board.id)).toEqual(board);
+  expect(await stored(page)).toEqual([source]);
+  expect(await copyReceipts(page)).toEqual([]);
+  await page.evaluate(() => { for (const key of Object.keys(localStorage)) if (key.startsWith('ticket11-quota:')) localStorage.removeItem(key); });
+  await page.goto(`/boards/${board.id}`);
+  await expect(page.getByRole('heading', { name: 'Recover local work' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open saved private copy', exact: true })).toHaveCount(0);
 });

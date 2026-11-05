@@ -8,7 +8,7 @@
 .boards-list input, .board-settings input, .board-dialog input { min-inline-size: 0; max-inline-size: 100%; flex: 1 1 12rem; padding: 0.625rem; border: 1px solid var(--color-border-control); border-radius: 0.375rem; background: var(--color-bg-surface); color: var(--color-text-primary); font: inherit; font-size: 1rem; }
 .board-dialog input { inline-size: 100%; }
 .board-primary { background: var(--color-accent-fill); color: var(--color-text-on-accent); }
-.boards-list button[aria-disabled="true"], .board-editor button[aria-disabled="true"] { color: var(--color-text-secondary); background: var(--color-bg-subtle); cursor: wait; }
+.boards-list button[aria-disabled="true"], .board-editor button[aria-disabled="true"], .board-recovery button[aria-disabled="true"] { color: var(--color-text-secondary); background: var(--color-bg-subtle); cursor: wait; }
 .board-entries { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
 .board-entries li { display: grid; gap: 0.5rem; padding: 1.25rem; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 0.5rem; overflow-wrap: anywhere; }
 .board-entries a { font-size: 1.125rem; font-weight: 600; }
