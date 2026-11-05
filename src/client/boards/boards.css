@@ -30,6 +30,14 @@
 .board-dialog p { margin-block: 1rem; }
 .board-dialog button { min-inline-size: 0; overflow-wrap: anywhere; }
 .board-dialog::backdrop { background: #00000080; }
+.board-recovery { display: grid; gap: 1.25rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.board-recovery h1, .board-recovery h2, .board-recovery p { margin: 0; }
+.board-recovery p { max-inline-size: 75ch; line-height: 1.5; }
+.board-recovery h2 { font-size: 1.125rem; line-height: 1.4; }
+.board-recovery-drafts { display: grid; gap: 1.25rem; margin: 0; padding: 0; list-style: none; }
+.board-recovery-drafts li { display: grid; gap: 0.75rem; min-inline-size: 0; padding: 1.25rem; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 0.5rem; }
+.board-recovery > button { justify-self: start; }
+.board-recovery button, .board-save button { max-inline-size: 100%; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 400px) {
   .board-form-row > * { inline-size: 100%; }
   .board-canvas { block-size: 38rem; margin-inline: calc(-1 * clamp(1rem, 4vw, 3rem)); border-radius: 0; border-inline: 0; }

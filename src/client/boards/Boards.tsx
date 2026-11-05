@@ -5,6 +5,7 @@ import type { SessionResponse } from '../../shared/session';
 import { BoardSaveError, SaveCoordinator } from './saveCoordinator';
 import { requestBoard, type BoardAuthority } from './boardRequest';
 import { IncomingWorkspace } from './IncomingWorkspace';
+import { readRecovery, RecoveryStore, type StoredRecovery } from './recovery';
 import './boards.css';
 
 type Session = Extract<SessionResponse, { status: 'signed-in' }>;
@@ -82,11 +83,65 @@ function LoadBoard({ id, authority, theme }: { id: string; authority: BoardAutho
     void load();
     return () => controller.abort();
   }, [id, attempt, authority, board]);
-  if (board) return <BoardEditor initialBoard={board} authority={authority} theme={theme} />;
+  if (board) return <RecoverBoard board={board} authority={authority} theme={theme} />;
   return <section className="board-loading"><h1 ref={heading} tabIndex={-1}>Open board</h1><p role="status">{!authority.ready ? 'Opening is paused until your account is checked.' : !error ? 'Loading your board…' : ''}</p>{authority.ready && error && <><p role="alert" className="board-error">{error}</p><button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>Retry opening</button></>}<a href="/boards">Return to Boards</a></section>;
 }
-function BoardEditor({ initialBoard, authority, theme }: { initialBoard: Board; authority: BoardAuthority; theme: 'light' | 'dark' }) {
+function RecoverBoard({ board, authority, theme }: { board: Board; authority: BoardAuthority; theme: 'light' | 'dark' }) {
+  const [recovery] = useState(() => readRecovery(authority.session.user.id, board.id));
+  const [selected, setSelected] = useState<{ board: Board; restored: boolean; source?: StoredRecovery } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const heading = useRef<HTMLHeadingElement>(null);
+  const requests = useRef<AbortController | null>(null);
+  useEffect(() => { const controller = new AbortController(); requests.current = controller; return () => controller.abort(); }, []);
+  useEffect(() => { if (recovery.drafts.length) heading.current?.focus(); }, [recovery.drafts.length]);
+  async function copy(stored: StoredRecovery) {
+    if (busy || !authority.ready) return;
+    setBusy(true); setError('');
+    const signal = requests.current?.signal;
+    try {
+      const response = await requestBoard(`/api/boards/${encodeURIComponent(board.id)}/copy`, authority, 'POST',
+        { title: `${board.title.slice(0, 153)} (copy)`, document: stored.draft.document, incoming: stored.draft.incoming }, signal);
+      if (!response.ok) throw new Error('Copy failed');
+      const result = validateBoard(await response.json());
+      if (signal?.aborted) return;
+      window.location.assign(`/boards/${encodeURIComponent(result.id)}`);
+    } catch { if (!signal?.aborted) { setError('The copy could not be saved. Your recovery draft remains here. Check your connection and account, then Save as copy again.'); setBusy(false); } }
+  }
+  async function reloadServer() {
+    if (busy || !authority.ready || !window.confirm('Open the server version instead of a local draft? The recovery drafts will remain available on your next visit.')) return;
+    setBusy(true); setError('');
+    const signal = requests.current?.signal;
+    try {
+      const response = await requestBoard(`/api/boards/${encodeURIComponent(board.id)}`, authority, 'GET', undefined, signal);
+      if (!response.ok) throw new Error('Reload failed');
+      const latest = validateBoard(await response.json());
+      if (!signal?.aborted) setSelected({ board: latest, restored: false });
+    } catch { if (!signal?.aborted) { setError('The server version could not be opened. Your recovery drafts remain here. Check your connection and account, then Reload server version again.'); setBusy(false); } }
+  }
+  if (selected || recovery.drafts.length === 0) return <BoardEditor initialBoard={selected?.board ?? board} restored={selected?.restored ?? false} source={selected?.source} authority={authority} theme={theme} />;
+  return <section className="board-recovery" aria-labelledby="recovery-heading">
+    <h1 ref={heading} tabIndex={-1} id="recovery-heading">Recover local work</h1>
+    <p>“{board.title}” has local recovery drafts on this browser. Nothing has been applied to the server. Another open tab may still be editing one of these drafts.</p>
+    <p>Save a draft as a new private copy to keep both versions. Reloading opens the server version without clearing other tabs’ recovery work.</p>
+    <p role="status">{busy ? 'Resolving board recovery…' : !authority.ready ? 'Recovery actions are paused until your account is checked.' : ''}</p>
+    {error && <p role="alert" className="board-error">{error}</p>}
+    <ul className="board-recovery-drafts">{recovery.drafts.map((stored) => <li key={stored.key}>
+      <h2>Local draft · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(stored.draft.updatedAt)}</h2>
+      <p>{stored.draft.expectedRevision === board.revision ? 'The server is still at this draft’s base revision. You can review and explicitly retry saving.' : 'The server revision differs from this draft’s base. It will not be overwritten. Save a copy to keep this work.'}</p>
+      <div className="board-form-row"><button type="button" disabled={busy || !authority.ready} onClick={() => { void copy(stored); }}>Save as copy</button>
+      {stored.draft.expectedRevision === board.revision && <button type="button" disabled={busy || !authority.ready} onClick={() => {
+        // Opening a draft never writes to the server; retry remains explicit.
+        setSelected({ board: { ...board, document: stored.draft.document, incoming: stored.draft.incoming }, restored: true, source: stored });
+      }}>Review local draft</button>}</div>
+    </li>)}</ul>
+    <button type="button" disabled={busy || !authority.ready} onClick={() => { void reloadServer(); }}>Reload server version</button>
+    <a href="/boards">Return to Boards</a>
+  </section>;
+}
+function BoardEditor({ initialBoard, authority, theme, restored = false, source }: { initialBoard: Board; authority: BoardAuthority; theme: 'light' | 'dark'; restored?: boolean; source?: StoredRecovery | undefined }) {
   const [coordinator, setCoordinator] = useState<SaveCoordinator | null>(null);
+  const [recoveryStore] = useState(() => new RecoveryStore(authority.session.user.id, initialBoard.id, source));
   const context = useRef(authority);
   useLayoutEffect(() => { context.current = authority; }, [authority]);
   useEffect(() => {
@@ -98,14 +153,14 @@ function BoardEditor({ initialBoard, authority, theme }: { initialBoard: Board; 
       const value = T.object({ revision: T.number }).validate(await response.json());
       if (value.revision !== save.expectedRevision + 1) throw new BoardSaveError('failed');
       return value.revision;
-    }, initialBoard);
+    }, initialBoard, recoveryStore, restored);
     // The coordinator owns an abortable request lifetime; recreate it after StrictMode's cleanup.
     // oxlint-disable-next-line react/set-state-in-effect
     setCoordinator(saves);
-    const preventLoss = (event: BeforeUnloadEvent) => { if (saves.dirty) event.preventDefault(); };
+    const preventLoss = (event: BeforeUnloadEvent) => { saves.checkpoint(); if (saves.dirty) event.preventDefault(); };
     window.addEventListener('beforeunload', preventLoss);
     return () => { saves.dispose(); controller.abort(); window.removeEventListener('beforeunload', preventLoss); };
-  }, [initialBoard]);
+  }, [initialBoard, restored, recoveryStore]);
   return coordinator ? <EditableBoard board={initialBoard} authority={authority} theme={theme} coordinator={coordinator} /> : <p role="status">Opening canvas…</p>;
 }
 function EditableBoard({ board, authority, theme, coordinator }: { board: Board; authority: BoardAuthority; theme: 'light' | 'dark'; coordinator: SaveCoordinator }) {
@@ -115,6 +170,8 @@ function EditableBoard({ board, authority, theme, coordinator }: { board: Board;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [retryInProgress, setRetryInProgress] = useState(false);
+  const [copy, setCopy] = useState<Board | null>(null);
+  const [copyBusy, setCopyBusy] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const confirmation = useRef<HTMLInputElement>(null);
@@ -152,6 +209,28 @@ function EditableBoard({ board, authority, theme, coordinator }: { board: Board;
       ? 'The board was not deleted. Use Check account above if requests remain paused, then Delete board again.'
       : 'The board could not be deleted. Check your connection and try Delete board again.'); setBusy(false); dialog.current?.close(); } }
   }
+  async function saveCopy() {
+    if (copyBusy || !authority.ready) return;
+    setCopyBusy(true); setError('');
+    coordinator.checkpoint();
+    const operation = coordinator.getOperation();
+    const signal = requests.current?.signal;
+    try {
+      const response = await requestBoard(`/api/boards/${encodeURIComponent(board.id)}/copy`, authority, 'POST',
+        { title: `${title.slice(0, 153)} (copy)`, document: operation.document, incoming: operation.incoming }, signal);
+      if (!response.ok) throw new Error('Copy failed');
+      const result = validateBoard(await response.json());
+      if (signal?.aborted) return;
+      if (coordinator.completeCopy(operation)) window.location.assign(`/boards/${encodeURIComponent(result.id)}`);
+      else setCopy(result);
+    } catch { if (!signal?.aborted) setError('The copy could not be saved. Your local work remains here. Check your connection and account, then Save as copy again.'); }
+    finally { if (!signal?.aborted) setCopyBusy(false); }
+  }
+  function reloadServer() {
+    if (copyBusy || !window.confirm('Reload the server version? This tab’s unsaved local changes will be discarded. Other tabs’ recovery drafts are kept.')) return;
+    coordinator.discard();
+    window.location.reload();
+  }
   async function retrySave() {
     if (retryInProgress || !authority.ready) return;
     setRetryInProgress(true);
@@ -161,7 +240,9 @@ function EditableBoard({ board, authority, theme, coordinator }: { board: Board;
   }
   return <section className="board-editor" aria-labelledby="board-heading">
     <div className="board-heading"><h1 id="board-heading" ref={heading} tabIndex={-1}>{title}</h1><a href="/boards">All boards</a></div>
-    <div className="board-save" data-save-state={save.status}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress || !authority.ready} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{save.status === 'conflict' && <button type="button" onClick={() => { if (window.confirm('Reload the server version? Your unsaved local changes will be discarded.')) window.location.reload(); }}>Reload server version</button>}</div>
+    <div className="board-save" data-save-state={save.status}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress || !authority.ready} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{(save.status === 'conflict' || save.retryable) && <div className="board-form-row"><button type="button" disabled={copyBusy || !authority.ready} aria-busy={copyBusy} onClick={() => { void saveCopy(); }}>{copyBusy ? 'Saving copy…' : 'Save as copy'}</button><button className="board-danger" type="button" disabled={copyBusy} onClick={reloadServer}>Reload server version</button></div>}</div>
+    {save.recoveryUnavailable && <p role="alert" className="board-error">Browser recovery storage is unavailable. Keep this tab open until saving succeeds, or save a private copy. Browser recovery is best effort, not a server backup.</p>}
+    {copy && <p role="status">A private copy was saved, but you made newer changes while it was saving. Those changes remain in this tab. <a href={`/boards/${encodeURIComponent(copy.id)}`} target="_blank" rel="noopener">Open saved copy</a></p>}
     <details className="board-settings"><summary>Board settings</summary><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name (1–160 characters)</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></details>
     {error && <p className="board-error" role="alert">{error}</p>}
     <div className="board-canvas"><IncomingWorkspace board={board} authority={authority} coordinator={coordinator} theme={theme} /></div>

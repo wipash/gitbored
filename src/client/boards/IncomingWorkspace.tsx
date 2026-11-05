@@ -82,7 +82,16 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     }
     save(document, next);
   }, [save]);
-  const mount = useCallback((editor: Editor) => { editorRef.current = editor; return () => { editorRef.current = null; history.current.clear(); }; }, []);
+  const mount = useCallback((editor: Editor) => {
+    editorRef.current = editor;
+    const releaseCheckpoint = coordinator.setCheckpoint(() => {
+      const document = captureNativeDocument(editor);
+      // Explicit save/copy/leave boundaries must include edits whose SDK store
+      // notification has not reached the next animation frame yet.
+      if (JSON.stringify(document) !== JSON.stringify(documentRef.current)) save(document, current.current);
+    });
+    return () => { releaseCheckpoint(); editorRef.current = null; history.current.clear(); };
+  }, [coordinator, save]);
   const remember = useCallback((item: SourceItem) => {
     const scope = `${item.metadata.locator.owner}/${item.metadata.locator.repository}`.toLowerCase();
     if (!canRead(authority) || deniedScopes.current.has(scope)) return;
