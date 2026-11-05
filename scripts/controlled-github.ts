@@ -65,7 +65,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
       return reply.type('text/html').send(`<!doctype html><html lang="en"><title>Controlled GitHub</title><body><h1>Controlled GitHub authorization</h1><p>Test identities only; not real GitHub.</p><a href="${alice.pathname}${alice.search.replaceAll('&', '&amp;')}">Authorize Alice</a> <a href="${bob.pathname}${bob.search.replaceAll('&', '&amp;')}">Authorize Bob</a></body></html>`);
     }
     const redirect = url.searchParams.get('redirect_uri');
-    if (!redirect || !['http://127.0.0.1:3100/api/auth/callback', 'http://127.0.0.1:3001/api/auth/callback', 'http://127.0.0.1:3005/api/auth/callback'].includes(redirect)) {
+    if (!redirect || !['http://127.0.0.1:3100/api/auth/callback', 'http://127.0.0.1:3001/api/auth/callback', 'http://127.0.0.1:3005/api/auth/callback', 'http://127.0.0.1:3009/api/auth/callback', 'https://127.0.0.1:3010/api/auth/callback'].includes(redirect)) {
       return reply.code(400).send({ error: 'Unregistered test callback' });
     }
     const callback = new URL(redirect);

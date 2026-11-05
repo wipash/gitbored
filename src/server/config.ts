@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { readEncryptionKeyFile } from './encryptionKey.js';
 
 export interface AuthConfig {
   origin: string;
@@ -25,13 +26,18 @@ function isLoopback(hostname: string): boolean {
   return ['127.0.0.1', 'localhost', '[::1]'].includes(hostname);
 }
 
-function readAuth(environment: NodeJS.ProcessEnv): AuthConfig | null {
+function readAuth(environment: NodeJS.ProcessEnv, directory: string): AuthConfig | null {
   const clientId = environment['GITHUB_CLIENT_ID'];
   const clientSecret = environment['GITHUB_CLIENT_SECRET'];
-  const key = environment['TOKEN_ENCRYPTION_KEY'];
+  const keyFile = environment['TOKEN_ENCRYPTION_KEY_FILE'];
+  if (keyFile !== undefined && environment['TOKEN_ENCRYPTION_KEY'] !== undefined) {
+    throw new Error('Choose TOKEN_ENCRYPTION_KEY_FILE or TOKEN_ENCRYPTION_KEY, not both.');
+  }
+  const key = keyFile === undefined ? environment['TOKEN_ENCRYPTION_KEY']
+    : readEncryptionKeyFile(resolve(directory, keyFile));
   if (!clientId && !clientSecret && !key) return null;
   if (!clientId || !clientSecret || !key || !/^[a-fA-F0-9]{64}$/.test(key)) {
-    throw new Error('Configure GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and a 64-hex TOKEN_ENCRYPTION_KEY together.');
+    throw new Error('Configure GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and a 64-hex encryption key together.');
   }
   const origin = new URL(environment['APP_ORIGIN'] ?? 'http://127.0.0.1:3001');
   if (origin.href !== `${origin.origin}/` || origin.username || origin.password) {
@@ -89,6 +95,6 @@ export function readConfig(environment: NodeJS.ProcessEnv, directory: string): R
     dataDirectory: resolve(directory, dataDirectory),
     clientDirectory: resolve(directory, 'dist/client'),
     serveClient,
-    auth: readAuth(environment),
+    auth: readAuth(environment, directory),
   };
 }
