@@ -399,23 +399,38 @@ test('equal deferred native delivery after a copy checkpoint is not a later user
 for (const paused of ['failed', 'conflict']) {
   test(`real quota failure publishes recoverability loss while ${paused} saves stay paused`, async ({ page }, testInfo) => {
     await signIn(page); const board = await create(page); await page.goto(`/boards/${board.id}`);
+    // Navigation does not await the asynchronous authorized board load. Mount
+    // the base-revision editor before the competing writer advances authority.
+    await expect(page.locator('.tl-container')).toBeVisible();
+    let original = board;
     if (paused === 'conflict') {
-      expect((await page.request.put(`/api/boards/${board.id}`, { headers: await headers(page), data: { expectedRevision: board.revision, document: board.document, incoming: board.incoming } })).status()).toBe(200);
+      const response = await page.request.put(`/api/boards/${board.id}`, { headers: await headers(page), data: { expectedRevision: board.revision, document: board.document, incoming: board.incoming } });
+      expect(response.status()).toBe(200);
+      expect(await response.json()).toEqual({ revision: board.revision + 1 });
+      original = await read(page, board.id);
+      expect(original.revision).toBe(board.revision + 1);
+      expect(original.document).toEqual(board.document);
+      expect(original.incoming).toEqual(board.incoming);
     }
     let writes = 0;
+    const localRevisions: number[] = [];
     await page.route(`**/api/boards/${board.id}`, async (route) => {
       if (route.request().method() !== 'PUT') return route.continue();
       writes += 1;
+      localRevisions.push(T.object({ expectedRevision: T.number, document: T.unknown, incoming: T.unknown }).validate(route.request().postDataJSON()).expectedRevision);
       if (paused === 'failed') await route.abort('connectionfailed');
       else await route.continue();
     });
+    const rejected = paused === 'conflict' ? page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().endsWith(`/api/boards/${board.id}`)) : null;
     await draw(page);
+    if (rejected) expect((await rejected).status()).toBe(409);
     await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', paused === 'failed' ? 'unsaved' : 'conflict');
     const warning = page.getByRole('alert').filter({ hasText: 'Browser recovery storage is unavailable' });
     await expect(warning).toHaveCount(0);
     if (paused === 'failed') await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toBeVisible();
+    expect(localRevisions).toEqual([board.revision]);
     const older = (await stored(page))[0]; if (!older) throw new Error('No older recoverable pair');
-    const original = await read(page, board.id);
+    expect(await read(page, board.id)).toEqual(original);
     const quota = await page.evaluate(() => {
       let index = 0; let filled = 0; const errors: string[] = [];
       for (let size = 1024 * 1024; size >= 1; size = Math.floor(size / 2)) {
