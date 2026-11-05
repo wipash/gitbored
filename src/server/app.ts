@@ -7,6 +7,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { RuntimeConfig } from './config.js';
 import { checkStorage } from './storage.js';
 import { AuthenticationError, registerAuthentication } from './auth.js';
+import { registerSources } from './sources.js';
 
 function isClientNavigation(request: FastifyRequest): boolean {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -52,6 +53,7 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
   });
 
   app.decorate('authentication', registerAuthentication(app, database, config.auth));
+  registerSources(app, database, config.auth);
 
   app.setNotFoundHandler((request, reply) => {
     if (config.serveClient && isClientNavigation(request)) {

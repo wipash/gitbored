@@ -4,9 +4,9 @@ A local-first issue-board application in development. Product scope lives in
 [the issue-canvas specification](.scratch/issue-canvas/spec.md).
 
 The runnable application provides GitHub App user sign-in, encrypted server-side
-credentials, private sessions and persistent light/dark/system theme selection.
-The separate `/runtime` diagnostic checks Fastify and real SQLite. Incoming and
-board editing are not implemented yet.
+credentials, private sessions, authorized GitHub source browsing and persistent
+light/dark/system theme selection. The separate `/runtime` diagnostic checks
+Fastify and real SQLite. Incoming and board editing are not implemented yet.
 
 ## Requirements
 
@@ -28,7 +28,8 @@ pnpm dev
 Open <http://127.0.0.1:3001>. Vite serves the client and proxies `/api` to
 Fastify on port 3002. Ctrl+C stops both development processes.
 
-The server creates `.data/gitbored.sqlite` with authentication tables. `DATA_DIR`
+The server creates `.data/gitbored.sqlite` with authentication and user-scoped
+repository-source/reference-registry tables. `DATA_DIR`
 changes that directory; relative paths resolve from the repository root. The
 directory is restricted to the server account and runtime data is ignored by Git.
 
@@ -100,6 +101,57 @@ and Space, comma with changed modifiers/focus, Meta reconciliation, repeats,
 dismissal, blur and ordinary native editing/shortcuts. A successful install or
 type-check alone does not establish correct keyboard behavior.
 
+## Authorized source browsing
+
+After sign-in, **Browse GitHub sources** lists authorized personal/organization
+installations and their repositories. Sign-in, installation selection and
+organization approval are separate. **Manage GitHub installations** opens GitHub's
+settings; organization owners may need to approve the app and select repositories.
+An empty picker does not prove that public URLs are unavailable.
+
+Repository browsing loads mixed issue/PR pages, including PR-only and empty pages.
+**Load next page** advances explicitly; a transient failure retains loaded results
+and **Retry page** retries the failed cursor. Detected access loss clears loaded
+values. Title/number and kind filters apply only to the loaded subset, never to a
+complete repository search. Two-line row titles and bounded previews expand
+through native, keyboard-accessible **View full available details** disclosures.
+Full titles, labels, assignees, state reason and available timestamps are retained;
+no bodies or comments are requested for rows or details.
+
+**Resolve URL** accepts canonical HTTPS `github.com/owner/repository/issues/123`
+and `/pull/123` URLs, optionally ending in `/`, without credentials, ports, encoded
+paths, queries or fragments. Public URLs outside the picker and authorized private
+URLs use the signed-in user's token, never an installation token. API paths are
+constructed from validated parts. URL access does not imply installation/webhook
+coverage. Neither browsing nor resolving creates a canvas placement.
+
+`src/shared/sources.ts` owns source responses; `ItemReference` / `ItemMetadata`
+remain the shared native contracts. IDs are decoded from original JSON numeric
+tokens before rounding, and REST IDs stay decimal strings. Registry identities
+are scoped to the current user and immutable item node/kind; repository identity
+and mutable locators remain separate. Issue and PR REST IDs have distinct fields.
+Only selected URL/reference reads request PR enrichment. Without it, PR workflow
+state stays **unknown**; old enrichment is not reused to imply authority.
+
+Public HTTP contracts (all authenticated, no-store):
+
+- `GET /api/sources/installations?page=1`
+- `GET /api/sources/installations/:installationId/repositories?page=1`
+- `GET /api/sources/repositories/:owner/:repository/items?page=1`
+- `POST /api/sources/resolve` with `{ "url": "https://github.com/…" }`, exact Origin
+  and current-session `X-CSRF-Token`
+- `GET /api/references/:id` checks reference ownership and reads its current
+  representation using the current user's provider token. A saved locator that
+  resolves to a different node is unresolved, not silently reassigned.
+
+Pages contain at most 30 rows; page inputs are 1–10,000 and only validated next
+page numbers are used, never provider-supplied Link URLs. Provider responses are
+bounded to 4 MB; over-limit or malformed pages fail without advancing progress.
+Titles are bounded to 65,536 characters, label/assignee lists to 1,000 values,
+label names to 1,024 and assignee values to 256 characters. Values are rejected,
+not silently truncated, at the provider boundary. The registry stores identity
+and locators, not private titles or a browser-persisted metadata cache.
+
 ## GitHub App setup
 
 Create a GitHub App with user authorization enabled. Register the callback as
@@ -109,11 +161,11 @@ URL and callback must match exactly. Enable expiring user access tokens so refre
 is available. Sign-in is user authorization, not installation authorization:
 anyone who successfully authorizes may sign in; there is no owner allowlist.
 
-For the upcoming read-only source flow, select Issues: read, Pull requests: read
+For read-only source browsing, select Issues: read, Pull requests: read
 and required Metadata: read. Do not grant write, Contents, Checks, Actions, Commit
 statuses or organization Members permissions. Installation access and organization
 approval are separate from signing in. No App private key or installation token
-is required or used by this sign-in flow.
+is required or used by sign-in or source browsing.
 
 Supply these **server-only** variables through your shell/service environment
 (the launcher does not load a `.env` file):
@@ -181,6 +233,12 @@ in the optional Fastify configuration callback before it starts listening.
 The provider's `/__control` accepts `reset`, `login`, `expiresIn`,
 `refreshExpiresIn`, `fail`, `deny`, `rateLimit`, `revoke` and `revokeRefresh`;
 `/__stats` reports exchange/refresh counts and expired controlled access tokens.
+Source controls also accept `sourceMode` (`normal`, `empty`, `malformed`,
+`untrusted-link`), `sourceFailurePage`, `pullUnavailable`, `sourceDenied` and
+`sourceDelayMs` (0–5000). `/__source-stats` reports token-free user/path request
+evidence; `POST /__source-stats/reset` clears it. Fixtures contain raw JSON numeric
+IDs beyond `Number.MAX_SAFE_INTEGER`, mixed/PR-only pages, multiple repository
+owners and public-outside-installation/private access scenarios.
 The test runner separately registers `/__runner/restart` on the controlled service;
 it restarts the actual application against the same temporary SQLite database
 using an original or replacement test encryption key. This is test-process
@@ -190,6 +248,25 @@ server-side expiry. Longer source suites may set `CONTROLLED_SESSION_SECONDS`;
 the short-session expiry test explicitly skips in that mode and must also be
 run in the default mode. Run `E2E_AUTH_MODE=unconfigured pnpm test:e2e` separately
 to cover the missing-credential UI and HTTP contract (configured-auth tests skip).
+
+For an isolated, reproducible source-mode review preview (no production build):
+
+```sh
+E2E_SOURCE_MODE=true E2E_APP_PORT=3006 E2E_FRONTEND_PORT=3005 \
+  E2E_PROVIDER_PORT=3008 CONTROLLED_SESSION_SECONDS=900 \
+  pnpm exec tsx scripts/test-server.ts
+```
+
+Open <http://127.0.0.1:3005>, select **Sign in with GitHub**, then **Authorize Alice**
+or **Authorize Bob** on the explicitly controlled provider. Alice has private
+`alice/project` and `alice/other`; page 2 of installations exposes `example-org`.
+Use `https://github.com/public/outside/issues/1` for public URL resolution and
+`https://github.com/alice/project/pull/2` for distinct PR identity/enrichment.
+The same environment with `pnpm exec playwright test tests/e2e/sources.spec.ts`
+starts/stops the preview automatically. Omit `CONTROLLED_SESSION_SECONDS` to
+retain the default ten-second expiry proof. The runner supports the same port
+variables for other isolated worktrees (test callbacks allow only 3001/3005/3100).
+Ctrl+C stops owned processes and removes its temporary SQLite directory.
 
 Provider replacement requires **both** `ENABLE_CONTROLLED_GITHUB=true` and
 `CONTROLLED_GITHUB_ORIGIN=http://127.0.0.1:3101`, plus a loopback `APP_ORIGIN`.

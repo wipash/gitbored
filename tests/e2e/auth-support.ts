@@ -3,8 +3,8 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import type { SessionResponse } from '../../src/shared/session.js';
 
 import { isSessionResponse } from '../../src/shared/session.js';
-export const providerOrigin = 'http://127.0.0.1:3101';
-export const applicationOrigin = 'http://127.0.0.1:3100';
+export const providerOrigin = `http://127.0.0.1:${process.env['E2E_PROVIDER_PORT'] ?? '3101'}`;
+export const applicationOrigin = `http://127.0.0.1:${process.env['E2E_FRONTEND_PORT'] ?? process.env['E2E_APP_PORT'] ?? '3100'}`;
 
 export async function controlProvider(request: APIRequestContext, settings: Record<string, unknown>): Promise<void> {
   const response = await request.post(`${providerOrigin}/__control`, { data: settings });

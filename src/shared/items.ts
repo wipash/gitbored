@@ -48,6 +48,10 @@ export interface ItemMetadata {
   labels: readonly string[];
   assignees: readonly string[];
   freshness: 'current' | 'stale';
+  stateReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  closedAt?: string | null;
 }
 
 export type ItemMetadataState =

@@ -1,0 +1,30 @@
+.source-browser { margin-block-start: 2rem; display: grid; gap: 1.5rem; min-inline-size: 0; }
+.source-browser section { display: grid; gap: 1rem; min-inline-size: 0; }
+.source-browser h2 { font-size: 1.25rem; }
+.source-browser h3, .source-browser h4 { font-size: 1rem; line-height: 1.5; margin: 0; }
+.source-browser input { inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; padding: .5rem .75rem; border: 1px solid var(--color-border-control); border-radius: .375rem; background: var(--color-bg-surface); color: var(--color-text-primary); font: inherit; font-size: 1rem; }
+.source-browser label { display: grid; gap: .5rem; }
+.source-navigation, .source-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.source-filters { align-items: start; }
+.source-filters label { flex: 1 1 15rem; min-inline-size: 0; }
+.source-filters select { inline-size: 100%; }
+.source-choices, .source-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; min-inline-size: 0; }
+.source-choices button { text-align: start; overflow-wrap: anywhere; }
+.source-item { min-inline-size: 0; padding: 1rem; background: var(--color-bg-subtle); border-radius: .5rem; display: grid; gap: .75rem; overflow-wrap: anywhere; }
+.source-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.source-preview { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-inline-size: 100%; }
+.source-locator, .source-preview, .source-subset { color: var(--color-text-secondary); font-size: .875rem; }
+.source-subset { font-variant-numeric: tabular-nums; }
+.source-details summary { cursor: pointer; min-block-size: 2rem; padding-block: .25rem; text-decoration: underline; text-underline-offset: .2em; }
+.source-full { margin-block-start: 1rem; display: grid; gap: 1rem; }
+.source-full dl { margin: 0; }
+.source-full dt { font-weight: 650; margin-block-start: .75rem; }
+.source-full dd { margin-inline: 0; }
+.source-full ul { padding-inline-start: 1.25rem; }
+.source-full h4, .source-full dd, .source-full li { overflow-wrap: anywhere; }
+.source-progress { display: grid; gap: .75rem; justify-items: start; }
+.source-url { padding-block-start: 1.5rem; border-block-start: 1px solid var(--color-border-subtle); }
+.source-url form { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; justify-items: start; min-inline-size: 0; }
+.source-url form p { min-inline-size: 0; max-inline-size: 100%; overflow-wrap: anywhere; font-size: .875rem; color: var(--color-text-secondary); }
+.source-url input { max-inline-size: 100%; }
+.source-browser a { overflow-wrap: anywhere; }

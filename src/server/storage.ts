@@ -1,6 +1,7 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { initializeSources } from './sources.js';
 
 export async function openStorage(directory: string): Promise<DatabaseSync> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -28,6 +29,7 @@ export async function openStorage(directory: string): Promise<DatabaseSync> {
         verifier TEXT NOT NULL, expires INTEGER NOT NULL
       );
     `);
+    initializeSources(database);
     return database;
   } catch (cause) {
     database.close();

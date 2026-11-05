@@ -9,20 +9,25 @@ import { startControlledGitHub } from './controlled-github.js';
 const directory = await mkdtemp(join(tmpdir(), 'gitbored-e2e-'));
 const configured = process.env['E2E_AUTH_MODE'] !== 'unconfigured';
 const keys = { original: '1234567890abcdef'.repeat(4), replacement: 'abcdef1234567890'.repeat(4) };
+const appPort = process.env['E2E_APP_PORT'] ?? '3100';
+const providerPort = Number(process.env['E2E_PROVIDER_PORT'] ?? '3101');
+const frontendPort = process.env['E2E_FRONTEND_PORT'] ?? appPort;
+const sourceMode = process.env['E2E_SOURCE_MODE'] === 'true';
 let child: ChildProcess | undefined;
+let frontend: ChildProcess | undefined;
 let restarting = false;
 let stopping = false;
 let finish: (() => void) | undefined;
 const stopped = new Promise<void>((resolve) => { finish = resolve; });
 
 async function startApplication(encryptionKey: string): Promise<ChildProcess> {
-  const application = spawn(process.execPath, ['dist/server/server/main.js'], {
+  const application = spawn(process.execPath, sourceMode ? ['--import', 'tsx', 'src/server/main.ts'] : ['dist/server/server/main.js'], {
     stdio: ['ignore', 'pipe', 'inherit'],
-    env: { ...process.env, NODE_ENV: 'production', HOST: '127.0.0.1', PORT: '3100', DATA_DIR: directory,
-      APP_ORIGIN: 'http://127.0.0.1:3100', ALLOW_LOOPBACK_HTTP: 'true',
+    env: { ...process.env, NODE_ENV: sourceMode ? 'development' : 'production', HOST: '127.0.0.1', PORT: appPort, DATA_DIR: directory,
+      APP_ORIGIN: `http://127.0.0.1:${frontendPort}`, ALLOW_LOOPBACK_HTTP: 'true',
       GITHUB_CLIENT_ID: configured ? 'controlled-client' : '', GITHUB_CLIENT_SECRET: configured ? 'controlled-secret' : '',
       TOKEN_ENCRYPTION_KEY: configured ? encryptionKey : '', ENABLE_CONTROLLED_GITHUB: 'true',
-      CONTROLLED_GITHUB_ORIGIN: 'http://127.0.0.1:3101', CONTROLLED_SESSION_SECONDS: process.env['CONTROLLED_SESSION_SECONDS'] ?? '10' },
+      CONTROLLED_GITHUB_ORIGIN: `http://127.0.0.1:${providerPort}`, CONTROLLED_SESSION_SECONDS: process.env['CONTROLLED_SESSION_SECONDS'] ?? '10' },
   });
   return await new Promise<ChildProcess>((resolve, reject) => {
     let ready = false;
@@ -52,7 +57,7 @@ async function stopApplication(): Promise<void> {
   await exited;
 }
 
-const provider = await startControlledGitHub(3101, (app) => {
+const provider = await startControlledGitHub(providerPort, (app) => {
   // Test-process lifecycle only: no application route, database mutation or authentication bypass.
   app.post('/__runner/restart', async (request, reply) => {
     const body = request.body;
@@ -80,10 +85,20 @@ function terminate(): void {
 process.once('SIGINT', terminate);
 process.once('SIGTERM', terminate);
 try {
+  if (sourceMode && frontendPort !== appPort) {
+    frontend = spawn(process.execPath, ['node_modules/vite/bin/vite.js'], {
+      stdio: 'inherit', env: { ...process.env, PORT: appPort, VITE_PORT: frontendPort },
+    });
+  }
   child = await startApplication(keys.original);
   await stopped;
 } finally {
   stopping = true;
+  if (frontend && frontend.exitCode === null && frontend.signalCode === null) {
+    const exited = once(frontend, 'exit');
+    frontend.kill('SIGTERM');
+    await exited;
+  }
   process.removeListener('SIGINT', terminate);
   process.removeListener('SIGTERM', terminate);
   await provider.close();

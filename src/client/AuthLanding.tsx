@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SessionResponse } from '../shared/session';
 import { isSessionResponse } from '../shared/session';
 import { isThemePreference, useTheme } from './theme';
+import { SourceBrowser } from './SourceBrowser';
 import './auth.css';
 
 type View = { status: 'loading' } | { status: 'error' } | SessionResponse;
@@ -105,10 +106,11 @@ export function AuthLanding() {
             {view.authorization === 'reauthorize' ? <>
               <p className="auth-error" role="alert">Your GitHub authorization ended. Reconnect to resume GitHub access. Your account is still yours.</p>
               <a className="auth-primary" href="/api/auth/github">Reconnect GitHub</a>
-            </> : <p className="connection-detail">Signed in securely. Board creation and repository sources are coming next; no GitHub changes are made here.</p>}
+            </> : <p className="connection-detail">Signed in securely. Browse sources below; no GitHub changes are made here.</p>}
             <button type="button" disabled={busy} onClick={() => { void logout(); }}>Sign out</button>
           </>}
         </section>
+        {view.status === 'signed-in' && view.authorization === 'ready' && <SourceBrowser key={view.user.id} session={view} />}
         {!theme.persistenceAvailable && <p id="theme-storage-note" className="storage-note" role="status">Theme changes apply for this visit. Allow site storage to keep your preference after reloading.</p>}
       </main>
       <footer><span>GitBored</span><a href="/runtime">Runtime diagnostics</a></footer>
