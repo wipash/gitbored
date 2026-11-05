@@ -14,7 +14,10 @@ Published 19 specification tickets plus bounded integration correction 20. GitHu
 | 02 Native reference workspace | done | NativeWorkspace; independent source + production-browser approval | Merge `a5147d9`, verified at `f8c9c79`; owned worktrees/branch removed | Released |
 | 03 Private durable boards | done | DurableBoards; independent source + production-runtime approval | Merge `dad0cd4`; owned worktree/branch removed | Released |
 | 04 Authorized source browser | done | Independent source + affected production approval | Merge `8367984`; owned worktree/branch removed | Released |
-| 05–19 | queued | Unclaimed | See individual blocking edges | None |
+| 05 Persistent Incoming/placement | in-progress | IncomingPlacement | `ticket/05-persistent-incoming-placement` / `../gitbored-wt/05-persistent-incoming-placement` | 3001/3002/3007 |
+| 06 Contextual details/controls | queued, ready after shared Incoming surface stabilizes | Unclaimed | Reuse05 panel convention and actual drag flow | None |
+| 07–15,17–19 | queued | Unclaimed | See individual blocking edges | None |
+| 16 Durable deployment/backup | in-progress | DurableOperations | `ticket/16-durable-deployment-backup` / `../gitbored-wt/16-durable-deployment-backup` | 3009/3010/3011 |
 | 20 Logout-navigation synchronization | done | Project manager; one-line integration correction | Source `cc00cbe`, merge `d41b835` | Released |
 
 Current ready frontier: **05 Incoming,06 contextual details/controls,16 deployment/backup**. Incoming discovery never auto-places issues. Start independent05/16 work; sequence06 composition behind the actual05 Incoming surface to avoid competing panel conventions and permit real drag/dismissal acceptance. Only the manager merges locally into main; no push or PR.
@@ -31,6 +34,7 @@ Current ready frontier: **05 Incoming,06 contextual details/controls,16 deployme
 - Planned 03/04 ownership after 02 integration: 03 owns board tables/routes/contracts, save state, actual workspace mounting and final shared application/navigation composition. 04 owns user-scoped reference/source tables, provider validation/normalization, source endpoints and standalone source-browser component. Both reuse session/native contracts; neither invents a second metadata or history model. Source browser receives the authenticated session from the application composition, not a separate auth flow. Discovery does not place shapes.
 - Shared-file integration plan: both may add their own route/table registration and minimal authenticated navigation in isolated branches. Integrate 04 first; 03 then rebases and resolves `app.ts`, `storage.ts`, `AuthLanding.tsx`/`App.tsx` and shared documentation as composition owner, retaining both flows and existing auth behavior. 04 owns controlled-provider/runner extensions; 03 reuses the existing restart/public-HTTP helpers and coordinates needed fixture changes. No production fixture routes or test-only auth bypass.
 - Completed03 development reservations3001/3002/3007 are released; completed04 reservations3005/3006/3008 remain released. Production gate ports3100/3101 are serialized. Preserve the standard short-session auth gate and explicit longer-session native smokes. All required03 combined rendered review and affected correction validation are complete; two documented upstream SDK limits remain unchanged.
+- Current05/16 ownership:05 exclusively owns schema/board contracts/routes/save effects, `Boards.tsx` composition, Incoming UI and immutable authorization-scoped workspace metadata;16 owns operational tooling/configuration and README operator sections, not application schema or UI.05 owns needed additive controlled-provider scenarios.16 rebases after05 and proves restoration of real Incoming before acceptance.06 extends the actual05 non-modal convention after the shared surface stabilizes; no parallel competing controller or fabricated Incoming-drag proof.
 
 ## Review and integration evidence
 
@@ -111,4 +115,4 @@ Current ready frontier: **05 Incoming,06 contextual details/controls,16 deployme
 
 ## Next action
 
-Claim05 Incoming and16 operations on current main with disjoint file ownership and assigned ports. Keep06 ready and sequence its shared contextual composition after actual Incoming is available; do not manufacture an Incoming-drag pass with a placeholder.16 final restore must include real05 Incoming. Continue all reachable tickets; real GitHub credentials/human authorization remain a later18 prerequisite.
+Implement05 Incoming and16 operations in their isolated worktrees with the recorded contracts. Prepare06 as the actual Incoming surface stabilizes, then validate contextual controls against real drag/placement and retained native interaction.16 final restore must include actual05 Incoming. Continue all reachable tickets; real GitHub credentials/human authorization remain a later18 prerequisite.

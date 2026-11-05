@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Work state:** queued
+**Work state:** in-progress
 
 ## Acceptance criteria
 
@@ -27,3 +27,5 @@ Own operational configuration, backup/restore tooling and operator instructions;
 ## Comments
 
 - 2026-11-05 — Project manager: Published from the accepted specification under the user’s instruction to proceed without a confirmation round. Work starts only when blocking tickets are done.
+- 2026-11-06 — **Project manager, claim:** owner **DurableOperations**, branch `ticket/16-durable-deployment-backup`, worktree `../gitbored-wt/16-durable-deployment-backup`; reserved application/TLS/provider **3009/3010/3011**.03 is integrated and done. Own operational configuration/tooling and README operator instructions, not application schema, board composition, native SDK or source-provider normalization. Reuse one backend/SQLite, loopback-by-default and protected current-user credentials; secure non-loopback exposure may use an explicit HTTPS reverse proxy without widening the application’s loopback listener. No push, cloud mutation, live GitHub credentials, public deployment, automated backup fleet or HA.
+- 2026-11-06 — **Project manager, integration dependency:**05 concurrently owns Incoming/schema/save effects and necessary controlled-provider additions. Exercise reachable fresh setup, consistent SQLite backup/restore, protected separate key recovery, shutdown/restart, owner/other-user denial and HTTPS/origin/CSRF now. Final acceptance must rebase onto actual05 and restore real persisted Incoming, not a synthetic stand-in or an omitted table. Keep README changes to operator sections;16 resolves its integration against05 while retaining both. Full gate/merge remains manager-owned. Append actual candidate/scenarios and evidence to this ticket, keep tracking separate, clean only owned resources, never edit PROGRESS.

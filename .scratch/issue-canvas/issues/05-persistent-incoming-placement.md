@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Work state:** queued
+**Work state:** in-progress
 
 ## Acceptance criteria
 
@@ -29,3 +29,5 @@ Own Incoming/source bookkeeping and atomic save effects, coordinating native edi
 ## Comments
 
 - 2026-11-05 — Project manager: Published from the accepted specification under the user’s instruction to proceed without a confirmation round. Work starts only when blocking tickets are done.
+- 2026-11-06 — **Project manager, claim:** owner **IncomingPlacement**, branch `ticket/05-persistent-incoming-placement`, worktree `../gitbored-wt/05-persistent-incoming-placement`; reserved frontend/backend/provider **3001/3002/3007**.03/04 are integrated and done. Own Incoming tables/contracts/routes, selected-source/cursor/seen bookkeeping, revision-atomic native placement/queue effects, save-coordinator integration, board composition and authorization-scoped immutable metadata hydration. Preserve every accepted03 account/native/save lifetime and04 authorization/denial contract. Build one actual non-modal Incoming surface;06 will extend that convention after the real flow is available, not add a competing panel model. No auto-placement, independent undo stack, native SDK patches, future filter/refresh placeholders or production fixture path.
+- 2026-11-06 — **Project manager, boundaries:**16 concurrently owns operational tooling/configuration and README operator sections;05 owns workspace/Incoming documentation and application schema/composition.16 will rebase and preserve05 schema/docs before final real-Incoming restore proof. Use the existing controlled provider;05 owns necessary provider-scenario additions and keeps them additive. Use better-interface and all owning domain skills, exact-candidate public-browser/HTTP/SQLite evidence, separate feature/tracking commits, and complete owned resource teardown. Do not edit manager-owned PROGRESS or run full integration gates mid-flight.
