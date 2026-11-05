@@ -100,11 +100,12 @@ function ItemRow({ item }: { item: SourceItem }) {
 function RepositoryItems({ repository, session, onAccessLoss }: SourceSessionProps & { repository: RepositorySource }) {
   const pages = usePages(`/api/sources/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/items`, session, itemIdentity, readSourceItem, onAccessLoss);
   const [query, setQuery] = useState(''); const [kind, setKind] = useState('all');
+  const queryInput = useRef<HTMLInputElement>(null);
   const matches = pages.items.filter((item) => (kind === 'all' || item.metadata.kind === kind)
     && `${item.metadata.title} ${item.metadata.locator.number}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return <section aria-labelledby="source-items-heading"><h2 id="source-items-heading"><bdi>{repository.owner}/{repository.name}</bdi></h2>
     <p>Browse mixed issues and pull requests. Discovery does not add anything to a board.</p>
-    <div className="source-filters"><label>Filter loaded titles or numbers<input type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+    <div className="source-filters"><label>Filter loaded titles or numbers<input ref={queryInput} type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
       <label>Kind in loaded results<select value={kind} onChange={(event) => setKind(event.currentTarget.value)}><option value="all">Issues and pull requests</option><option value="issue">Issues</option><option value="pull-request">Pull requests</option></select></label></div>
     <p className="source-subset" role="status">Showing {matches.length} of {pages.items.length} loaded items. This filters the loaded subset only, not the whole repository.</p>
     {!pages.busy && !pages.error && matches.length === 0 && <p>{pages.items.length
@@ -112,7 +113,7 @@ function RepositoryItems({ repository, session, onAccessLoss }: SourceSessionPro
       : pages.nextPage === null
         ? 'No issues or pull requests were returned. Browse another repository or resolve a URL below.'
         : 'No items returned on the loaded pages. Load the next page below to continue.'}</p>}
-    {(query || kind !== 'all') && <button type="button" onClick={() => { setQuery(''); setKind('all'); }}>Clear filters</button>}
+    {(query || kind !== 'all') && <button type="button" onClick={() => { setQuery(''); setKind('all'); queryInput.current?.focus(); }}>Clear filters</button>}
     <ul className="source-items">{matches.map((item) => <ItemRow key={item.reference.id} item={item} />)}</ul>
     <PageProgress {...pages} />
   </section>;

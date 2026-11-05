@@ -31,6 +31,7 @@ test('mixed pages retain PR-only progress, partial retry and loaded-subset filte
   await page.getByLabel('Filter loaded titles or numbers').fill('no matching title');
   await expect(page.getByText('No loaded items match.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(page.getByLabel('Filter loaded titles or numbers')).toBeFocused();
   await expect(page.locator('.source-item')).toHaveCount(5);
   await expect(page.getByText('Pull request · State unknown', { exact: false })).toHaveCount(3);
   await page.getByText('View full available details', { exact: true }).first().click();
@@ -129,6 +130,14 @@ test('source controls and complete values remain reachable in both themes, keybo
   await page.keyboard.press('Enter');
   await expect(page.getByText('Item resolved. No canvas placement was created.')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const panel = await page.getByRole('region', { name: 'Browse GitHub sources', exact: true }).boundingBox();
+  if (!panel) throw new Error('Expected a visible source panel');
+  for (const control of [page.getByLabel('GitHub item URL', { exact: true }), page.getByRole('button', { name: 'Resolve URL', exact: true })]) {
+    const bounds = await control.boundingBox();
+    if (!bounds) throw new Error('Expected a visible URL control');
+    expect(bounds.x).toBeGreaterThanOrEqual(panel.x);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(panel.x + panel.width);
+  }
   await page.screenshot({ path: 'test-results/sources-dark-320-enlarged.png', fullPage: true });
 });
 
