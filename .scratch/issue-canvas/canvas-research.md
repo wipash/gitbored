@@ -6,11 +6,9 @@ Source retrieval date: **2026-11-05**. Research only; no application, benchmarks
 
 ## Decision summary
 
-**Original documentation-only recommendation, now aligned with the user's choice:** choose **tldraw**, because application-defined React/HTML shapes, geometric hit testing, shape-specific interaction hooks, migrations, and accessibility descriptions are explicit SDK extension points. These directly match a metadata card that must behave like a drawing object without treating its contents as editable diagram text. Licensing is accepted; obtaining the appropriate production key remains a deployment gate. [T1][T2][T3][T5][T6]
+**Original documentation-only recommendation, now aligned with the user's choice:** choose **tldraw**, because application-defined React/HTML shapes, geometric hit testing, shape-specific interaction hooks, migrations, and accessibility descriptions are explicit SDK extension points. These directly match a metadata card that must behave like a drawing object without treating its contents as editable diagram text. [T1][T2][T3][T5][T6]
 
 **Important correction to a common comparison:** Excalidraw **can render custom React issue cards without a fork**, using its documented `renderEmbeddable(element, appState)` callback for built-in `embeddable` elements and `customData` for issue references. It does **not** expose the same arbitrary new-shape-type/ShapeUtil extension model. The source's closed element union and embeddable rendering code substantiate that distinction. Calling Excalidraw “unable to show live custom HTML cards” would be incorrect. Its embed interaction semantics and export limitations require a spike, not immediate rejection. [E1][E2][E3][E4]
-
-**License is a decision gate, not an implementation detail.** Current tldraw is source-available, not MIT. Development-only permission does not authorize a deployed app for end users. Production needs an active trial, commercial, or discretionary hobby key; a non-commercial open-source repository does not automatically receive a hobby license. Excalidraw's repository is MIT, including permission for commercial use subject to its notice requirements. [T9][T10][T11][E7]
 
 **Historical alternative, not the selected implementation:** the original research proposed testing Excalidraw embeddables if tldraw licensing was unacceptable. Subsequent experiments rejected those embeds for this workflow and found native-image cards viable with tradeoffs. The user nevertheless prefers tldraw; do not carry either Excalidraw approach into the implementation.
 
@@ -117,7 +115,7 @@ If required later, tldraw offers `useSync` and server-side `TLSocketRoom`; produ
 
 Excalidraw's README explicitly distinguishes package features from excalidraw.com features (real-time collaboration, end-to-end encryption, local-first autosave and share links). Importing the package or setting `isCollaborating` does not provision that backend. Hosting choices, synchronization protocol, persistence and authorization would need a separate design; do not claim the embedded app inherits the hosted site's encryption. [E1][E9]
 
-## Exact licensing findings and gate
+## Historical licensing findings (outside implementation scope)
 
 ### tldraw
 
@@ -128,8 +126,6 @@ Excalidraw's README explicitly distinguishes package features from excalidraw.co
 - Hobby: discretionary non-commercial grant; application page describes personal projects, student/research work, side projects, prototypes and ideas not yet a business. A “made with tldraw” canvas watermark is required. The pricing page describes hobby licenses as free, but issuance is not automatic. [T9][T11][T14]
 - Open-source project inclusion does not relicense the SDK; downstream production users need their own qualifying license. Docs say commercial/hobby use sends no information to tldraw; trial use pings a hash of the key, without canvas data or PII. The repository license more generally permits compliance-related transmission. Review the actual granted terms if privacy requirements are strict. [T9][T10]
 - Retrieval caveat: the license docs' `/legal/tldraw-license` link returned HTTP 404 during research. The official repository `LICENSE.md` was therefore read directly alongside the licensing/pricing/application pages. The full future commercial/hobby agreement was not available to inspect and has not been represented as approved.
-
-**Release gate recommendation:** confirm intended use category; obtain the actual license/key and written terms; confirm acceptable watermark, allowed deployments/downstream distribution, renewal/expiration behavior and budget; keep notices. Until this decision is resolved, mark tldraw as preferred but conditional. Do not bypass enforcement or assume old MIT-era terms apply.
 
 ### Excalidraw
 
@@ -146,11 +142,10 @@ These are **proposed future acceptance tests**, not completed verification. Use 
 5. **Privacy and stale data:** authorization loss or missing issue yields a controlled unavailable card while preserving position. Export/import/copy/paste never includes credentials or bypasses authorization. No accidental arbitrary iframe fallback for malformed Excalidraw card data.
 6. **Export:** if visual export is part of scope, PNG/SVG contains readable actual issue cards, native drawing and text, including offscreen items; metadata is frozen consistently for the export; links/fonts/images have defined behavior. If only editable document export is selected, clearly establish that external metadata requires rehydration.
 7. **Performance:** use production builds on a named baseline device/browser with 100, 500 and 1,000 realistic cards plus drawings. Measure mount, pan/zoom, drag, metadata refresh, memory and DOM count before/after visiting the whole board. Proposed starting target: p95 frame time at or below 33 ms during interaction at the chosen initial capacity, no input task exceeding 100 ms due to metadata refresh; revise only through an explicit product decision. These are suggested targets, not vendor guarantees or measured results.
-8. **License/hosting:** tldraw production-mode spike uses a valid permitted key, with watermark if applicable; no demo sync service or implicit public issue-cache exposure. No collaboration infrastructure is required for the owner-only choice.
+8. **Hosting:** no demo sync service or implicit public issue-cache exposure. No collaboration infrastructure is required.
 
 ## Remaining unknowns
 
-- User's license category/budget and willingness to retain a hobby watermark; actual issued alternative agreement.
 - Pinned published versions and whether all current documentation/source APIs are present in those releases.
 - Excalidraw custom-embed keyboard activation, frame clipping, arbitrary card/drawing z-order, resize ergonomics and actual SVG/PNG appearance.
 - Measured card capacity and memory for this card design; minimum supported browsers/devices.

@@ -4,7 +4,7 @@ Date: 2026-11-05. **Historical experiment scope:** personal self-hosted GitHub i
 
 ## Current decision
 
-**The user selected tldraw after trying both public previews.** Use custom React/HTML card shapes; the earlier Excalidraw recommendation below is superseded, not the observed experiment results. Licensing is accepted as a tradeoff; a valid production key remains to be obtained. Both preview servers and quick tunnels were stopped at the user's request. The [current plan](spec.md) is authoritative; the prototype branch retains the original experiment-time snapshot.
+**The user selected tldraw after trying both public previews.** Use custom React/HTML card shapes; the earlier Excalidraw recommendation below is superseded, not the observed experiment results. Both preview servers and quick tunnels were stopped at the user's request. The [current plan](spec.md) is authoritative; the prototype branch retains the original experiment-time snapshot.
 
 **Current scope supersedes the former single-owner restriction:** anyone who authenticates through the GitHub App may use the self-hosted deployment, including teammates sharing the app. Upsert each immutable GitHub user ID; keep that user's credentials, repository authorization, caches, and boards isolated. Boards are private per creator by default. Board-sharing permissions are undefined separately; no shared boards, invitations, or live collaboration are inferred.
 
@@ -143,6 +143,6 @@ Following the user's choice, the [implementation plan](spec.md) now specifies:
 - Self-hosting usable by anyone who signs in through the GitHub App: upsert immutable GitHub user IDs, isolate each user's private boards and GitHub access, one Node app, SQLite on durable disk, HTTPS, and backup/restore. The former single-owner allowlist is superseded.
 - GitHub App with baseline Issues/read, Pull requests/read, and Metadata/read. Keep mixed issue endpoint results; distinguish PR draft/open/closed-unmerged/merged with targeted enrichment. Validate weight/sprint/type source mapping before any extra Projects read-only permission.
 - Read-only metadata; placement-preserving view filters; on-load, manual, and adjustable cost-aware scheduled refresh. Separate board-sharing permissions remain undefined; no collaboration, CI/review aggregation, or write-back is inferred.
-- Reference-only tldraw document persistence with validated/versioned custom props; metadata stays in an authorization-aware cache outside the document and history. Explicit SVG rendering if visual export is included. Production licensing and tldraw performance/accessibility verification remain deployment gates.
+- Reference-only tldraw document persistence with validated/versioned custom props; metadata stays in an authorization-aware cache outside the document and history. Explicit SVG rendering if visual export is included. Verify tldraw performance and accessibility before deployment.
 
 The experiments answer the canvas feasibility question. They do not claim GitHub authentication, private-data revocation, durable storage, offline recovery, or a production app has been implemented.
