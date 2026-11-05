@@ -12,4 +12,6 @@ The skills use five canonical triage roles. For this local Markdown tracker, wri
 
 When a skill mentions a role, use the corresponding tracker string from this table.
 
+Implementation lifecycle is separate: use `Work state:` for queued, in-progress, in-review, blocked, and done. Completion does not replace the ticket's canonical `Status:` role. The issue tracker's wayfinding-specific lifecycle remains separate.
+
 Edit the Tracker string column to match the vocabulary used in this repo.

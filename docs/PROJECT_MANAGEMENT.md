@@ -1,107 +1,90 @@
 # Project management guide
 
-GitBored is built by a project manager agent that runs teams of other agents. This guide is for that project manager, and for any agent that takes over from it partway through. The tracking files in this folder must always describe the real state of the work, so a new agent can carry on from them without the previous agent's conversation.
+Build GitBored as a small, primarily local tool for Sean and perhaps a few other users. Prefer shipping a complete useful slice over infrastructure for hypothetical scale. The project manager coordinates implementation, independent review, integration, and records; it does not become a second feature implementer.
 
-## Files
+## Sources of truth
 
-| File | Purpose | Who updates it |
+| Record | Location | Responsibility |
 |---|---|---|
-| `prd.md` | What we are building and the decisions already made | Project manager, only when a decision changes |
-| `tickets/NN-<slug>.md` | One ticket per vertical slice, with status, acceptance criteria and a progress log | Project manager, plus the agent working the ticket for its progress log |
-| `PROGRESS.md` | The board: every ticket's status, owner, branch and merge commit, the current frontier, and the project log | Project manager only |
-| `PROJECT_MANAGEMENT.md` | This guide | Project manager, when the process itself changes |
+| Product scope and settled decisions | `.scratch/issue-canvas/spec.md` | Project manager records user decisions and clearly marked provisional defaults |
+| Implementation tickets | `.scratch/issue-canvas/issues/NN-<slug>.md` | Project manager owns scope/dependencies; implementer appends evidence and progress |
+| Execution board and handover | `.scratch/issue-canvas/PROGRESS.md` | Project manager records ownership, worktrees, ports, review commits, integration, and the frontier |
+| Coding rules | `docs/CODING-CONVENTIONS.md` | Implementers and reviewers apply the documented enforcement level |
+| Tracker and triage vocabulary | `.agents/issue-tracker.md`, `.agents/triage-labels.md` | Keep these authoritative rather than inventing another tracker |
 
+Read the spec, progress record, this guide, and coding conventions before planning implementation. Read the relevant domain glossary and ADRs when present. Keep one specification; do not create a parallel PRD in `docs/`.
 
-## Branches
+An implementation ticket contains a canonical `Status:` triage role and a separate `Work state:`: `queued`, `in-progress`, `in-review`, `blocked`, or `done`. It also names blockers, acceptance criteria, non-goals, affected shared contracts, and a progress log. A completed ticket retains its triage classification; completion is recorded in `Work state`, not by replacing the triage vocabulary. Wayfinding research tickets retain their separately documented lifecycle.
 
-All work for this project happens on, or is merged into, the local branch `main`. Do not open pull requests, and do not push unless Sean asks.
+## Delivery bar
 
-- Each ticket gets its own branch, `ticket/NN-<slug>`, created from `main` in its own worktree at `../gitbored-wt/NN-<slug>`.
-- Only the project manager merges a ticket branch into `main`, after rebasing it onto the current tip. Merge with `git merge --no-ff` so each ticket is one merge commit, then delete the worktree and the ticket branch.
-- When two tickets run in parallel, the second to finish rebases onto `main` after the first has merged. Its implementer resolves any conflicts.
+- Optimize for a single user running locally first. Keep one application and straightforward local storage; avoid speculative service layers, elaborate outage machinery, or enterprise operational requirements.
+- Preserve the explicit privacy boundary if additional users sign in: private boards and credentials must not cross accounts. This calls for ordinary ownership checks and scoped state, not a new security platform. Rank findings by a concrete failure case and impact; hypothetical misuse is not an automatic release blocker.
+- Desktop is the primary editing environment. Include both light and dark themes. At narrow widths, verify reachable controls, readable content, and no unintended document-level sideways scrolling; canvas scrolling is intentional. Do not turn this into a separate mobile product.
+- Every subagent implementing interface features must use `better-interface`, including its owning domain skills, before handoff. Include this requirement in its brief. Inspect the rendered flow and report any domain or state that could not be checked; source inspection alone does not establish visual correctness.
+- Test through the agreed application seam: real browser/public HTTP behavior and real SQLite, controlling external GitHub responses when needed. Live GitHub authorization and permissions have a separate acceptance smoke run. Do not demand an internal unit-test suite simply to fill a checklist.
+- Finish the assigned behavior. Record unrelated failures and assign bounded corrective work rather than allowing every agent to expand its ticket. Never conceal a failing gate or call unverified behavior done.
 
-Read `prd.md`, this guide and `PROGRESS.md` before doing anything else. Then read the repo's `AGENTS.md`, `GLOSSARY.md` and the ADRs that touch the area of the ticket.
+## Assigning work
 
-## Roles
+All project work integrates locally into `main`. Do not open pull requests or push unless Sean asks.
 
-The project manager does not write feature code. It assigns tickets, briefs agents, checks their output, keeps the tracking files current, and escalates to Sean.
+1. Pick `Status: ready-for-agent` tickets whose blockers have `Work state: done`, excluding already completed or claimed tickets. Parallelize genuinely independent slices.
+2. Give each ticket its own branch `ticket/NN-<slug>` from current `main` and a worktree at `../gitbored-wt/NN-<slug>`. Record the owner, branch, worktree, and any assigned development ports in the progress record.
+3. Define shared-contract ownership before concurrent work: schema/migration order, request/response contracts, exported interfaces, and files with a single integration owner. Worktree isolation does not prevent incompatible designs.
+4. Brief each agent with the ticket, relevant spec sections, accepted design evidence, coding conventions, exact file ownership, non-goals, and checks. Interface implementers must use `better-interface`. Give reviewers the requirements and code, not the implementer's conclusions.
+5. Set `Work state: in-progress` and record the claim before implementation. Reserve distinct development ports from 3001–3019, including both ports when a task runs a frontend and backend. Record and release only resources owned by that task.
 
-| Role | Job | Output |
-|---|---|---|
-| Implementer | Builds one ticket test-first in its own worktree and branch | A branch with passing lint, type-check and tests, and a progress log entry |
-| Reviewer | Reviews the implementer's diff for correctness bugs, security and conventions, without seeing the implementer's reasoning | Findings ranked by severity, each with a concrete failure case |
-| Tester | Adds or strengthens tests for the acceptance criteria and edge cases the implementer may have missed | New or changed tests, and a list of criteria it could not test |
-| Validator | Runs the app end to end the way a user would and checks every acceptance criterion, including UI detail in light and dark themes and at phone width | A pass or fail per acceptance criterion, with evidence such as screenshots or command output |
-| Critic | Challenges the design: whether the slice fits the PRD, the ADRs and the domain language, and whether something simpler would do | A short list of objections, each with a proposed change |
+## Implement, verify, integrate
 
-Tell every implementer, reviewer and critic the engineering bar from the PRD's decisions table: this is an internal tool, not a critical service, so the smallest plain design wins and reviewers rank unlikely misuse and outage handling as low severity. The app will be used from desktop PCs about 99% of the time (Sean, 2026-11-05): judge UI polish at desktop widths, and at phone widths only check that nothing breaks, overlaps or scrolls sideways.
+1. **Implement a vertical slice.** Start with a failing behavioral test at the agreed seam where practical, then implement it. For interface changes, also exercise the actual surface. Keep the ticket's progress log current.
+2. **Review proportionately.** Default to an independent reviewer and a browser validator for user-facing work. A non-UI change needs the relevant HTTP/runtime validation instead. Add a tester for material coverage gaps and a critic for architectural choices or recurring problems, not automatically for every UI change. A small documentation-only change needs a consistency check, not an agent panel.
+3. **Record the candidate.** On handoff set `Work state: in-review`. Record the exact commit each review and validation examined, the scenarios exercised, results, and unresolved findings. Fix medium/high findings that violate scope or acceptance criteria; record low-impact follow-ups instead of manufacturing another round.
+4. **Reassess recurring failures.** If the same area fails in two consecutive rounds, ask an agent on `gpt-6-astra` to reconsider the design with the goal and concrete failure history. Choose the smallest fix that removes the cause rather than another exception.
+5. **Integrate the checked candidate.** Only the project manager integrates. Rebase onto current `main`; the implementer resolves conflicts. If tests or source change after review, including conflict resolution, rerun affected review and validation against the resulting commit. Previous evidence does not automatically cover new code.
+6. **Gate and merge.** Run `pnpm gate` on the integration candidate, merge with `git merge --no-ff`, and run the gate on the integrated result. The merge message identifies the ticket and pre-merge evidence; record the post-merge command/result and merge commit in the ticket and progress record. If integration fails, pause further integration and fix it; unrelated isolated work may continue.
+7. **Finish.** Mark acceptance criteria with evidence and set `Work state: done` only when the integrated result passes and records are current. Remove the owned worktree/branch after its changes are safely integrated, release its ports and agent terminals, and recompute the frontier.
 
-Give each agent only what it needs: the ticket, the relevant PRD sections, and pointers to files. Give reviewers and critics the code, not the implementer's conclusions, so their read is independent.
+The executable commands and their options live in `package.json` and the runner configuration. Build and production E2E runs share a per-user machine-wide lock across worktrees. Let queued runs wait; do not kill another task's run or nest a lock-taking command inside the same lock. Reserve 3100 for the production test application and 3101 for a controlled GitHub test service when a scenario needs one; development agents use their assigned ports instead.
 
+## Periodic UI review with Claude Fable
 
-## Working a ticket
+Use Claude Fable for an independent review of the **rendered interface**, in addition to acceptance validation:
 
-1. **Pick from the frontier.** The frontier is every ticket with status `ready-for-agent` whose blockers are all `done`, within the current phase. Independent frontier tickets can run in parallel.
-2. **Claim it.** Set the ticket's status to `in-progress`, and record the owner, branch name and start date in `PROGRESS.md`. Commit the tracking change before work starts.
-3. **Implement.** The implementer works test-first in the ticket's worktree (see Branches), and appends to the ticket's progress log as it goes.
-4. **Review, test, validate and critique.** Run the reviewer, tester, validator and critic on the branch. Scale this to the ticket: a small refactor needs a reviewer, while a UI or permissions change needs all four. Send findings back to the implementer and repeat until the reviewer finds nothing of medium severity or worse and the validator passes every criterion. Log low-severity findings in the ticket as follow-ups rather than running another round for them, because each extra round tends to add new edge cases of its own.
-   If the same area produces findings in two consecutive rounds, or a problem keeps recurring across tickets, stop fixing and ask an agent on the `gpt-6-astra` model to rethink the premise: give it the goal, the constraints and the history of findings, and ask for the simplest design that removes that whole class of problem. Decide from its proposal before sending another fix round.
-   Set the status to `in-review` when the implementer first hands the branch over for review.
-5. **Merge.** Rebase the ticket branch onto `main`, merge it with `--no-ff`, and run `pnpm gate` (lint, type-check, unit tests and E2E) on the merged result. E2E always runs against a production test build on ports 3100 and 3101, and `pnpm build` and `pnpm test:e2e` take a machine-wide lock, so runs from different worktrees queue rather than collide; tell agents to run them in the background or with a long timeout and never to kill a run that is waiting. Give every agent that may run a dev server its own port from 3001-3019 in its brief, record it under "Ports" in `PROGRESS.md`, and free it when the agent finishes. The merge commit message names the ticket and lists how each acceptance criterion was verified. If anything fails, fix it before starting another ticket.
-6. **Finish.** Tick the acceptance criteria, set the status to `done`, add a final progress log entry, record the merge commit in `PROGRESS.md`, and recompute the frontier.
+- At the first complete board workflow.
+- After every three completed UI tickets since the last Fable review, or at the end of an interface milestone, whichever comes first.
+- After a substantial navigation, theme/token, or interaction-model change, and before calling an interface milestone complete. One review can satisfy coincident triggers.
 
-A ticket is done only when every acceptance criterion is ticked with evidence, lint, type-check, unit and E2E tests pass on `main` after the merge, and the tracking files say so.
+The project manager records the last review, reviewed commit, UI tickets since that review, and next trigger in `PROGRESS.md`. Review a coherent flow rather than asking for a full-product audit after every small change. Cover light/dark desktop views, keyboard/focus, and a narrow-width sanity check; include relevant loading, empty, and error states. Respect Atlas + Contextual and the `better-interface` evidence standard. Findings must identify the affected behavior and evidence, distinguish observed defects from taste, and propose the cheaper fix. Record inaccessible states as not verified.
 
-## Statuses
+### Launch and interact through herdr-core
 
-| Status | Meaning |
-|---|---|
-| `ready-for-agent` | Fully specified; an agent can start once its blockers are done |
-| `ready-for-human` | Needs Sean or another person before an agent can continue |
-| `needs-info` | A question must be answered first; the question is in the progress log |
-| `in-progress` | An agent is working on it; owner and branch are in `PROGRESS.md` |
-| `in-review` | Implementation is finished and the branch is going through review, testing and validation before merge |
-| `blocked` | Work started but something outside the ticket stopped it; the reason is in the progress log |
-| `done` | Merged into `main`, and every acceptance criterion verified |
+Read `hc --skill` before first use in a session, then `hc templates`; prefer a fitting template only if it actually selects Claude Fable. Without one, launch Claude Code interactively with an explicit model and the initial task:
 
-## Keeping records current
-
-Update the tracking files at every status change, and at least once per working session on an in-progress ticket. Commit tracking changes on their own, so they can be read without wading through code diffs.
-
-Each progress log entry in a ticket uses this shape:
-
-```
-### 2026-11-05: <role or agent name>
-- Done: what changed, with branch and commits
-- Verified: what was checked and how
-- Next: the next concrete step
-- Open: questions, risks or anything a successor must know
+```sh
+hc run --bg --name ui-review --cwd /absolute/worktree \
+  claude --model fable --effort high \
+  "Review the specified rendered UI read-only. Use better-interface. Do not edit files or start subagents. Read the review brief and report findings to the parent terminal named there."
 ```
 
-Write entries for a reader who has not seen any of the conversation that produced them: name files, commands and decisions explicitly. Record dead ends too, so a successor does not repeat them.
+Replace the task with a concrete brief naming the reviewed commit, preview URL, flow, intended design, available screenshots, and parent terminal address. Supply browser access where available; screenshots alone cannot verify interactions. The reviewer must distinguish source, screenshot, and live-interaction evidence. Never invent a screenshot or mark an unvisited flow verified.
 
-## Handover
+- Check the launch's `first_message.sent`. If it is false, inspect `hc read ui-review`, resolve readiness, and only then send the task. Do not blindly resend a possibly delivered message.
+- Use `hc send ui-review "..."` to narrow scope or request a follow-up. Use `hc wait ui-review` while waiting for completion, then `hc read ui-review` for the actual result. Keep doing other useful work while the reviewer works; do not sleep or poll.
+- Keep the agent interactive and watchable; do not use Claude print mode. `hc` manages the terminal, while Claude's flags select its model and supported effort. Do not silently substitute a different model for a required Fable review.
+- Treat `blocked` as a permission/input prerequisite, not permission to bypass a prompt. Do not use permission-bypass flags to force a review. If Fable or browser access is unavailable, record the limitation and continue independent implementation; obtain the missing review before closing the affected UI milestone, or ask Sean for an explicit waiver.
+- Read the actual findings before summarizing them. A launch, idle screen, or successful process exit is not evidence of a completed UI review. After accepting the result, `hc kill ui-review` and `hc rm ui-review`; clean up only terminals this task started, never the user's core or other agents.
 
-If you are taking over:
+## Decisions without unnecessary blocking
 
-1. Read this guide, `prd.md` and `PROGRESS.md`.
-2. For each ticket in `in-progress`, `in-review` or `blocked`, read its progress log, check that its branch or worktree exists, and compare the branch with what the log says. Where they disagree, trust the code and correct the log.
-3. Run `git worktree list` and `git branch --list 'ticket/*'`, and check that every ticket branch that has not been merged matches a ticket in `in-progress`, `in-review` or `blocked`.
-4. Add a project log entry in `PROGRESS.md` saying that you took over and what state you found.
+Sean prefers progress and accepts rework for reversible decisions. The project manager chooses ordinary implementation details using the spec and existing conventions. Do not ask about names, file placement, or routine library wiring when the repo already answers them.
 
-Before you stop, or whenever your context is getting full, make sure every in-flight ticket has a current progress log entry and `PROGRESS.md` is committed.
+For a genuinely unresolved but reversible design question, consult a `gpt-6-astra` stand-in with the spec, this guide, and Sean's recorded choices. Its recommendation is provisional, not a new user instruction. Record the question, chosen default and reason, affected tickets, and what would change if Sean chooses differently. Keep proceeding on that basis.
 
-## Changing the plan
+Ask Sean only when the decision changes settled product scope, crosses an authorization/privacy boundary, incurs a purchase or licensing commitment, requires credentials/human provisioning, or authorizes destructive/irreversible action. Do not use the stand-in to manufacture consent. Continue independent work while a human prerequisite is outstanding.
 
-- If a ticket turns out too large for one context window, split it. Give the new tickets the next free numbers, update the blocking edges of every affected ticket, and record the split in the project log.
-- If a decision in the PRD needs to change, stop and ask Sean. Once he answers, update the PRD's decisions table and note the change in the project log and in the affected tickets.
-- If a ticket uncovers work the PRD does not cover, add a new ticket with status `needs-info` and ask Sean, rather than widening the current ticket.
-- Fix lint errors, failing tests and flaky tests you come across, even when they are unrelated to the ticket, as the repo's instructions require. Put an unrelated fix that is more than a few lines on its own branch, merged into `main` separately from the ticket.
+## Records and handover
 
-## Provisional answers from the Sean stand-in
+Append progress under each ticket's `## Comments` heading. Entries state date/agent, what changed, exact reviewed/validated commits, exercised checks and results, remaining blockers, and next action. The progress record holds the current execution board, frontier, ports, Fable review cadence, and provisional decisions; avoid copying the full ticket history into it.
 
-Sean prefers the work to keep moving over waiting for him, and accepts rework if his later answers change something. When a question below would otherwise stop the project, ask the Sean stand-in instead: an agent on the `gpt-6-astra` model, briefed with the PRD, this guide and Sean's recorded decisions, and kept alive so its answers stay consistent with each other. Its answers are provisional.
-
-- Record every provisional answer in the "Provisional answers" section of `PROGRESS.md`, as its own subsection that Sean can decide from without reading anything else: the question in plain language with enough background to understand it, the options that were considered, the stand-in's decision and reason, the tickets that rely on it, and what would need redoing if Sean answers differently.
-- The stand-in may answer questions about requirements and design.
-
+Keep tracking changes in separate logical commits. Before handing over, ensure active tickets and the progress record describe the real work, including failed approaches worth not repeating. A successor reads those records, checks only the relevant worktree/branch/runtime facts, resolves discrepancies in favor of observed evidence, and continues. A completed ticket requires implemented behavior, evidence, integration, and current records—not merely a compiling branch.
