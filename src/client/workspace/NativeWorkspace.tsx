@@ -81,6 +81,39 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
   const editor = useEditor();
   const listRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
+    const ownerDocument = editor.getContainer().ownerDocument;
+    // Track only UI-origin presses; the SDK remains responsible for native releases.
+    // Retain ownership across blur until a real up or a fresh down replaces it.
+    const uiOwnedCodes = new Set<string>();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.repeat) uiOwnedCodes.delete(event.code);
+      if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Alt' || event.key === 'Meta' || event.key === 'AltGraph') return;
+      const inCards = event.target instanceof Node && !!listRef.current?.contains(event.target);
+      if (!event.repeat) {
+        if (!inCards) return;
+        uiOwnedCodes.add(event.code);
+      } else if (!uiOwnedCodes.has(event.code) && !inCards) return;
+      event.stopPropagation();
+      if (event.key === 'Escape' && inCards && uiOwnedCodes.has(event.code)) {
+        const list = listRef.current;
+        if (list) {
+          list.open = false;
+          list.querySelector('summary')?.focus();
+        }
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (uiOwnedCodes.delete(event.code)) event.stopPropagation();
+    };
+    ownerDocument.addEventListener('keydown', onKeyDown, true);
+    ownerDocument.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      ownerDocument.removeEventListener('keydown', onKeyDown, true);
+      ownerDocument.removeEventListener('keyup', onKeyUp, true);
+      uiOwnedCodes.clear();
+    };
+  }, [editor]);
+  useEffect(() => {
     const dismiss = (event: PointerEvent) => {
       if (event.target instanceof Node && listRef.current && !listRef.current.contains(event.target)) listRef.current.open = false;
     };
@@ -88,20 +121,7 @@ function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
     return () => document.removeEventListener('pointerdown', dismiss, true);
   }, []);
   const cards = useValue('Workspace cards', () => editor.getCurrentPageShapes().filter((shape) => shape.type === ITEM_CARD_TYPE), [editor]);
-  return <details className="workspace-cards" ref={listRef} onKeyDownCapture={(event) => {
-    // Capture before the SDK container's native bubble listeners; keep browser defaults.
-    event.stopPropagation();
-    if (event.key === 'Escape') {
-      event.currentTarget.open = false;
-      event.currentTarget.querySelector('summary')?.focus();
-    }
-  }} onKeyUpCapture={(event) => {
-    // Release modifiers held before entering Cards, without invoking canvas action keys.
-    switch (event.key) {
-      case 'Shift': case 'Control': case 'Alt': case 'Meta': return;
-      default: event.stopPropagation();
-    }
-  }}>
+  return <details className="workspace-cards" ref={listRef}>
     <summary>Cards <span>{cards.length}</span></summary>
     <section aria-label="Cards on this page">
       <p>Select a card here, then use the arrow keys to move it on the canvas. Native menus provide grouping, stacking and duplication.</p>

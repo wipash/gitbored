@@ -3,3 +3,6 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@fastify/static@10.1.10'
   - vite@8.3.6
+patchedDependencies:
+  '@tldraw/editor@5.6.0': patches/@tldraw__editor@5.6.0.patch
+  tldraw@5.6.0: patches/tldraw@5.6.0.patch

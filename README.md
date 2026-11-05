@@ -58,6 +58,39 @@ default. Stop the development server before starting it, or set a different
 Unknown API routes and missing assets return errors, not the application HTML.
 
 
+## Native workspace keyboard boundary
+
+The reusable native workspace is not yet mounted as an authenticated board.
+Its SDK is pinned to 5.6.0. Two version-specific pnpm patches in `patches/`,
+registered in `pnpm-workspace.yaml`, correct accepted-key releases in
+`@tldraw/editor` and tldraw's body-owned comma shortcut. A native press must finish
+even if focus moves to a button, link or other UI. The SDK retains its own
+modifier/Meta cleanup and comma pointer lifecycle; the application does not copy
+that bookkeeping or dispatch substitute keyboard events.
+
+Cards uses one editor-lifetime document capture gate for UI-origin physical key
+sequences. Browser defaults remain native. UI-owned repeats/releases stay out of
+the canvas after focus changes or dismissal; native-owned releases reach the
+patched SDK. UI ownership remains quarantined across window blur until a real
+release or a fresh press, while the SDK handles its own native blur cleanup.
+Authenticated application identity remains separate from native attribution.
+
+The unchanged upstream SDK has a comma/blur limitation: blurring during a held
+comma pointer gesture clears key membership without ending that pointer gesture.
+The first subsequent card drag finishes the stale gesture instead of moving the
+card; a fresh comma down/up and the next card drag recover normal interaction.
+These patches preserve the existing SDK blur handler and do not inject releases.
+Report this limitation separately from the Cards release matrix.
+
+`pnpm install --frozen-lockfile` applies the committed patches. Any SDK upgrade
+must update or remove the exact-version patch registrations and regenerate
+coherent source, ESM/CJS runtime artifacts and source maps. Remove these patches
+only after the upstream release provides equivalent accepted-key ownership and
+the real-browser matrix passes: both press directions across Cards, held arrows
+and Space, comma with changed modifiers/focus, Meta reconciliation, repeats,
+dismissal, blur and ordinary native editing/shortcuts. A successful install or
+type-check alone does not establish correct keyboard behavior.
+
 ## GitHub App setup
 
 Create a GitHub App with user authorization enabled. Register the callback as
