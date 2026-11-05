@@ -93,11 +93,21 @@ for (const theme of ['light', 'dark']) {
     await page.screenshot({ path: `test-results/incoming-${theme}-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 320, height: 800 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => {
+      const trigger = document.querySelector('.incoming-trigger')?.getBoundingClientRect();
+      const cards = document.querySelector('.workspace-cards')?.getBoundingClientRect();
+      return !!trigger && !!cards && (trigger.top >= cards.bottom || trigger.bottom <= cards.top || trigger.right <= cards.left || trigger.left >= cards.right);
+    })).toBe(true);
     const add = page.getByRole('button', { name: 'Add to board', exact: true }).first();
     await add.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab'); await expect(add).toBeFocused();
     expect(await add.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
     const bounds = await add.boundingBox(); if (!bounds) throw new Error('Missing keyboard Add bounds');
     expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
+    expect(await add.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const inset = Number.parseFloat(getComputedStyle(element).borderTopRightRadius) + 2;
+      return [[rect.left + inset, rect.top + inset], [rect.right - inset, rect.top + inset], [rect.left + inset, rect.bottom - inset], [rect.right - inset, rect.bottom - inset]].every(([x, y]) => x !== undefined && y !== undefined && element.contains(document.elementFromPoint(x, y)));
+    })).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/incoming-${theme}-320-enlarged.png`, fullPage: true });
     await page.keyboard.press('Enter');

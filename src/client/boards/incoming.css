@@ -1,4 +1,4 @@
-.incoming-shell { position: absolute; inset-block-start: 72px; inset-inline-start: 0.75rem; z-index: 250; max-inline-size: calc(100% - 1.5rem); color: var(--color-text-primary); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; line-height: 1.5; pointer-events: auto; }
+.incoming-shell { position: absolute; inset-block-start: calc(48px + 1.5rem); inset-inline-start: 0.75rem; z-index: 400; max-inline-size: calc(100% - 1.5rem); color: var(--color-text-primary); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; line-height: 1.5; pointer-events: auto; }
 .incoming-shell button { color: var(--color-text-primary); background: var(--color-bg-surface); border: 1px solid var(--color-border-control); border-radius: 0.375rem; padding: 0.5rem 0.75rem; min-block-size: 2.5rem; font: inherit; max-inline-size: 100%; overflow-wrap: anywhere; }
 .incoming-shell button[aria-disabled="true"] { color: var(--color-text-secondary); background: var(--color-bg-subtle); }
 .incoming-shell :focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
@@ -18,4 +18,4 @@
 .incoming-panel .source-choices button { text-align: start; }
 .incoming-panel .source-choices, .incoming-panel .source-items { padding: 0; }
 .incoming-announcement { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
-@media (max-width: 400px) { .incoming-panel { padding: 0.75rem; } .incoming-shell { inset-block-start: 104px; inset-inline-start: 0.5rem; max-inline-size: calc(100% - 1rem); } }
+@media (max-width: 400px) { .incoming-panel { padding: 0.75rem; } .incoming-shell { inset-block-start: calc(84px + 1.5rem); inset-inline-start: 0.5rem; max-inline-size: calc(100% - 1rem); } }
