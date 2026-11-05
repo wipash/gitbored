@@ -226,6 +226,8 @@ test('an edit queued during a failed native save cannot replay until explicit re
   await nudge(page, 'ArrowRight'); await page.clock.runFor(350);
   await expect.poll(() => Boolean(first)).toBe(true);
   await nudge(page, 'ArrowDown');
+  // Deliver the native store change while PUT is held, before its 300ms save debounce.
+  await page.clock.runFor(16);
   if (!first) throw new Error('Missing pending first save');
   await first.abort('connectionfailed');
   await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toBeEnabled();
