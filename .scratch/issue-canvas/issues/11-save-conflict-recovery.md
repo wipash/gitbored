@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Work state:** queued
+**Work state:** in-progress
 
 ## Acceptance criteria
 
@@ -27,3 +27,4 @@ Own recovery envelope/version and client save state transitions; reuse atomic bo
 ## Comments
 
 - 2026-11-05 — Project manager: Published from the accepted specification under the user’s instruction to proceed without a confirmation round. Work starts only when blocking tickets are done.
+- 2026-11-06 — **Project manager, claim:** **ConflictRecovery**, `ticket/11-save-conflict-recovery`, `../gitbored-wt/11-save-conflict-recovery`, application/frontend/provider **3001/3002/3007**, from checked05 main. Own saveCoordinator, account/board-scoped reference-only recovery, Boards reload/save-as-copy choices and needed authenticated copy API; preserve latest atomic native/Incoming pair and source board.08 owns refresh/provider scenarios,06 contextual controls,16 operations. Read `local://post05-parallel-contracts.md`, spec201–208/235 and required docs. Use better-interface/owning domains and real two-context/HTTP/SQLite/restart/account evidence; one tab must not clear another's unsaved work. No silent newer-revision overwrite, private cache/credentials in recovery, or second durability authority. All criteria required; no full gate, self-integration or PROGRESS edits.

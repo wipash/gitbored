@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Work state:** queued
+**Work state:** in-progress
 
 ## Acceptance criteria
 
@@ -28,3 +28,4 @@ Own user-scoped refresh coordinator and status contract; coordinate source recon
 ## Comments
 
 - 2026-11-05 — Project manager: Published from the accepted specification under the user’s instruction to proceed without a confirmation round. Work starts only when blocking tickets are done.
+- 2026-11-06 — **Project manager, claim:** **RefreshCoordination**, `ticket/08-coordinated-refresh`, `../gitbored-wt/08-coordinated-refresh`, application/frontend/provider **3012/3013/3014**, from checked05 main. Own provider/conditional retrieval, authorization-scoped cross-tab coordination/status, measured adjustable scheduling/backoff/preferences and actual metadata/bounded discovery integration.11 owns recovery/save/copy;06 contextual convention;16 operations. Coordinate overlapping Incoming hooks with06 and own additive controlled-provider scenarios/exact3012 callback. Read `local://post05-parallel-contracts.md`, spec188–208/232–234 and required docs. Use better-interface/owning domains and actual HTTP cost/overlap/conditional/backoff, native-history and rendered evidence. No new06 dependency; later integrator preserves both. All criteria required; no full gate, self-integration or PROGRESS edits.
