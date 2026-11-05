@@ -1,6 +1,6 @@
 # Issue canvas progress
 
-Updated: 2026-11-05
+Updated: 2026-11-06
 
 ## Current state
 
@@ -10,8 +10,8 @@ Published 19 separate dependency-ordered implementation tickets from the accepte
 
 | Ticket | Work state | Owner | Branch / worktree | Ports |
 |---|---|---|---|---|
-| 01 GitHub App sign-in | in-progress | GitHubIdentity | `ticket/01-github-app-sign-in` / `../gitbored-wt/01-github-app-sign-in` | 3001 / 3002 |
-| 02 Native reference workspace | in-review | NativeWorkspace; CanvasCodeReview + CanvasBrowserValidation checking | `ticket/02-native-reference-workspace` / `../gitbored-wt/02-native-reference-workspace` | 3003 / 3004 reserved for validation |
+| 01 GitHub App sign-in | in-review; accepted candidate awaiting local integration | GitHubIdentity; independent source/browser rechecks approved | `ticket/01-github-app-sign-in` / `../gitbored-wt/01-github-app-sign-in` | Validation resources stopped |
+| 02 Native reference workspace | in-review; corrections assigned | NativeWorkspace; CanvasCodeReview + CanvasBrowserValidation | `ticket/02-native-reference-workspace` / `../gitbored-wt/02-native-reference-workspace` | 3003 / 3004 reserved for validation |
 | 03–19 | queued | Unclaimed | See individual blocking edges | None |
 
 Current frontier: 01 and 02, both claimed. After 01, source browsing (04) can proceed independently of workspace completion. After 01+02, durable boards (03) can run alongside 04. Only the manager merges locally into main; no push or PR.
@@ -28,7 +28,10 @@ Current frontier: 01 and 02, both claimed. After 01, source browsing (04) can pr
 
 ## Review and integration evidence
 
-Ticket 02 candidate `31f71bb24c21fbefd4cff06dc88a6ea15a5d26e0` is rebased onto current main and under independent source review plus actual-browser validation. `pnpm gate` is running on this candidate, including its native-document regression suite. Implementer reports standalone real SDK smoke; authenticated durable mounting remains ticket 03. Ticket 01 is finishing verification. Production E2E uses shared serialized lock, port 3100 and controlled provider 3101; development agents use assigned ports only.
+- Ticket 01 corrected candidate `9db2c78a25fd3d2ed98c3370ed68355328748ca6` (source `a619b6fb8061b5ef50246a68d8b51633a0ff9ed9`) passed manager Node-26 `pnpm gate`: lint/boundaries/types/build and 14 tests, complementary unconfigured case intentionally skipped. IdentityCodeReview independently approved the encoded-route CSRF and credential-decryption recovery fixes; IdentityBrowserValidation independently proved replacement-key reconnect/identity preservation, encoded logout 403/no-store, and corrected narrow enlarged-label containment in both themes. Initial findings are resolved; no live GitHub/TLS/AT claim. Ready for local integration and post-merge gate.
+- Ticket 02 candidate `31f71bb24c21fbefd4cff06dc88a6ea15a5d26e0` passed the initial manager gate on the host pnpm runtime. A separate declared-Node-26 gate was contaminated by the browser validator's throwaway harness in lint scope and failed; it must run after harness cleanup. No clean Node-26 success is claimed yet.
+- CanvasCodeReview found three medium blockers: unchecked clipboard collections bypass shape restrictions; rich-text schema accepts unrenderable/unsupported content; native mailto edits cannot round-trip. Independent browser validation additionally confirmed unnamed native Text textbox and hidden-button focus preventing advertised arrow movement. NativeWorkspace is assigned one bounded correction pass after validation cleanup. No affected acceptance is considered complete; new source requires new candidate review/validation.
+- Production E2E uses the shared serialized lock, port 3100 and controlled provider 3101; development agents use assigned ports only. Authenticated durable canvas mounting remains ticket 03.
 
 ## Claude Fable review cadence
 
