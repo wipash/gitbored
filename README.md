@@ -119,11 +119,8 @@ There is no browser-persisted private draft, automatic conflict merge or save-as
 yet (recovery is a later ticket).
 
 SQLite remains authoritative across browser reloads and real server restarts.
-For a straightforward local backup, stop the server cleanly, copy the entire data
-directory to protected storage, and retain the token-encryption key separately.
-Restore with the server stopped, replace the data directory with that backup,
-restore the same key, then restart and reopen a board. Do not copy only the main
-SQLite file while a WAL-mode server is writing.
+Use the consistent database backup and separate key recovery procedure below;
+never copy just the live main SQLite file or replace an active data directory.
 
 
 ## Incoming discovery and placement
@@ -462,6 +459,142 @@ Controlled-provider acceptance does **not** establish live GitHub authorization.
 The live gate still needs the actual App client ID/secret, registered callback
 and human authorization by two independent GitHub users, including refresh and
 revocation under the actual App's permissions.
+
+## Operate one durable backend
+
+Use one application process and one SQLite database on a local filesystem. No
+container, secondary database, backup daemon or HA service is required. Do not put
+SQLite on a shared/network filesystem. Backups contain private board notes,
+ownership, sessions, reference contexts and Incoming bookkeeping; protect them as
+private application data even though GitHub credentials are encrypted.
+
+### Fresh setup and restart
+
+Install Node **26.8.1** (supported range: 26.x from 26.8.1) and pnpm **12.16.1**.
+From a fresh checkout, verify both `node --version` and `pnpm exec node --version`,
+then `pnpm install --frozen-lockfile` and `pnpm build`. The frozen lockfile also
+applies the two committed exact-version native SDK patches. Run as a dedicated
+unprivileged account, not root. Keep source/build files separate from durable data:
+
+```sh
+umask 077
+mkdir -m 700 "$HOME/gitbored-data" "$HOME/gitbored-secrets"
+pnpm data keygen "$HOME/gitbored-secrets/token.key"
+export DATA_DIR="$HOME/gitbored-data"
+export TOKEN_ENCRYPTION_KEY_FILE="$HOME/gitbored-secrets/token.key"
+export APP_ORIGIN=http://127.0.0.1:3001
+export ALLOW_LOOPBACK_HTTP=true
+# Supply GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET through a protected service
+# environment/secret store, never command-line arguments or shell history.
+pnpm start
+```
+
+Configure the GitHub App callback for that exact origin and `/api/auth/callback`.
+The key file must be owned by the application account, a regular non-symlink file,
+mode 600 (or 400), with one 64-hex key. Startup rejects shared files and rejects
+setting both `TOKEN_ENCRYPTION_KEY_FILE` and `TOKEN_ENCRYPTION_KEY`. The latter
+remains available for a service secret environment; do not echo either value.
+Relative `DATA_DIR` and key-file paths resolve from the application working
+directory. The application creates/restricts the data directory to 700 and database
+to 600; its WAL/SHM remain inside that protected directory. Do not use an existing
+directory holding unrelated operator data: startup deliberately restricts its
+permissions.
+
+Wait for **Saved** in all board tabs before planned shutdown. Send SIGTERM to the
+application process (or Ctrl+C in the foreground) and await process exit; Fastify
+finishes in-flight requests and closes SQLite. Do not use SIGKILL as the ordinary
+shutdown path. Restart from the same working directory, with the same `DATA_DIR`,
+origin, credentials and encryption key. Check `/api/health`, sign in and reopen
+the board; confirm the expected revision/content. A running editor's unsaved draft
+is not included in a database backup. Keep the previous application release when
+upgrading; use a backup with its matching release because downgrade migrations
+are not provided.
+
+### Consistent backup and isolated restore
+
+The `data` command uses Node's SQLite online-backup API, not a raw file copy. It
+includes committed WAL content and copies **all** database tables in one consistent
+snapshot, including ownership, document revisions and per-board Incoming state.
+It works with the application running; pause operator writes or stop cleanly if
+you need a specific final revision. Writes acknowledged after the snapshot are
+not promised to be included. Heavy concurrent writing can delay backup completion.
+
+Keep the backup destination and encryption-key recovery in separately protected
+storage (ideally different failure domains). Provision their parent directories
+first with mode 700. For example, with protected backup/recovery mounts:
+
+```sh
+pnpm data backup "$DATA_DIR" /protected-backups/gitbored-2026-11-06
+pnpm data key-copy "$TOKEN_ENCRYPTION_KEY_FILE" /separate-recovery/gitbored-token.key
+```
+
+These commands never print key material. Backup/restore exclusively create a
+**new, nonexistent** destination directory (700), with a standalone
+`gitbored.sqlite` (600), and check SQLite integrity/foreign keys before publishing
+the completed filename. Missing, empty, uninitialized or unrelated SQLite sources
+fail; an existing destination is never overwritten or merged. Key generation and
+recovery copying also refuse existing destination files. Parent directories must
+already exist. An interrupted operation may leave `.incomplete.sqlite`; do not
+start an app on that directory or treat it as a successful backup. Remove only
+that known incomplete destination and choose a fresh destination for another
+operation. Successful database backups intentionally contain **no key file**.
+
+Practice restoration without touching the original application:
+
+```sh
+pnpm data restore /protected-backups/gitbored-2026-11-06 "$HOME/gitbored-restored"
+pnpm data key-copy /separate-recovery/gitbored-token.key "$HOME/gitbored-secrets/restored.key"
+DATA_DIR="$HOME/gitbored-restored" \
+  TOKEN_ENCRYPTION_KEY_FILE="$HOME/gitbored-secrets/restored.key" \
+  PORT=3003 pnpm start
+```
+
+Use the matching original application version and protected GitHub App configuration.
+For this isolated port, also set `APP_ORIGIN=http://127.0.0.1:3003`,
+`ALLOW_LOOPBACK_HTTP=true` and register its callback if signing in there. Never
+run two backends against the same live database. Check readiness, reopen an
+owner's mixed native board and Incoming, compare the acknowledged revision and
+selected sources/queue/seen/cursor progress, then check signed-out and a second
+user cannot read or modify that board. Sessions are restored too; keep the copy
+private and retire it after the drill. To cut over, stop the old process first and
+point the replacement at the restored directory; never overwrite unrelated data.
+
+Recover the **same** encryption key; generating a new key is not recovery.
+The key alone does not replace the GitHub App client secret; recover that
+separately from its protected secret store. With a wrong/lost key, existing users
+and boards remain, but credentials require **Reconnect GitHub**. If no valid key
+copy survives, generate/protect a new key and have each user explicitly reauthorize.
+This is credential replacement, not decryption of the old credentials. Do not
+print decrypted credentials, cookies, CSRF values or private database rows when
+recording a recovery drill.
+
+### Explicit HTTPS exposure
+
+Loopback HTTP is the default; `HOST` remains limited to loopback even for remote
+access. Terminate HTTPS in an explicitly configured reverse proxy on the same
+host, using a certificate trusted by clients. Set `APP_ORIGIN=https://board.example.com`,
+omit `ALLOW_LOOPBACK_HTTP`, retain `HOST=127.0.0.1`, and register
+`https://board.example.com/api/auth/callback` with the GitHub App. Only expose the
+proxy's TLS port, never the backend port. For example, this Caddy site forwards
+unchanged paths to one backend started with `PORT=3001`:
+
+```caddyfile
+board.example.com {
+    reverse_proxy 127.0.0.1:3001
+}
+```
+
+Provision DNS/certificates and firewall policy explicitly; the application does
+not do so. Never cache `/api`, strip its cookies, rewrite paths, or split the API
+onto another origin. Serve client and API through the same proxy. TLS offload
+does not require widening `HOST` or trusting arbitrary forwarded headers:
+`APP_ORIGIN` determines OAuth redirects, exact Origin checks and Secure cookies.
+HTTPS sessions are Secure/HttpOnly/SameSite=Lax/host-only. All unsafe API requests
+still require the exact configured Origin **and** the current session's CSRF
+token; protected contextual GETs also require that token. Verify HTTPS sign-in,
+cookie flags, successful same-origin writes, and rejection of missing/wrong
+Origin or stale/missing CSRF through real requests before exposing the service.
+An HTTP origin on a non-loopback host is rejected, not silently upgraded.
 
 ## Verify
 

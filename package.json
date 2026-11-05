@@ -11,6 +11,7 @@
     "dev": "tsx scripts/dev.ts",
     "build": "tsx scripts/locked.ts build",
     "start": "NODE_ENV=production node dist/server/server/main.js",
+    "data": "tsx scripts/data.ts",
     "lint": "oxlint --type-aware --tsconfig tsconfig.lint.json --deny-warnings && tsx scripts/check-boundaries.ts",
     "type-check": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.tools.json",
     "test:e2e": "tsx scripts/locked.ts e2e",
