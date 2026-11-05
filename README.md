@@ -67,6 +67,8 @@ registered in `pnpm-workspace.yaml`, correct accepted-key releases in
 even if focus moves to a button, link or other UI. The SDK retains its own
 modifier/Meta cleanup and comma pointer lifecycle; the application does not copy
 that bookkeeping or dispatch substitute keyboard events.
+Repeats cannot transfer a press already accepted by another native handler when
+modifiers change its reported character.
 
 Cards uses one editor-lifetime document capture gate for UI-origin physical key
 sequences. Browser defaults remain native. UI-owned repeats/releases stay out of
