@@ -365,6 +365,13 @@ URL and callback must match exactly. Enable expiring user access tokens so refre
 is available. Sign-in is user authorization, not installation authorization:
 anyone who successfully authorizes may sign in; there is no owner allowlist.
 
+Ordinary and [Enterprise Managed User logins](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-iam/iam-configuration-reference/username-considerations-for-external-authentication)
+are accepted, including underscore/enterprise-shortcode names such as
+`mona-cat_acme` and setup users such as `acme_admin`, within the same39-character
+total bound. No extra debug flag or App/credential/key configuration change is
+needed for this username format. Renaming a login or reconnecting retains the
+same owner through GitHub's immutable user ID, not the display login.
+
 For read-only source browsing, select Issues: read, Pull requests: read
 and required Metadata: read. Do not grant write, Contents, Checks, Actions, Commit
 statuses or organization Members permissions. Installation access and organization
