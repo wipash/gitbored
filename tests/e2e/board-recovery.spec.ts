@@ -308,11 +308,9 @@ test('a real copy acknowledgement never consumes edits made while the private co
   await draw(page, 150);
   // Pointer-up completes native geometry synchronously, but recovery observes
   // the SDK's deferred store listener. Deliver it before freezing the exact pair.
-  await page.evaluate(() => {
-    const { promise, resolve } = Promise.withResolvers<void>();
+  await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); });
-    return promise;
-  });
+  }));
   expect(held).toHaveLength(1);
   await expect.poll(async () => Object.values((await stored(page))[0]?.value.document.snapshot.store ?? {}).filter((record) => record.typeName === 'shape').length).toBe(2);
   const latest = (await stored(page))[0]; if (!latest) throw new Error('Missing newer copy-time edits');
