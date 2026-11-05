@@ -346,6 +346,49 @@ Secure, HttpOnly, SameSite=Lax, host-only cookies; plain HTTP is permitted only 
 explicit loopback operation. Partial or invalid credential configuration fails
 startup; missing configuration renders an actionable unconfigured screen.
 
+### Troubleshooting GitHub sign-in
+
+When a callback cannot exchange its authorization code or confirm the GitHub
+identity, the browser keeps its existing sign-in failure message. The server
+writes exactly one warning line to stderr for that callback, for example:
+
+```json
+{"event":"github_oauth_callback_failed","operation":"token_exchange","category":"http","httpStatus":503}
+{"event":"github_oauth_callback_failed","operation":"identity_lookup","category":"network","networkCode":"ENOTFOUND"}
+```
+
+`operation` distinguishes the code/token POST from the authenticated identity
+lookup. `httpStatus` is the actual upstream status, not the browser redirect or
+application error status. Categories give the next bounded investigation:
+
+| Category | What it establishes / next action |
+|---|---|
+| `http` | GitHub returned an unsuccessful HTTP status. For 401/403, privately check the App's user authorization/client configuration; for 429/5xx, check provider availability or throttling before manually trying later. The status alone does not prove the underlying cause. |
+| `rate_limited` | The identity lookup returned the existing recognized rate-limit response. Wait before manually trying again; do not substitute installation authority. |
+| `invalid_json` | The response could not be parsed as JSON. Check for an upstream proxy/error response and the configured provider endpoint without sharing its body. |
+| `invalid_response` | JSON was received but did not meet the existing token/identity contract. Check the actual App/protocol response privately; this does not establish that credentials are wrong. |
+| `network` | Fetch or response reading failed. The bounded `networkCode` identifies recognized DNS, connection, timeout or certificate failures; `UNKNOWN` means no recognized code was available. Check the corresponding host/network/trust configuration; do not disable certificate verification. |
+
+Only fixed operation/category values, HTTP status and allowlisted network codes
+are logged. Request logging remains disabled. No callback URL/query, OAuth
+code/state/verifier, cookie, token, credentials, provider body or raw upstream
+exception is included. Invalid/replayed state and declined consent do not produce
+provider-operation warnings. Session/refresh requests do not generate this
+callback-specific event. There are no automatic OAuth retries.
+
+A successful unauthenticated fetch of `github.com` or `api.github.com` does not
+prove that the token POST or authenticated identity lookup works. These
+diagnostics make a subsequent failure identifiable; they do not by themselves
+fix or prove a successful live sign-in. Share only the bounded event and runtime
+version when requesting help, never an environment dump or provider payload.
+
+The focused real-HTTP/SQLite regression runs the actual TypeScript application,
+captures operator output and checks redaction without live GitHub access:
+`pnpm test:server` (also selected by `pnpm gate` before production E2E). It
+temporarily owns application port3009 and controlled-provider port3019 and awaits
+their cleanup; keep those ports available when running the focused script or gate.
+
+
 ### Authentication contracts for owner routes
 
 `src/shared/session.ts` owns browser-safe `SessionUser` and `SessionResponse`.
