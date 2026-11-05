@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { RuntimeConfig } from './config.js';
 import { checkStorage } from './storage.js';
+import { AuthenticationError, registerAuthentication } from './auth.js';
 
 function isClientNavigation(request: FastifyRequest): boolean {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -35,6 +36,9 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
   const app = Fastify({ logger: false });
 
   app.setErrorHandler((error: unknown, _request, reply) => {
+    if (error instanceof AuthenticationError) {
+      return reply.code(error.statusCode).send({ error: error.code, message: error.message });
+    }
     const status = error instanceof Error && 'statusCode' in error
       && typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500
       ? error.statusCode
@@ -46,6 +50,8 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
     checkStorage(database);
     return reply.header('Cache-Control', 'no-store').send({ status: 'ok', storage: 'sqlite' });
   });
+
+  app.decorate('authentication', registerAuthentication(app, database, config.auth));
 
   app.setNotFoundHandler((request, reply) => {
     if (config.serveClient && isClientNavigation(request)) {
@@ -62,6 +68,7 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
         index: false,
         redirect: false,
       });
+      app.get('/', (_request, reply) => reply.header('Cache-Control', 'no-cache').sendFile('index.html'));
     }
     await app.ready();
     return app;
