@@ -33,6 +33,8 @@ Current frontier: 01 and 02, both claimed. After 01, source browsing (04) can pr
 - CanvasCodeReview found three medium blockers: unchecked clipboard collections bypass shape restrictions; rich-text schema accepts unrenderable/unsupported content; native mailto edits cannot round-trip. Independent browser validation additionally confirmed unnamed native Text textbox and hidden-button focus preventing advertised arrow movement. NativeWorkspace is assigned one bounded correction pass after validation cleanup. No affected acceptance is considered complete; new source requires new candidate review/validation.
 - Production E2E uses the shared serialized lock, port 3100 and controlled provider 3101; development agents use assigned ports only. Authenticated durable canvas mounting remains ticket 03.
 
+- Ticket 01 candidate `3fea28ee2627307a789172311b84a5c53d91e240` is ready for independent review, not integrated. Implementer gate passed (11 configured-mode tests), complementary unconfigured mode passed (4 tests); real SQLite/public HTTP/browser evidence and all-six-domain scoped interface review are in ticket 01. Live GitHub authorization and actual TLS termination remain separate unexercised gates. The Volta pnpm shim selects Node 24; validation used `PATH=/home/sean/.volta/tools/image/packages/pnpm/bin:/home/sean/.local/bin:$PATH` to retain Node 26.8.1. Owned preview processes/data were removed.
+
 ## Claude Fable review cadence
 
 - Last completed rendered Fable review: none.
