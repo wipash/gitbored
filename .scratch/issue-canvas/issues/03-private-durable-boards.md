@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Work state:** queued
+**Work state:** in-progress
 
 ## Acceptance criteria
 
@@ -27,3 +27,4 @@ Own board schema and routes, board workspace mounting and revisioned save envelo
 ## Comments
 
 - 2026-11-05 — Project manager: Published from the accepted specification under the user’s instruction to proceed without a confirmation round. Work starts only when blocking tickets are done.
+- 2026-11-06 — Project manager: Claimed for **DurableBoards** after 01/02 completion. Branch `ticket/03-private-durable-boards`, worktree `../gitbored-wt/03-private-durable-boards`; assigned frontend/backend/provider ports **3001/3002/3007**. Own board schema/routes/save envelope and coordinator, authenticated native mounting, and final shared application/navigation composition. Run concurrently with 04; integrate 04 first, then rebase and retain both flows while resolving shared registrations/composition. Reuse canonical capture, user-scoped session and metadata contracts; coordinate controlled-provider seams with AuthorizedSources. Retain the concrete native keyboard regressions through the actual authenticated app where practical; do not expand upstream SDK limitations or licensing scope. First complete board workflow requires rendered Fable review.
