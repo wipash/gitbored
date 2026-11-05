@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { startControlledGitHub } from '../scripts/controlled-github.js';
+import { isSessionResponse } from '../src/shared/session.js';
 
 interface FailureScenario {
   operation: 'token_exchange' | 'identity_lookup';
@@ -17,6 +18,8 @@ interface FailureScenario {
   category: 'http' | 'invalid_json' | 'invalid_response' | 'rate_limited' | 'network';
   redirect: '/?authError=provider' | '/?authError=denied';
   httpStatus?: number;
+  label?: string;
+  identityResponse?: Record<string, unknown>;
 }
 
 const scenarios: FailureScenario[] = [
@@ -33,6 +36,24 @@ const scenarios: FailureScenario[] = [
   { operation: 'identity_lookup', fault: 'bad_json', category: 'invalid_json', httpStatus: 200, redirect: '/?authError=provider' },
   { operation: 'identity_lookup', fault: 'bad_schema', category: 'invalid_response', httpStatus: 200, redirect: '/?authError=provider' },
   { operation: 'identity_lookup', fault: 'socket', category: 'network', redirect: '/?authError=provider' },
+  ...[
+    { label: 'empty_login', fields: { login: '' } },
+    { label: 'overlong_login', fields: { login: `${'a'.repeat(35)}_acme` } },
+    { label: 'unsupported_dot', fields: { login: 'mona.cat_acme' } },
+    { label: 'unsupported_slash', fields: { login: 'mona/cat_acme' } },
+    { label: 'unsupported_unicode', fields: { login: 'mona_équipe' } },
+    { label: 'zero_id', fields: { id: 0 } },
+    { label: 'unsafe_id', fields: { id: Number.MAX_SAFE_INTEGER + 1 } },
+    { label: 'fractional_id', fields: { id: 1.5 } },
+    { label: 'wrong_type_id', fields: { id: '101' } },
+    { label: 'wrong_type_name', fields: { name: false } },
+    { label: 'overlong_name', fields: { name: 'N'.repeat(257) } },
+    { label: 'missing_name', fields: { name: undefined } },
+  ].map(({ label, fields }): FailureScenario => ({
+    label, operation: 'identity_lookup', fault: 'bad_schema', category: 'invalid_response',
+    httpStatus: 200, redirect: '/?authError=provider',
+    identityResponse: { id: 101, login: 'managed_acme', name: 'Alice Example', ...fields },
+  })),
 ];
 
 await test('actual OAuth callbacks emit one bounded diagnostic without leaking request or provider secrets', { timeout: 45_000 }, async () => {
@@ -51,6 +72,7 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
   let provider: FastifyInstance | undefined;
   let active: FailureScenario | undefined;
   let tokenCalls = 0;
+  const acceptedManagedLogins: string[] = [];
   let identityCalls = 0;
   const observed: unknown[] = [];
 
@@ -95,6 +117,15 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
     return { callback, binding };
   }
 
+  async function signedInSession(session: string) {
+    const response = await fetch(`${applicationOrigin}/api/session`, { headers: { cookie: session } });
+    assert.equal(response.status, 200);
+    const body: unknown = await response.json();
+    assert.ok(isSessionResponse(body) && body.status === 'signed-in');
+    sensitive.add(body.csrfToken);
+    return body;
+  }
+
   try {
     provider = await startControlledGitHub(3019, (app) => {
       app.addHook('preHandler', async (request, reply) => {
@@ -118,7 +149,7 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
           case 'http_429': return reply.code(429).send(payload);
           case 'rate_limit': return reply.header('Retry-After', '1').code(403).send(payload);
           case 'bad_json': return reply.type('application/json').send(`not JSON: ${JSON.stringify(payload)}`);
-          case 'bad_schema': return reply.send(payload);
+          case 'bad_schema': return reply.send(active.identityResponse ?? payload);
           case 'bad_expiry': return reply.send({ access_token: 'private-response-access-token', refresh_token: 'private-response-refresh-token', expires_in: privatePayload });
           case 'socket':
             reply.hijack();
@@ -159,13 +190,50 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
     const success = await fetch(authorized.callback, { redirect: 'manual', headers: { cookie: authorized.binding } });
     assert.equal(success.status, 302);
     assert.equal(success.headers.get('location'), '/');
-    const session = success.headers.getSetCookie().find((value) => value.startsWith('gitbored-session='))?.split(';')[0];
+    let session = success.headers.getSetCookie().find((value) => value.startsWith('gitbored-session='))?.split(';')[0];
     assert.ok(session);
     sensitive.add(session);
     sensitive.add(session.slice(session.indexOf('=') + 1));
-    assert.equal((await fetch(`${applicationOrigin}/api/session`, { headers: { cookie: session } })).status, 200);
+    const ordinary = await signedInSession(session);
+    assert.equal(ordinary.user.login, 'alice');
+    assert.equal(ordinary.user.githubId, '101');
+    assert.equal(ordinary.authorization, 'ready');
     assert.equal(diagnostics().length, 0, 'Successful authorization must not emit a failure diagnostic.');
     assert.ok((await stat(join(directory, 'gitbored.sqlite'))).size > 0);
+
+    for (const login of ['mona-cat_acme', 'renamed-mona_acme', 'acme_admin', `${'a'.repeat(30)}_acme1234`]) {
+      if (login === 'renamed-mona_acme') {
+        const revoked = await fetch(`${providerOrigin}/__control`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revoke: true }) });
+        assert.equal(revoked.status, 200);
+        const reconnect = await signedInSession(session);
+        assert.equal(reconnect.authorization, 'reauthorize');
+        assert.equal(reconnect.user.id, ordinary.user.id);
+      }
+      const renamed = await fetch(`${providerOrigin}/__control`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login }) });
+      assert.equal(renamed.status, 200);
+      const before = tokenCalls;
+      const attempt = await beginAuthorization();
+      const callback: Response = await fetch(attempt.callback, { redirect: 'manual', headers: { cookie: `${attempt.binding}; ${session}` } });
+      assert.equal(callback.status, 302);
+      assert.equal(callback.headers.get('location'), '/');
+      const replacement = callback.headers.getSetCookie().find((value) => value.startsWith('gitbored-session='))?.split(';')[0];
+      assert.ok(replacement);
+      assert.notEqual(replacement, session);
+      sensitive.add(replacement);
+      sensitive.add(replacement.slice(replacement.indexOf('=') + 1));
+      session = replacement;
+      for (let check = 0; check < 2; check += 1) {
+        const confirmed = await signedInSession(session);
+        assert.equal(confirmed.authorization, 'ready');
+        assert.equal(confirmed.user.id, ordinary.user.id);
+        assert.equal(confirmed.user.githubId, ordinary.user.githubId);
+        assert.equal(confirmed.user.login, login);
+        assert.notEqual(confirmed.csrfToken, ordinary.csrfToken);
+      }
+      assert.equal(tokenCalls - before, 1, 'Managed-user callback must use the ordinary single-attempt exchange.');
+      assert.equal(diagnostics().length, 0, 'Valid managed identities must not emit failure diagnostics.');
+      acceptedManagedLogins.push(login);
+    }
 
     for (const scenario of scenarios) {
       active = scenario;
@@ -198,7 +266,7 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
       const replay = await fetch(attempt.callback, { redirect: 'manual', headers: { cookie: attempt.binding } });
       assert.equal(replay.headers.get('location'), '/?authError=state');
       assert.equal(diagnostics().length, before.diagnostics + 1, 'Consumed state must not repeat the provider failure.');
-      observed.push({ fault: scenario.fault, redirect: scenario.redirect, diagnostic: event });
+      observed.push({ fault: scenario.label ?? scenario.fault, redirect: scenario.redirect, diagnostic: event });
     }
     active = undefined;
     const invalid = await fetch(`${applicationOrigin}/api/auth/callback?state=invalid-private-state&code=invalid-private-code`, { redirect: 'manual' });
@@ -216,6 +284,10 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
     try {
       assert.equal(database.prepare('SELECT count(*) AS count FROM users').get()?.['count'], 1);
       assert.equal(database.prepare('SELECT count(*) AS count FROM sessions').get()?.['count'], 1);
+      const stored = database.prepare('SELECT id, github_id, login FROM users').get();
+      assert.equal(stored?.['id'], ordinary.user.id);
+      assert.equal(stored?.['github_id'], ordinary.user.githubId);
+      assert.equal(stored?.['login'], acceptedManagedLogins.at(-1));
     } finally { database.close(); }
     assertRedacted();
   } finally {
@@ -231,6 +303,6 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
     }
   }
   await assert.rejects(stat(directory), { code: 'ENOENT' });
-  console.info(JSON.stringify({ callbackScenarios: observed, redaction: 'PASS', persistence: 'real SQLite; original session retained',
+  console.info(JSON.stringify({ acceptedManagedLogins, immutableOwnerAcrossRenameAndReconnect: true, callbackScenarios: observed, redaction: 'PASS', persistence: 'real SQLite; original owner retained across login changes',
     cleanup: 'owned application/provider stopped; temporary SQLite removed', ports: [3009, 3019] }));
 });

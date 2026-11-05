@@ -105,7 +105,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 function providerIdentity(value: unknown): ProviderIdentity {
   if (!record(value) || typeof value['id'] !== 'number' || !Number.isSafeInteger(value['id']) || value['id'] < 1
-    || typeof value['login'] !== 'string' || !/^[a-zA-Z0-9-]{1,39}$/.test(value['login'])
+    || typeof value['login'] !== 'string' || !/^[a-zA-Z0-9_-]{1,39}$/.test(value['login'])
     || !(value['name'] === null || (typeof value['name'] === 'string' && value['name'].length <= 256))) {
     throw new AuthenticationError(502, 'provider_unavailable', 'GitHub could not confirm your identity. Try signing in again.');
   }
