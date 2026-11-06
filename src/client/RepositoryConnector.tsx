@@ -78,12 +78,13 @@ export function RepositoryConnector({ session, onConnect, onAccessLoss, onSsoReq
   }, [session, attempt, retryAttempt]);
   useEffect(() => {
     const value = query.trim().replace(/^https:\/\/github.com\//, '').replace(/\/$/, '');
-    if (!/^[\w-]+\/[\w.-]+$/.test(value)) return;
+    if (!/^[\w-]+\/[\w.-]+$/.test(value)) { ssoRecovered.current?.('lookup'); return; }
     const controller = new AbortController();
     const timer = setTimeout(() => {
       requestJson('/api/sources/repositories/resolve', controller.signal, session, readRepository, value).then((repo) => {
         if (!controller.signal.aborted) {
           ssoRecovered.current?.('lookup');
+          setError('');
           setRepos((previous) => [...new Map([...previous, repo].map((item) => [item.nodeId, item])).values()]);
         }
       }).catch((failure: unknown) => {
@@ -102,11 +103,11 @@ export function RepositoryConnector({ session, onConnect, onAccessLoss, onSsoReq
     return () => { clearTimeout(timer); controller.abort(); };
   }, [query, session, attempt, retryAttempt]);
   useEffect(() => {
-    if (!/^https:\/\/github\.com\/[^/]+\/[^/]+\/(issues|pull)\/[1-9][0-9]*\/?$/.test(query.trim())) return;
+    if (!/^https:\/\/github\.com\/[^/]+\/[^/]+\/(issues|pull)\/[1-9][0-9]*\/?$/.test(query.trim())) { ssoRecovered.current?.('item'); return; }
     const controller = new AbortController();
     const timer = setTimeout(() => {
       requestJson('/api/sources/resolve', controller.signal, session, readSourceItem, query.trim()).then((result) => {
-        if (!controller.signal.aborted) { ssoRecovered.current?.('item'); setItem(result); }
+        if (!controller.signal.aborted) { ssoRecovered.current?.('item'); setError(''); setItem(result); }
       }).catch((failure: unknown) => {
         if (controller.signal.aborted) return;
         if (failure instanceof SourceReadError && failure.code === 'sso_required') {
