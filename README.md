@@ -68,8 +68,9 @@ board picker for a new account). The canvas fills the viewport. **Boards ▾**
 switches or creates boards; **Settings** combines rename/delete, view filters,
 connections and project fields. Board navigation
 runs in the client and drains pending saves before switching. A failed save keeps
-the current editor open with retry/copy controls. Sign-out and theme controls remain
-available in the workspace; retired page URLs return to Boards.
+the current editor open with retry/copy controls. Sign-out, theme and account recovery are in **Settings**. On phones, **Menu**
+opens workspace actions and panels sit above the drawing toolbar. Retired page
+URLs return to Boards.
 
 Each board is private to its creator. Deletion requires the exact board name and
 does not change GitHub. The desktop workspace has light/dark themes, a faint dot
