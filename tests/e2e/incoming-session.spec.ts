@@ -109,14 +109,14 @@ test('current-session queue and placed hydration stay ephemeral, and resource de
   const { board, items } = await seed(page, 'Incoming resource authorization');
   const first = items[0]; const second = items[1];
   if (!first || !second) throw new Error('Missing authorized source items');
-  const lookups: { id: string; csrf: string | undefined }[] = [];
+  const lookups: { path: string; csrf: string | undefined }[] = [];
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
-    if (/^\/api\/references\/[^/]+$/.test(path)) lookups.push({ id: path.slice('/api/references/'.length), csrf: request.headers()['x-csrf-token'] });
+    if (/^\/api\/references\/[^/]+$/.test(path) || path === `/api/boards/${board.id}/metadata`) lookups.push({ path, csrf: request.headers()['x-csrf-token'] });
   });
   await open(page, board, items);
   const csrf = (await headers(page))['X-CSRF-Token'];
-  expect(new Set(lookups.map((lookup) => lookup.id))).toEqual(new Set(items.map((item) => item.reference.id)));
+  expect(lookups.map((lookup) => lookup.path)).toEqual([`/api/boards/${board.id}/metadata`]);
   expect(lookups.every((lookup) => lookup.csrf === csrf)).toBe(true);
   const hydratedReads = lookups.length;
   await add(page, first.reference.id);
@@ -131,7 +131,7 @@ test('current-session queue and placed hydration stay ephemeral, and resource de
   await expect(page.locator('.workspace-card-title')).toHaveText(first.metadata.title);
   await page.getByRole('button', { name: 'Incoming 1', exact: true }).click();
   await expect(page.locator('.incoming-candidates')).toContainText(second.metadata.title);
-  expect(new Set(lookups.map((lookup) => lookup.id))).toEqual(new Set(items.map((item) => item.reference.id)));
+  expect(lookups.map((lookup) => lookup.path)).toEqual([`/api/boards/${board.id}/metadata`]);
   expect(lookups.every((lookup) => lookup.csrf === csrf)).toBe(true);
   const original = await page.locator('.tl-container').elementHandle();
   if (!original) throw new Error('Missing native editor');
@@ -269,6 +269,9 @@ test('confirmed Bob unmounts Alice Incoming before another private lookup and ig
   });
   await page.goto(`/boards/${board.id}`);
   await expect(page.locator('.tl-container')).toBeVisible();
+  // Refresh the existing references without discovering additional fixture items.
+  await controlProvider(page.request, { sourceMode: 'empty' });
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect.poll(() => new Set(accepted.map(({ route }) => route.request().url())).size).toBe(2);
   const original = await page.locator('.tl-container').elementHandle();
   if (!original) throw new Error('Missing Alice native editor');
