@@ -257,7 +257,8 @@ export function IncomingWorkspace({ board, authority, coordinator, theme, notice
     // One check on return from GitHub; no timer or background retry loop.
     const onFocus = () => { if (document.visibilityState === 'visible') retrySsoRef.current(); };
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => { window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
   }, [ssoFailures.size]);
   useLayoutEffect(() => {
     if (!ssoFailures.size && restoreSsoFocus.current) {
