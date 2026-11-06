@@ -223,11 +223,13 @@ session. Use **Reconnect GitHub** in a new tab, then **Check GitHub access** in 
 retained tray to resume authorized reads; no failed write replays automatically.
 Incoming is a non-modal region: Escape/Close returns to its trigger and canvas
 interaction leaves it open. **Find** selects a card without changing zoom; selected
-cards expose full details. Cards resize with native handles or the **Card size**
-control in details. **View → Hide closed** hides closed/merged cards without changing
+cards keep their details closed until you use their **Card details** button. Details
+follow the card as you pan, scale modestly with desktop zoom, and show the issue or
+PR description as plain text. Cards resize with native handles or the **Card size**
+control in details. **Settings → Hide closed** hides closed/merged cards without changing
 the saved document.
 
-**View → Project** selects one project and maps Status, Weight, Priority and Sprint
+**Settings → Project** selects one project and maps Status, Weight, Priority and Sprint
 to its actual field IDs. Values—including zero—stay separate from native history;
 missing values are not inferred. **Connections** offers Off, Selected (default),
 and All. Curves indicate generic relationships from GitHub cross-references and
@@ -343,10 +345,14 @@ Titles are bounded to 65,536 characters, label/assignee lists to 1,000 values,
 label names to 1,024 and assignee values to 256 characters. Values are rejected,
 not silently truncated, at the provider boundary. The registry stores identity
 and locators. A separate account-scoped SQLite cache stores private card metadata,
-repository item pages and project context for 15 minutes. Browser reloads and
-server restarts reuse that cache; **Refresh** bypasses it. Entries are tied to the
-current credential, and detected access loss evicts them. Permission changes may
-therefore take up to 15 minutes to appear without Refresh. Proxy/browser HTTP
+repository item pages and project context. Board opening loads cached card content
+in one batch before mounting the canvas. Entries stay fresh for 15 minutes; older
+card content remains visible while background requests update it, with only a small
+corner spinner. Temporary failures retain the cached content marked stale. Browser
+reloads and server restarts reuse the cache; **Refresh** bypasses freshness without
+blanking cards. Entries are tied to the current credential, and detected access loss
+evicts them and clears affected content. Permission changes may take up to 15 minutes
+to appear without Refresh. Proxy/browser HTTP
 responses remain `no-store`; private metadata never enters the canvas document.
 
 Select a card to set its saved colour with the drawing palette. **Settings → Card
