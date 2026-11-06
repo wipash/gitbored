@@ -71,8 +71,8 @@ function readAuth(environment: NodeJS.ProcessEnv, directory: string): AuthConfig
 export function readConfig(environment: NodeJS.ProcessEnv, directory: string): RuntimeConfig {
   const serveClient = environment['NODE_ENV'] === 'production';
   const host = environment['HOST'] ?? '127.0.0.1';
-  if (host !== '127.0.0.1' && host !== '::1' && host !== 'localhost') {
-    throw new Error('HOST must be a loopback address for the local runtime.');
+  if (!['127.0.0.1', '::1', 'localhost', '0.0.0.0'].includes(host)) {
+    throw new Error('HOST must be a loopback address, or explicitly 0.0.0.0 for a container network.');
   }
 
   const portValue = environment['PORT'] ?? (serveClient ? '3001' : '3002');

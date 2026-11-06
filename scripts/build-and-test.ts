@@ -5,4 +5,5 @@ import { run } from './run.ts';
 await rm('dist', { recursive: true, force: true });
 await run('pnpm', ['exec', 'vite', 'build']);
 await run('pnpm', ['exec', 'tsc', '-p', 'tsconfig.server.json']);
-if (process.argv[2] === 'e2e') await run('pnpm', ['exec', 'playwright', 'test']);
+await run('pnpm', ['exec', 'tsc', '-p', 'tsconfig.data.json']);
+if (process.argv[2] === 'e2e') await run('pnpm', ['exec', 'playwright', 'test', ...process.argv.slice(3)]);
