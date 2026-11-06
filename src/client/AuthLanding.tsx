@@ -124,6 +124,7 @@ export function AuthLanding() {
   const inBoard = view.status === 'signed-in' && !pathname.startsWith('/account') && !pathname.startsWith('/sources');
   const inSources = pathname.startsWith('/sources');
   const inAccount = view.status !== 'signed-in' || (!inBoard && !inSources);
+  const inWorkspace = view.status !== 'signed-in' || inBoard;
   useEffect(() => {
     if (!inAccount || view.status === 'loading') return;
     document.title = view.status === 'signed-in' ? 'Account · GitBored' : 'GitBored';
@@ -162,21 +163,20 @@ export function AuthLanding() {
   </div>;
 
   return (
-    <div className={`runtime-shell auth-shell${view.status === 'signed-in' && inBoard ? ' desktop-app' : ''}`} onClick={(event) => {
+    <div className={`runtime-shell auth-shell${inWorkspace ? ' desktop-app' : ''}`} onClick={(event) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = event.target instanceof Element ? event.target.closest('a') : null;
       if (!anchor || anchor.target || anchor.origin !== window.location.origin || !/^\/(boards|account|sources)(\/|$)/.test(anchor.pathname)) return;
       event.preventDefault(); void navigate(anchor.pathname + anchor.search);
     }}>
       <a className="skip-link" href="#auth-content">Skip to content</a>
-      {!inBoard && themeControls}
+      {!inWorkspace && themeControls}
       <main id="auth-content">
         {!inBoard && accountNavigation}
         {!inBoard && accountFeedback}
-        {inAccount && <>
-        <p className="eyebrow">Your work, in perspective</p>
-        <h1 ref={accountHeading} tabIndex={-1}>{view.status === 'signed-in' ? 'Your GitBored account' : 'A little space for the big picture.'}</h1>
-        <p className="intro">Arrange GitHub work in a space of your own. Your account and boards stay private to you.</p>
+        {inAccount && <section className={inWorkspace ? 'entry-panel' : undefined} aria-labelledby="entry-heading">
+        <h1 id="entry-heading" ref={accountHeading} tabIndex={-1}>{view.status === 'signed-in' ? 'Your GitBored account' : 'GitBored'}</h1>
+        {view.status === 'signed-in' && <p className="intro">Arrange GitHub work in a space of your own. Your account and boards stay private to you.</p>}
         <section className="runtime-panel auth-panel" aria-labelledby="account-heading" aria-busy={busy}>
           <h2 id="account-heading">{view.status === 'signed-in' ? accountCheck.status === 'ready' ? 'Connected account' : 'Last checked account' : 'Connect with GitHub'}</h2>
           <p className="auth-status" role="status">{busy ? 'Signing out…' : ''}</p>
@@ -194,7 +194,6 @@ export function AuthLanding() {
           {view.status === 'signed-out' && <>
             <p>{view.reason === 'expired' ? 'Your session ended. Sign in again to continue.' : 'Sign in with your GitHub account to get started.'}</p>
             <a className="auth-primary" href="/api/auth/github">Sign in with GitHub</a>
-            <p className="connection-detail">GitBored uses your GitHub App authorization. Signing in does not give other users access to your work.</p>
           </>}
           {view.status === 'signed-in' && <>
             <p className="account-login">@{view.user.login}</p>
@@ -206,12 +205,12 @@ export function AuthLanding() {
             <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>
           </>}
         </section>
-        </>}
+        </section>}
         {view.status === 'signed-in' && inBoard && <Boards key={view.user.id} session={view} ready={accountCheck.status === 'ready'} reconcileAccount={reconcileAccount} theme={theme.resolved} />}
         {view.status === 'signed-in' && inSources && <SourcesRoute key={view.user.id} session={view} ready={accountCheck.status === 'ready'} />}
         {!theme.persistenceAvailable && <p id="theme-storage-note" className="storage-note" role="status">Theme changes apply for this visit. Allow site storage to keep your preference after reloading.</p>}
       </main>
-      {inBoard && <div className="workspace-account">{accountFeedback}{accountNavigation}{themeControls}</div>}
+      {inWorkspace && <div className="workspace-account">{inBoard && accountFeedback}<div className="workspace-preferences">{inBoard && accountNavigation}{themeControls}</div></div>}
       <footer><span>GitBored</span><a href="/runtime">Runtime diagnostics</a></footer>
     </div>
   );

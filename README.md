@@ -787,6 +787,14 @@ docker run -d --name gitbored --restart unless-stopped \
   ghcr.io/wipash/gitbored:sha-<full-commit-sha>
 ```
 
+Set `TLDRAW_KEY` to a valid tldraw license key covering the public hostname.
+The server serves this public SDK key through `/api/client-config.js`, which the
+browser loads before the app. It is runtime configuration, so replacing the key
+requires a server restart and page reload, not an image rebuild. Without a valid
+key, tldraw stops rendering after five seconds on production HTTPS domains.
+The endpoint exposes only this public key; GitHub credentials and the token
+encryption key remain on the server.
+
 The protected environment file supplies `APP_ORIGIN=https://board.example.com`,
 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and the stable `TOKEN_ENCRYPTION_KEY`
 (or a mounted `TOKEN_ENCRYPTION_KEY_FILE` owned by UID 1000 with mode 600/400).

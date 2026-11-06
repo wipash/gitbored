@@ -65,6 +65,11 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
     return reply.header('Cache-Control', 'no-store').send({ status: 'ok', storage: 'sqlite' });
   });
 
+  app.get('/api/client-config.js', (_request, reply) => reply
+    .header('Cache-Control', 'no-store')
+    .type('application/javascript; charset=utf-8')
+    .send(`window.gitboredConfig = ${JSON.stringify({ tldrawKey: config.tldrawKey })};`));
+
   app.decorate('authentication', registerAuthentication(app, database, config.auth));
   registerSources(app, database, config.auth);
   registerBoards(app, database);

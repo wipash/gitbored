@@ -4,13 +4,11 @@ Updated: 2026-11-06
 
 ## Current state
 
-Sean’s approved desktop redesign is implemented on local `main`: full-screen canvas, compact floating menus, dot grid/icons, client navigation, repository typeahead/import filters, automatic Incoming paging and bulk placement, resizable cards, project-field mappings, and generic related-item connections. Incoming stays open and placement preserves the camera. Account isolation, revisioned saves, conflict recovery, and native history remain intact.
+The desktop workspace, individual accounts, safe server logging and CI/GHCR publication are merged. GitBored is deployed publicly at `https://bored.mcgrath.nz` through the homelab; Sean confirmed GitHub sign-in. NAS iSCSI storage and VolSync backups are configured.
 
-Local commits: `e16bccd` implementation, `94af19e` design/checkpoint records, `f636ca7` native shortcut release fix. Nothing has been pushed. See [implementation and validation](../desktop-redesign/IMPLEMENTATION.md), [accepted prototype](../desktop-redesign/proposal.html), and [audit](../desktop-redesign/audit.html).
+Hosted shell fixes are in [app PR #3](https://github.com/wipash/gitbored/pull/3): compact sign-in without marketing copy, a full-viewport dot grid, adjacent Account/Theme controls, and runtime `TLDRAW_KEY` loading. [Homelab PR #7366](https://github.com/wipash/homelab/pull/7366) maps the key from the existing 1Password item. The app image needs updating after merge before the key takes effect. See [validation and review](../hosted-shell/IMPLEMENTATION.md).
 
-Validation complete on application commit `f636ca7`: full Node 26.8.1 gate passed (89 browser tests; lint/types, 13 native-document tests, server diagnostics). Both environment-specific skips passed separately against the same production build: session expiry and missing GitHub configuration. Final tracking commits change documentation only. Independent Fable rendered review and corrections are recorded in [reviews](../desktop-redesign/reviews/); the subsequent SDK review found no material regression. Final panel/focus/footer checks passed in light/dark desktop and narrow/enlarged text.
-
-Follow-up fixes for startup flash, Account/Theme overlap, Incoming’s pinned selection action and drag performance are committed and validated through `c57d38f`. Full Node 26 gate passed: lint/types, 13 native-document tests, diagnostics and 93 production browser tests; session-expiry and missing-configuration cases passed separately. Independent review and the gate exposed additional layout/selector defects, now corrected. One intermittent test-runner restart timeout passed unchanged in isolation and in the full confirmation run; its cause remains recorded under tooling. See [follow-up evidence](../desktop-redesign/FOLLOWUP.md).
+Application commit `e3f8d06` passes the full Node 26.8.1 gate: 94 production browser tests, two expected mode-specific skips, lint/types/native/server tests and build. Remote CI also passes both alternate modes and the container smoke test. Real hosted licence validation remains pending deployment.
 
 ## Next product checkpoint
 
@@ -20,7 +18,7 @@ Sean’s app remains on ports 3001/3002 with `.data/github-debug` and ignored `.
 
 ## Retrospective follow-ups
 
-CI enforcement and verified GHCR images are in review in [PR #2](https://github.com/wipash/gitbored/pull/2); see [CI evidence](../desktop-redesign/issues/03-ci-gate.md). CI pins the runtime and isolates authentication modes. Local-runner follow-ups remain queued: [runtime preflight](../desktop-redesign/issues/01-runtime-preflight.md) and [isolated test runs and auth modes](../desktop-redesign/issues/02-isolated-test-runs.md). Safe server failure logging was merged in [PR #1](https://github.com/wipash/gitbored/pull/1). Early live-path and stable visual milestones are recorded in the project guide; editor-lifetime review is in coding conventions.
+CI enforcement and verified GHCR images are merged in [PR #2](https://github.com/wipash/gitbored/pull/2); see [CI evidence](../desktop-redesign/issues/03-ci-gate.md). CI pins the runtime and isolates authentication modes. Local-runner follow-ups remain queued: [runtime preflight](../desktop-redesign/issues/01-runtime-preflight.md) and [isolated test runs and auth modes](../desktop-redesign/issues/02-isolated-test-runs.md). Safe server failure logging was merged in [PR #1](https://github.com/wipash/gitbored/pull/1). Early live-path and stable visual milestones are recorded in the project guide; editor-lifetime review is in coding conventions.
 
 Remaining UI edge case: [constrained account-error layout](../desktop-redesign/issues/04-constrained-account-error-layout.md). Recovery controls remain reachable, but simultaneous notices can still crowd Incoming at very small/enlarged viewports.
 
