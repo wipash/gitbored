@@ -4,52 +4,26 @@ Updated: 2026-11-06
 
 ## Current state
 
-Sean approved the full desktop redesign and authorized implementation on 2026-11-06. The current working tree implements the full-screen workspace, floating controls, client navigation, persistent/filterable/bulk Incoming, preloaded repository search/import filters, resizable cards, project mappings, and generic related-item overlays. It is **in progress at Sean’s requested local checkpoint, with final validation unfinished**. See [implementation state](../desktop-redesign/IMPLEMENTATION.md), [approved prototype](../desktop-redesign/proposal.html), and [audit](../desktop-redesign/audit.html).
+Sean’s approved desktop redesign is implemented on local `main`: full-screen canvas, compact floating menus, dot grid/icons, client navigation, repository typeahead/import filters, automatic Incoming paging and bulk placement, resizable cards, project-field mappings, and generic related-item connections. Incoming stays open and placement preserves the camera. Account isolation, revisioned saves, conflict recovery, and native history remain intact.
 
-Focused checks pass bulk placement/undo, automatic paging, project mappings and related links, navigation, account isolation and save/copy recovery. Fable approved the major rendered corrections; the remaining panel/focus/footer corrections passed targeted checks. The production gate reached 82 browser passes, 7 failures and 2 skips before corrections; it is not green. Immediate work: fix native held-Comma release across panel rerenders, then run a clean final gate and the complementary session-expiry check. See implementation state for evidence and limitations. The rest of this record describes the historical baseline and parked work.
+Local commits: `e16bccd` implementation, `94af19e` design/checkpoint records, `f636ca7` native shortcut release fix. Nothing has been pushed. See [implementation and validation](../desktop-redesign/IMPLEMENTATION.md), [accepted prototype](../desktop-redesign/proposal.html), and [audit](../desktop-redesign/audit.html).
 
-The committed baseline contains sign-in, private durable boards, the native workspace, source browsing, Incoming, save/conflict recovery, and backup/restore tooling (tickets 01–05, 11, 16 and corrections 20–23). Its historical checked commit is `de017ac`. Commit `900e8e0` adds the live pagination repair, repository diagnostics and the repository connection redesign described below.
+Validation complete on application commit `f636ca7`: full Node 26.8.1 gate passed (89 browser tests; lint/types, 13 native-document tests, server diagnostics). Both environment-specific skips passed separately against the same production build: session expiry and missing GitHub configuration. Final tracking commits change documentation only. Independent Fable rendered review and corrections are recorded in [reviews](../desktop-redesign/reviews/); the subsequent SDK review found no material regression. Final panel/focus/footer checks passed in light/dark desktop and narrow/enlarged text.
 
-**Live source browsing works locally:** Sean confirmed sign-in, repository listing and issue retrieval after the canonical numeric-pagination fix. The earlier other-machine listing `403` remains unexplained. No complete live GitHub-to-board workflow has been confirmed yet.
+## Next product checkpoint
 
-**Repository connection redesign implemented:** direct owner/name or repository-URL lookup, account-scoped recent shortcuts, Sources → board selection/creation handoff, and a normal-flow connection section above the mounted canvas. Connecting starts the first bounded discovery page; placement stays deliberate. Successful retry clears only that repository's denial; denied lookups clear its fetched card metadata. Keep the source host outside `.board-canvas` as well as outside the native editor to avoid clipping.
+Use Sean’s existing app to connect a real repository, bulk-place work, arrange/resize it, and reopen the saved board. Prior live sign-in/repository browsing was confirmed; the redesigned flow and GitHub Projects permissions still need live-account verification. Controlled-provider coverage is not evidence of live Projects access.
 
-Validation: Node 26 full gate passed (87 browser passes, one complementary skip, lint/types and native/server checks). The final connection-reopen and successful-retry changes passed two affected scenarios against a fresh production build. Final lint/types and independent Fable source/rendered correction review pass. Covered save/reload, restart-persistent shortcuts, account separation, errors/retry, keyboard paths and light/dark/narrow controls. Sean's live GitHub-to-board retry is the next product checkpoint.
-
-Sean's app remains on ports 3001/3002 with isolated `.data/github-debug` storage and ignored `.env.github-debug` credentials. Leave that process alone. The temporary setup/launcher is `.scratch/github-debug-local.sh`.
-
-## Delivery priorities when development resumes
-
-1. Next product checkpoint: place real GitHub work from Incoming onto a board, arrange it, save and reopen it. Live source browsing is now confirmed locally.
-2. Finish a coherent Atlas + Contextual board: choose work, place it, arrange and annotate it, inspect details, open GitHub links, save and reopen. Polish the actual light/dark interface as part of this slice.
-3. Complete refresh and basic non-destructive filters, preserving placement geometry and native undo behavior.
-4. Put that workflow in Sean's hands and use feedback to choose the next slice.
-
-Planning-field mappings, JSON portability, expanded clipboard/schema work, and comprehensive lifecycle/performance acceptance remain in the specification but follow the first usable milestone. This sequencing does not remove promised scope or mark deferred tickets complete. Account isolation, safe persistence, and usable essential controls remain part of every slice.
+Sean’s app remains on ports 3001/3002 with `.data/github-debug` and ignored `.env.github-debug`; its process and credentials are preserved. The user-owned launcher `.scratch/github-debug-local.sh` remains untracked. The accepted static prototype is still served at `http://10.0.16.32:3018/proposal.html`; it is not the live GitHub application.
 
 ## Preserved work
 
-All three worktrees are under `../gitbored-wt/`, with the same suffix as their branch after `ticket/`. They are paused, unmerged, and not accepted as complete. Read the relevant ticket's latest Comments before touching one; historical review rituals there are superseded by the current [management guide](../../docs/PROJECT_MANAGEMENT.md).
+These older worktrees remain paused and unmerged under `../gitbored-wt/`. The desktop redesign now overlaps details/filters/refresh, so compare the current implementation before reviving older work. Do not merge stale UI wholesale. Preserve concrete unfinished requirements in each ticket.
 
-| Ticket | Branch | Parked HEAD | Remaining product concern |
-|---|---|---|---|
-| [06 contextual details/controls](issues/06-contextual-details-controls.md) | `ticket/06-contextual-details-controls` | `a7f5274` (feature/tests `1d30de1`, based on `de017ac`) | Corrections exist, but narrow/enlarged reload left the canvas/card below the viewport with failed native hit testing. Cause remains unresolved. Finish the affected workflow and rendered correction review. |
-| [08 coordinated refresh](issues/08-coordinated-refresh.md) | `ticket/08-coordinated-refresh` | `b5df686` (based on `15a13de`) | Substantial implementation and prior runtime evidence exist; the final fixture correction passed its focused test. Assess the final integration delta and complete under the current guide. |
-| [12 JSON portability](issues/12-reference-json-portability.md) | `ticket/12-reference-json-portability` | `7aee65f` (based on `15a13de`) | Same-user authorization-error feedback was corrected with owner checks. Corrected-flow independent acceptance remains incomplete. Preserve and defer until the core workflow is useful. |
+| Ticket | Branch | Preserved commit |
+| --- | --- | --- |
+| [07 filters](issues/07-local-filters.md) | `ticket/07-local-filters` | `aa9b8a3` |
+| [08 refresh](issues/08-coordinated-refresh.md) | `ticket/08-coordinated-refresh` | `b5df686` |
+| [12 JSON portability](issues/12-reference-json-portability.md) | `ticket/12-reference-json-portability` | `7aee65f` |
 
-Parked ticket workers and their test runtimes remain shut down. Sean's local debug app uses ports 3001/3002. Check other port availability when resuming; leave his app, preview/tunnel and shared services alone.
-
-## Design and implementation anchors
-
-- Keep tldraw and the selected Atlas + Contextual appearance, including dark theme. Newly discovered work waits in Incoming; placement is deliberate.
-- Canvas documents contain geometry and references; fetched GitHub metadata stays outside native history. Use the existing document capture/validation helpers and native grouping/history.
-- Reuse existing session-context authorization, board request, save coordinator, and account-scoped recovery contracts. Preserve ownership checks and revisioned saves.
-- Product requirements live in [spec.md](spec.md); remaining tickets and detailed failure history live in [issues/](issues/). Consult current code for interfaces rather than copying historical ownership contracts.
-
-## Rendered review and follow-ups
-
-Fable approved the repository connection flow after affected corrections, including light/dark desktop, keyboard/focus, 320px/enlarged controls, normal document scrolling and actual button hit testing. Report: `/tmp/gitbored-source-connection-findings.md`. Remaining low-impact follow-ups: reduce outer board-section padding further at enlarged narrow widths; combine connection/discovery feedback so the connection announcement lasts longer; improve the inherited error for a renamed repository's redirect. Screen-reader behavior was not directly exercised.
-
-The next board-details milestone remains ticket 06. Its older obscured-control/clipping/interaction findings are not accepted by this Sources review; retain the parked correction work and review the affected coherent flow when resumed.
-
-Detailed reports and artifact paths remain in ticket Comments. The previous full progress log is available in Git at `8749a8d:.scratch/issue-canvas/PROGRESS.md`; it is historical context, not an active work queue.
+JSON portability and broader clipboard/schema/performance work remain outside this redesign. Existing upstream comma/window-blur behavior and UI-origin Shift eligibility are documented in README; the panel-rerender release regression is fixed. Screen-reader runtime, RTL, and forced-colors were not exercised. Historical progress is retained in Git; the specification and ticket comments remain the source for unfinished scope.
