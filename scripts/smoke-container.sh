@@ -16,9 +16,11 @@ cleanup() {
 trap cleanup EXIT
 "$engine" volume create "$volume" >/dev/null
 "$engine" run -d --name "$container" -p 127.0.0.1::3001 -v "$volume:/data" "$image" >/dev/null
-origin="http://$("$engine" port "$container" 3001/tcp)"
 
 wait_for_health() {
+  # Docker can assign a new ephemeral host port when the container restarts.
+  origin="http://$("$engine" port "$container" 3001/tcp)"
+  echo "Checking container health at $origin"
   curl --fail --silent --show-error --retry 20 --retry-delay 1 --retry-connrefused \
     --retry-all-errors --max-time 3 "$origin/api/health" >/dev/null
 }
