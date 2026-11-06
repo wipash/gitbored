@@ -24,7 +24,7 @@ export function Boards({ session, ready, reconcileAccount, theme }: { session: S
   const boardId = /^\/boards\/([^/]+)\/?$/.exec(pathname)?.[1];
   return boardId ? <LoadBoard key={`${authority.session.user.id}:${boardId}`} id={boardId} authority={authority} theme={theme} /> : <BoardList authority={authority} restore={pathname === '/'} />;
 }
-function BoardList({ authority, restore = true, embedded = false }: { authority: BoardAuthority; restore?: boolean; embedded?: boolean }) {
+function BoardList({ authority, restore = true, embedded = false, onClose }: { authority: BoardAuthority; restore?: boolean; embedded?: boolean; onClose?: () => void }) {
   const requestedSource = new URLSearchParams(window.location.search).get('source');
   const sourceQuery = requestedSource ? `?source=${encodeURIComponent(requestedSource.slice(0, 512))}` : '';
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
@@ -70,9 +70,7 @@ function BoardList({ authority, restore = true, embedded = false }: { authority:
       void navigate(`/boards/${encodeURIComponent(board.id)}${sourceQuery}`);
     } catch { if (!signal?.aborted) { setError('The board could not be created. Check your connection and board name, then Create board again. If your session ended, use Check account above.'); setBusy(false); } }
   }
-  return <section className="boards-list" aria-labelledby="boards-heading">
-    {embedded ? <h2 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h2> : <h1 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h1>}
-
+  const content = <>
     {requestedSource && <p className="board-source-intent">Choose a board for <strong><bdi>{requestedSource}</bdi></strong>, or create one below.</p>}
     <form className="board-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <label htmlFor="new-board-title">Board name</label>
@@ -82,6 +80,12 @@ function BoardList({ authority, restore = true, embedded = false }: { authority:
     {authority.ready && <><p role="status">{boards === null && !error ? 'Loading boards…' : boards?.length === 0 ? 'Create your first board.' : ''}</p>
     {error && <div className="board-error"><p role="alert">{error}</p><button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); heading.current?.focus(); }}>Retry loading</button></div>}
     {boards && <ul className="board-entries">{boards.map((board) => <li key={board.id}><a href={`/boards/${encodeURIComponent(board.id)}${sourceQuery}`}>{board.title}</a><span>Updated {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(board.updatedAt)}</span></li>)}</ul>}</>}
+  </>;
+  return <section className="boards-list" aria-labelledby="boards-heading">
+    {embedded ? <>
+      <div className="incoming-heading board-switcher-heading"><h2 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h2><button className="board-switcher-close" type="button" aria-label="Close boards" data-native-dismiss onClick={onClose}><Icon name="close" /></button></div>
+      <div className="board-switcher-body">{content}</div>
+    </> : <><h1 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h1>{content}</>}
   </section>;
 }
 function LoadBoard({ id, authority, theme }: { id: string; authority: BoardAuthority; theme: 'light' | 'dark' }) {
@@ -314,10 +318,11 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
     if (!coordinator.getSnapshot().retryable && document.activeElement === retryButton.current) saveStatus.current?.focus();
     setRetryInProgress(false);
   }
-  useEffect(() => { if (switcher) document.getElementById('new-board-title')?.focus(); }, [switcher]);
+  useEffect(() => { if (switcher) document.querySelector<HTMLButtonElement>('.board-switcher-close')?.focus(); }, [switcher]);
   return <WorkspacePanelContext value={panels}><BoardSettingsContext value={<div className="board-settings"><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></div>}><section className="board-editor" aria-labelledby="board-heading">
-    <div className="board-heading" data-native-ui="board-controls"><h1 id="board-heading" ref={heading} tabIndex={-1} title={title}>{title}</h1><button ref={boardsTrigger} type="button" aria-expanded={switcher} onClick={() => setSwitcher(!switcher)}>Boards ▾</button></div>
-    {switcher && <div className="board-switcher" data-native-ui="board-controls"><button className="board-switcher-close" type="button" aria-label="Close boards" data-native-dismiss onClick={() => { setSwitcher(false); boardsTrigger.current?.focus(); }}><Icon name="close" /></button><BoardList authority={authority} restore={false} embedded /></div>}
+    <div className="board-heading" data-native-ui="board-controls"><h1 id="board-heading" ref={heading} tabIndex={-1} title={title}>{title}</h1><button ref={boardsTrigger} type="button" aria-expanded={switcher} aria-controls={switcher ? 'board-switcher' : undefined} onClick={() => setSwitcher(!switcher)}>Boards ▾</button>
+      {switcher && <div id="board-switcher" className="board-switcher" data-native-ui="board-controls"><BoardList authority={authority} restore={false} embedded onClose={() => { setSwitcher(false); boardsTrigger.current?.focus(); }} /></div>}
+    </div>
     <div className="board-notices" data-native-ui="save"><div className="board-save" data-save-state={save.status} data-save-attention={Boolean(save.retryable || retryInProgress || save.status === 'conflict')}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress || !authority.ready} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{(save.status === 'conflict' || save.retryable) && <div className="board-form-row"><button type="button" aria-disabled={copyBusy || !authority.ready} aria-busy={copyBusy} onClick={() => { void saveCopy(); }}>{copyBusy ? 'Saving copy…' : 'Save as copy'}</button><button className="board-danger" type="button" aria-disabled={copyBusy || !authority.ready} onClick={reloadServer}>Reload server version</button></div>}</div>
     {save.recoveryUnavailable && <p role="alert" className="board-error">Browser recovery storage is unavailable. Keep this tab open until saving succeeds, or save a private copy. Browser recovery is best effort, not a server backup.</p>}
     {copyReceiptUnavailable && <p role="status">Your private copy is saved. Browser storage could not remember its link on the original recovery draft, so that draft may still appear unmarked.</p>}
