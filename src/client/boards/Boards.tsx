@@ -7,7 +7,7 @@ import { requestBoard, type BoardAuthority } from './boardRequest';
 import { IncomingWorkspace } from './IncomingWorkspace';
 import { readRecovery, readRecoveryCopy, recoveryStorageChanged, rememberRecoveryCopy, RecoveryStore, type RecoveryCopyReceipt, type StoredRecovery } from './recovery';
 import './boards.css';
-import { WorkspacePanelContext, useWorkspacePanel } from '../workspace/panels';
+import { BoardSettingsContext, WorkspacePanelContext, useWorkspacePanel } from '../workspace/panels';
 import { navigate, setNavigationGuard, usePathname } from '../navigation';
 
 type Session = Extract<SessionResponse, { status: 'signed-in' }>;
@@ -217,10 +217,7 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
   const [title, setTitle] = useState(board.title);
   const panels = useWorkspacePanel();
   const switcher = panels.active === 'boards';
-  const settings = panels.active === 'settings';
   const setSwitcher = (value: boolean) => panels.setActive(value ? 'boards' : null);
-  const setSettings = (value: boolean) => panels.setActive(value ? 'settings' : null);
-  const settingsTrigger = useRef<HTMLButtonElement>(null);
   const boardsTrigger = useRef<HTMLButtonElement>(null);
   const [name, setName] = useState(board.title);
   const [error, setError] = useState('');
@@ -305,16 +302,16 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
     if (!coordinator.getSnapshot().retryable && document.activeElement === retryButton.current) saveStatus.current?.focus();
     setRetryInProgress(false);
   }
-  useEffect(() => { if (settings) document.getElementById('board-name')?.focus(); if (switcher) document.getElementById('new-board-title')?.focus(); }, [settings, switcher]);
-  return <WorkspacePanelContext value={panels}><section className="board-editor" aria-labelledby="board-heading">
-    <div className="board-heading" data-native-ui="board-controls"><h1 id="board-heading" ref={heading} tabIndex={-1}>{title}</h1><button ref={settingsTrigger} type="button" aria-label="Board settings" aria-expanded={settings} onClick={() => setSettings(!settings)}>···</button><button ref={boardsTrigger} type="button" aria-expanded={switcher} onClick={() => setSwitcher(!switcher)}>Boards ▾</button></div>
+  useEffect(() => { if (switcher) document.getElementById('new-board-title')?.focus(); }, [switcher]);
+  return <WorkspacePanelContext value={panels}><BoardSettingsContext value={<div className="board-settings"><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></div>}><section className="board-editor" aria-labelledby="board-heading">
+    <div className="board-heading" data-native-ui="board-controls"><h1 id="board-heading" ref={heading} tabIndex={-1}>{title}</h1><button ref={boardsTrigger} type="button" aria-expanded={switcher} onClick={() => setSwitcher(!switcher)}>Boards ▾</button></div>
     {switcher && <div className="board-switcher" data-native-ui="board-controls"><button type="button" data-native-dismiss onClick={() => { setSwitcher(false); boardsTrigger.current?.focus(); }}>Close boards</button><BoardList authority={authority} restore={false} embedded /></div>}
     <div className="board-notices" data-native-ui="save"><div className="board-save" data-save-state={save.status}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress || !authority.ready} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{(save.status === 'conflict' || save.retryable) && <div className="board-form-row"><button type="button" aria-disabled={copyBusy || !authority.ready} aria-busy={copyBusy} onClick={() => { void saveCopy(); }}>{copyBusy ? 'Saving copy…' : 'Save as copy'}</button><button className="board-danger" type="button" aria-disabled={copyBusy || !authority.ready} onClick={reloadServer}>Reload server version</button></div>}</div>
     {save.recoveryUnavailable && <p role="alert" className="board-error">Browser recovery storage is unavailable. Keep this tab open until saving succeeds, or save a private copy. Browser recovery is best effort, not a server backup.</p>}
     {copyReceiptUnavailable && <p role="status">Your private copy is saved. Browser storage could not remember its link on the original recovery draft, so that draft may still appear unmarked.</p>}
     {copy && <p role="status">A private copy was saved, but you made newer changes while it was saving. Those changes remain in this tab.{copy.receiptUnavailable ? ' Browser storage could not remember the saved copy’s link on the original recovery draft.' : ''} <a href={`/boards/${encodeURIComponent(copy.id)}`} target="_blank" rel="noopener">Open saved copy (new tab)</a></p>}
     {error && <p className="board-error" role="alert">{error}</p>}</div>
-    {settings && <section className="board-settings" data-native-ui="board-controls" aria-label="Board settings"><div className="incoming-heading"><h2>Board settings</h2><button type="button" data-native-dismiss aria-label="Close board settings" onClick={() => { setSettings(false); settingsTrigger.current?.focus(); }}>×</button></div><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></section>}
+
     <IncomingWorkspace board={board} authority={authority} coordinator={coordinator} theme={theme} />
     <dialog ref={dialog} className="board-dialog" aria-labelledby="delete-board-heading" onClose={() => {
       if (confirmation.current) { confirmation.current.value = ''; confirmation.current.setCustomValidity(''); }
@@ -327,5 +324,5 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
       }
       void remove();
     }}><label htmlFor="delete-board-name">Type the board name to confirm</label><input ref={confirmation} id="delete-board-name" name="confirmation" required autoComplete="off" onChange={(event) => event.currentTarget.setCustomValidity('')} /><div className="board-form-row"><button type="button" aria-disabled={busy} onClick={() => { if (!busy) dialog.current?.close(); }}>Cancel</button><button className="board-danger" type="submit" aria-disabled={busy || !authority.ready}>Delete board permanently</button></div></form></dialog>
-  </section></WorkspacePanelContext>;
+  </section></BoardSettingsContext></WorkspacePanelContext>;
 }

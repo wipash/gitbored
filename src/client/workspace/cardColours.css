@@ -1,0 +1,22 @@
+.native-workspace .workspace-card {
+  border-top: 5px solid transparent;
+  background: linear-gradient(color-mix(in srgb, var(--card-accent, transparent) 8%, var(--workspace-surface)), color-mix(in srgb, var(--card-accent, transparent) 8%, var(--workspace-surface))) padding-box,
+    var(--card-stripes, var(--workspace-surface)) border-box;
+}
+.workspace-card .card-category {
+  border-inline-start: 3px solid var(--badge-accent);
+  padding-inline-start: 5px;
+  color: var(--workspace-text);
+  background: var(--workspace-surface);
+}
+.workspace-card .card-type { align-self: start; font-size: .6875rem; }
+.card-colour-settings { min-inline-size: 0; margin: 0; padding: 10px; border: 1px solid var(--color-border-subtle); }
+.card-colour-settings legend { padding-inline: 4px; font-weight: 600; }
+.view-settings .card-colour-settings label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 8px; align-items: center; margin-block: 8px; text-transform: none; }
+.card-colour-settings select { min-inline-size: 0; }
+.card-colour-settings .colour-help { color: var(--color-text-secondary); margin-block: 8px; }
+.card-colour-settings summary { cursor: pointer; min-block-size: 28px; }
+.category-colour-list { max-block-size: 220px; overflow: auto; overscroll-behavior: contain; padding-inline: 3px; }
+.view-settings .card-colour-settings .category-colour-list label { grid-template-columns: minmax(0, 1fr) 44px; }
+.category-colour-list span { overflow-wrap: anywhere; }
+.category-colour-list input[type="color"] { width: 44px; height: 30px; padding: 2px; border: 1px solid var(--color-border-control); background: var(--color-bg-surface); cursor: pointer; }

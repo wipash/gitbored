@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { SessionResponse } from '../shared/session';
 import { isSessionResponse } from '../shared/session';
 import { isThemePreference, useTheme } from './theme';
-import { SourceBrowser } from './SourceBrowser';
 import { Boards } from './boards/Boards';
 import './auth.css';
 import { navigate, usePathname } from './navigation';
@@ -30,7 +29,7 @@ export function AuthLanding() {
   const checking = useRef<Promise<void> | null>(null);
   const checkController = useRef<AbortController | null>(null);
   const mounted = useRef(false);
-  const accountHeading = useRef<HTMLHeadingElement>(null);
+  const entryHeading = useRef<HTMLHeadingElement>(null);
   const checkButton = useRef<HTMLButtonElement>(null);
   const accountStatus = useRef<HTMLParagraphElement>(null);
   const focusCheckedStatus = useRef(false);
@@ -121,15 +120,17 @@ export function AuthLanding() {
     }
   }
 
-  const inBoard = view.status === 'signed-in' && !pathname.startsWith('/account') && !pathname.startsWith('/sources');
-  const inSources = pathname.startsWith('/sources');
-  const inAccount = view.status !== 'signed-in' || (!inBoard && !inSources);
-  const inWorkspace = view.status !== 'signed-in' || inBoard;
+  const signedIn = view.status === 'signed-in';
   useEffect(() => {
-    if (!inAccount || view.status === 'loading') return;
-    document.title = view.status === 'signed-in' ? 'Account · GitBored' : 'GitBored';
-    accountHeading.current?.focus();
-  }, [inAccount, view.status]);
+    if (signedIn && !/^\/boards(?:\/|$)/.test(pathname) && pathname !== '/') {
+      void navigate('/boards', true);
+    }
+  }, [pathname, signedIn]);
+  useEffect(() => {
+    if (view.status === 'loading' || signedIn) return;
+    document.title = 'GitBored';
+    entryHeading.current?.focus();
+  }, [signedIn, view.status]);
 
   if (view.status === 'loading') return <main className="app-loading" aria-label="GitBored" aria-busy="true"><p role="status">Loading…</p></main>;
 
@@ -143,17 +144,16 @@ export function AuthLanding() {
           </select>
         </div>
       </header>;
-  const accountNavigation = view.status === 'signed-in' && <nav className="application-nav" aria-label="Application">
-          <a href="/boards" aria-current={inBoard ? 'page' : undefined}>Boards</a>
-          <a href="/sources" aria-current={inSources ? 'page' : undefined}>Sources</a>
-          <a href="/account" aria-current={inAccount ? 'page' : undefined}>Account</a>
+  const accountNavigation = view.status === 'signed-in' && <nav className="application-nav" aria-label="Workspace">
+          <a href="/boards">Boards</a>
           <span className="application-account">{accountCheck.status === 'ready' ? 'Account' : 'Last checked'}: @{view.user.login}</span>
-          {!inAccount && <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>}
+          <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>
         </nav>;
 
   const accountFeedback = <div className="account-feedback">
-        {!inAccount && busy && <p role="status">Signing out…</p>}
-        {!inAccount && actionError && <p className="auth-error" role="alert">{actionError}</p>}
+        {view.status === 'signed-in' && view.authorization === 'reauthorize' && <p className="auth-error" role="alert">Your GitHub authorization ended. <a href="/api/auth/github">Reconnect GitHub</a> to resume GitHub access.</p>}
+        {busy && <p role="status">Signing out…</p>}
+        {actionError && <p className="auth-error" role="alert">{actionError}</p>}
         {view.status === 'signed-in' && <p className="auth-status account-context-status" ref={accountStatus} tabIndex={-1} role="status">{accountCheck.message}</p>}
         {view.status === 'signed-in' && accountCheck.status !== 'ready' && <section className="account-check runtime-panel" aria-label="Account check" aria-busy={accountCheck.status === 'checking'}>
           <p>Previously checked account: @{view.user.login}. A confirmed different account clears this account's canvas from the page.</p>
@@ -163,22 +163,18 @@ export function AuthLanding() {
   </div>;
 
   return (
-    <div className={`runtime-shell auth-shell${inWorkspace ? ' desktop-app' : ''}`} onClick={(event) => {
+    <div className="runtime-shell auth-shell desktop-app" onClick={(event) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = event.target instanceof Element ? event.target.closest('a') : null;
-      if (!anchor || anchor.target || anchor.origin !== window.location.origin || !/^\/(boards|account|sources)(\/|$)/.test(anchor.pathname)) return;
+      if (!anchor || anchor.target || anchor.origin !== window.location.origin || !/^\/boards(\/|$)/.test(anchor.pathname)) return;
       event.preventDefault(); void navigate(anchor.pathname + anchor.search);
     }}>
       <a className="skip-link" href="#auth-content">Skip to content</a>
-      {!inWorkspace && themeControls}
       <main id="auth-content">
-        {!inBoard && accountNavigation}
-        {!inBoard && accountFeedback}
-        {inAccount && <section className={inWorkspace ? 'entry-panel' : undefined} aria-labelledby="entry-heading">
-        <h1 id="entry-heading" ref={accountHeading} tabIndex={-1}>{view.status === 'signed-in' ? 'Your GitBored account' : 'GitBored'}</h1>
-        {view.status === 'signed-in' && <p className="intro">Arrange GitHub work in a space of your own. Your account and boards stay private to you.</p>}
+        {!signedIn && <section className="entry-panel" aria-labelledby="entry-heading">
+        <h1 id="entry-heading" ref={entryHeading} tabIndex={-1}>GitBored</h1>
         <section className="runtime-panel auth-panel" aria-labelledby="account-heading" aria-busy={busy}>
-          <h2 id="account-heading">{view.status === 'signed-in' ? accountCheck.status === 'ready' ? 'Connected account' : 'Last checked account' : 'Connect with GitHub'}</h2>
+          <h2 id="account-heading">Connect with GitHub</h2>
           <p className="auth-status" role="status">{busy ? 'Signing out…' : ''}</p>
           {signInError && <p className="auth-error" role="alert">{signInError}</p>}
           {actionError && <p className="auth-error" role="alert">{actionError}</p>}
@@ -195,34 +191,13 @@ export function AuthLanding() {
             <p>{view.reason === 'expired' ? 'Your session ended. Sign in again to continue.' : 'Sign in with your GitHub account to get started.'}</p>
             <a className="auth-primary" href="/api/auth/github">Sign in with GitHub</a>
           </>}
-          {view.status === 'signed-in' && <>
-            <p className="account-login">@{view.user.login}</p>
-            {view.user.name && <p>{view.user.name}</p>}
-            {view.authorization === 'reauthorize' ? <>
-              <p className="auth-error" role="alert">Your GitHub authorization ended. Reconnect to resume GitHub access. Your account is still yours.</p>
-              <a className="auth-primary" href="/api/auth/github">Reconnect GitHub</a>
-            </> : <p className="connection-detail">{accountCheck.status === 'ready' ? 'Signed in securely. Open Boards to arrange your work or Sources to browse GitHub. GitBored makes no changes to GitHub.' : 'Protected requests are paused until your current account can be confirmed.'}</p>}
-            <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>
-          </>}
         </section>
         </section>}
-        {view.status === 'signed-in' && inBoard && <Boards key={view.user.id} session={view} ready={accountCheck.status === 'ready'} reconcileAccount={reconcileAccount} theme={theme.resolved} />}
-        {view.status === 'signed-in' && inSources && <SourcesRoute key={view.user.id} session={view} ready={accountCheck.status === 'ready'} />}
+        {view.status === 'signed-in' && <Boards key={view.user.id} session={view} ready={accountCheck.status === 'ready'} reconcileAccount={reconcileAccount} theme={theme.resolved} />}
         {!theme.persistenceAvailable && <p id="theme-storage-note" className="storage-note" role="status">Theme changes apply for this visit. Allow site storage to keep your preference after reloading.</p>}
       </main>
-      {inWorkspace && <div className="workspace-account">{inBoard && accountFeedback}<div className="workspace-preferences">{inBoard && accountNavigation}{themeControls}</div></div>}
+      <div className="workspace-account">{accountFeedback}<div className="workspace-preferences">{accountNavigation}{themeControls}</div></div>
       <footer><span>GitBored</span><a href="/runtime">Runtime diagnostics</a></footer>
     </div>
   );
-}
-
-function SourcesRoute({ session, ready }: { session: Extract<SessionResponse, { status: 'signed-in' }>; ready: boolean }) {
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { document.title = 'Sources · GitBored'; heading.current?.focus(); }, []);
-  return <section className="sources-route" aria-labelledby="sources-route-heading">
-    <h1 ref={heading} id="sources-route-heading" tabIndex={-1}>Sources</h1>
-    {!ready ? <p role="status">GitHub values are withheld until your current account is checked.</p>
-      : session.authorization === 'ready' ? <SourceBrowser session={session} />
-        : <p className="auth-error" role="alert">Your GitHub authorization ended. <a href="/api/auth/github">Reconnect GitHub</a> to browse sources. Your boards remain private to your account.</p>}
-  </section>;
 }

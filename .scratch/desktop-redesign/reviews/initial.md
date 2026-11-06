@@ -10,7 +10,7 @@ The working tree changed while the review ran (`Boards.tsx`, `IncomingWorkspace.
 
 **Stack.** React 19 + tldraw 5.6, plain CSS with semantic tokens in `src/client/styles.css` (`--color-*`) and a parallel `--workspace-*` set in `workspace.css`; desktop overrides in `src/client/desktop.css`, `src/client/boards/incoming.css`, `src/client/workspace/workspace.css`. Vite dev server, Playwright 1.64 driven from a scratch script.
 
-**Conventions read.** `docs/CODING-CONVENTIONS.md` (Interface work section), `docs/PROJECT_MANAGEMENT.md`, `AGENTS.md`, `.scratch/desktop-redesign/IMPLEMENTATION.md`, the accepted visual `.scratch/desktop-redesign/proposal.html`, `audit.html` not opened beyond its screenshots.
+**Conventions read.** `docs/CODING-CONVENTIONS.md` (Interface work section), `AGENTS.md`, `.scratch/desktop-redesign/IMPLEMENTATION.md`, the accepted visual `.scratch/desktop-redesign/proposal.html`, `audit.html` not opened beyond its screenshots.
 
 | Domain | Evidence inspected | Result |
 | --- | --- | --- |

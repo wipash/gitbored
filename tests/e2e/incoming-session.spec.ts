@@ -83,8 +83,8 @@ async function add(page: Page, referenceId: string) {
 async function authorize(page: Page, identity: 'Alice' | 'Bob') {
   await page.goto('/api/auth/github');
   await page.getByRole('link', { name: `Authorize ${identity}`, exact: true }).click();
-  await page.goto('/account');
-  await expect(page.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
+  await page.goto('/boards');
+  await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
 }
 async function privateValuesAbsent(page: Page, items: SourceItem[]) {
   for (const item of items) {

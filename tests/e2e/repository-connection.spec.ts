@@ -9,16 +9,10 @@ test('find a repository directly, carry it into a board, and reuse it without pa
   await controlProvider(page.request, { reset: true });
   expect((await page.request.post(`${providerOrigin}/__source-stats/reset`)).ok()).toBe(true);
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
-  await page.getByLabel('Repository name or URL').fill('alice/project');
-  await page.getByLabel('Repository name or URL').press('Enter');
-  await expect(page.locator('#source-items-heading')).toHaveText('alice/project');
-  await page.screenshot({ path: info.outputPath('sources-light.png'), fullPage: true });
-  await page.getByRole('link', { name: 'Choose a board', exact: true }).click();
-  await expect(page.getByText('Choose a board for', { exact: false })).toBeVisible();
-  await page.getByLabel('Board name', { exact: false }).fill('Repository connection');
+  await page.getByLabel('Board name', { exact: true }).fill('Repository connection');
   await page.getByRole('button', { name: 'Create board', exact: true }).click();
-  await expect(page.getByLabel('Search repositories')).toHaveValue('alice/project');
+  await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+  await page.getByLabel('Search repositories').fill('alice/project');
   await page.getByRole('button', { name: /alice\/project/ }).first().click();
   await page.getByLabel('Theme', { exact: true }).selectOption('dark');
   await page.getByRole('button', { name: 'Connect repository', exact: true }).click();
@@ -63,18 +57,14 @@ test('find a repository directly, carry it into a board, and reuse it without pa
 
 test('repository lookup has actionable failure, retries, and durable account-scoped shortcuts', async ({ page }) => {
   await controlProvider(page.request, { reset: true }); await signIn(page);
-  await page.goto('/sources');
-  await page.getByLabel('Repository name or URL').fill('https://example.invalid/private/project');
-  await page.getByRole('button', { name: 'Find repository', exact: true }).click();
-  await expect(page.locator('.repository-finder [role="alert"]')).toBeVisible();
-  await expect(page.getByLabel('Repository name or URL')).toBeFocused();
-  await page.getByLabel('Repository name or URL').fill('https://github.com/alice/project');
-  await page.getByRole('button', { name: 'Find repository', exact: true }).click();
-  await expect(page.locator('#source-items-heading')).toHaveText('alice/project');
+  const initial = await currentSession(page.request);
+  if (initial.status !== 'signed-in') throw new Error('Expected Alice');
+  const headers = { origin: applicationOrigin, 'x-csrf-token': initial.csrfToken };
+  expect((await page.request.post('/api/sources/repositories/resolve', { headers, data: { url: 'https://example.invalid/private/project' } })).status()).toBe(400);
+  expect((await page.request.post('/api/sources/repositories/resolve', { headers, data: { url: 'https://github.com/alice/project' } })).ok()).toBe(true);
   await restartApplication(page.request, 'original');
-  await page.reload();
-  await page.getByRole('button', { name: 'Open alice/project', exact: true }).click();
-  await expect(page.locator('#source-items-heading')).toHaveText('alice/project');
+  const recent = await page.request.get('/api/sources/recent-repositories', { headers });
+  expect(readSourcePage(await recent.json(), readRepositoryLocator).items).toContainEqual({ owner: 'alice', name: 'project' });
   const session = await currentSession(page.request);
   if (session.status !== 'signed-in') throw new Error('Expected Alice');
   const response = await page.request.post('/api/boards', { headers: { origin: applicationOrigin, 'x-csrf-token': session.csrfToken }, data: { title: 'Second board' } });

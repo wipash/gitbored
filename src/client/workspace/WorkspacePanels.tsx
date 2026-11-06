@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { computed, useEditor, useValue } from 'tldraw';
 import { githubItemUrl, type WorkspaceMetadata } from '../../shared/items';
 import { ITEM_CARD_TYPE, type ItemCardShape } from '../../shared/nativeDocument';
@@ -7,15 +7,19 @@ import { itemStateLabel, describeItem } from './metadata';
 import { planningRoles, type PlanningSelection } from '../../shared/planning';
 import { ProjectFields } from './planning';
 import { RelatedLinks, relatedTo, type ConnectionMode } from './RelatedLinks';
-import { useWorkspacePanel } from './panels';
+import { BoardSettingsContext, useWorkspacePanel } from './panels';
 import { useNativeUiKeys } from './useNativeUiKeys';
+import { useCardDetailPosition } from './useCardDetailPosition';
+import { CardColourSettings } from './cardColours';
+import { usePanelClearance } from './usePanelClearance';
 
 export function WorkspacePanels({ children, metadata, planning, onPlanningChange, preferenceKey, hideClosed, onHideClosedChange }: { children?: ReactNode; metadata: WorkspaceMetadata; hideClosed: boolean; onHideClosedChange: (value: boolean) => void; planning?: PlanningSelection | undefined; onPlanningChange?: ((selection: PlanningSelection) => void) | undefined; preferenceKey?: string | undefined }) {
   const editor = useEditor();
   useNativeUiKeys();
   const { active, setActive } = useWorkspacePanel();
-  const settingsOpen = active === 'view';
-  const setSettingsOpen = (value: boolean) => setActive(value ? 'view' : null);
+  const boardSettings = useContext(BoardSettingsContext);
+  const settingsOpen = active === 'settings';
+  const setSettingsOpen = (value: boolean) => setActive(value ? 'settings' : null);
   const [mode, setMode] = useState<ConnectionMode>(() => {
     try { const value = localStorage.getItem(`gitbored.connections.${preferenceKey}`); return value === 'off' || value === 'all' ? value : 'selected'; } catch { return 'selected'; }
   });
@@ -24,6 +28,8 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   const [query, setQuery] = useState('');
   const [dismissed, setDismissed] = useState<string | null>(null);
   const viewTrigger = useRef<HTMLButtonElement>(null);
+  const settingsPanel = useRef<HTMLElement>(null);
+  usePanelClearance(settingsPanel, settingsOpen);
   const trigger = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
   // Panel content follows membership and card properties; geometry stays in the canvas.
@@ -34,6 +40,8 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
     const shape = editor.getOnlySelectedShape();
     return shape?.type === ITEM_CARD_TYPE ? shape : null;
   }, { isEqual: (a: ItemCardShape | null, b: ItemCardShape | null) => a?.id === b?.id && a?.props === b?.props }), [editor]));
+  const detailsOpen = !!selected && dismissed !== selected.id && active !== 'settings' && active !== 'boards';
+  const { ref: detailRef, position: detailPosition } = useCardDetailPosition(detailsOpen);
   const state = selected ? metadata.get(selected.props.referenceId) : undefined;
   const item = state?.status === 'ready' ? state.item : null;
   const url = item ? githubItemUrl(item.kind, item.locator) : null;
@@ -47,9 +55,10 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   }) : [];
   return <>
     <RelatedLinks metadata={metadata} mode={mode} />
-    <div className="workspace-tools"><div className="workspace-view" data-native-ui="view" onPointerDown={(event) => event.stopPropagation()}>
-      <button ref={viewTrigger} type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>View</button>
-      {settingsOpen && <section className="workspace-floating-panel" aria-label="View settings"><div className="incoming-heading"><h2>View</h2><button type="button" data-native-dismiss aria-label="Close View" onClick={() => { setSettingsOpen(false); viewTrigger.current?.focus(); }}><Icon name="close" /></button></div><div className="workspace-panel-body view-settings">
+    <div className="workspace-tools"><div className="workspace-view" data-native-ui="settings" onPointerDown={(event) => event.stopPropagation()}>
+      <button ref={viewTrigger} type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>Settings</button>
+      {settingsOpen && <section ref={settingsPanel} className="workspace-floating-panel workspace-settings-panel" aria-label="Settings"><div className="incoming-heading"><h2>Settings</h2><button type="button" data-native-dismiss aria-label="Close Settings" onClick={() => { setSettingsOpen(false); viewTrigger.current?.focus(); }}><Icon name="close" /></button></div><div className="workspace-panel-body view-settings">
+        {boardSettings}
         <label>Hide closed<input type="checkbox" checked={hideClosed} onChange={(event) => { onHideClosedChange(event.currentTarget.checked); editor.selectNone(); }} /></label>
         <label>Connections<select aria-label="Connections" value={mode} onChange={(event) => { const value = event.currentTarget.value; if (value !== 'off' && value !== 'selected' && value !== 'all') return; setMode(value); try { localStorage.setItem(`gitbored.connections.${preferenceKey}`, value); } catch { /* Session preference still applies. */ } }}><option value="off">Off</option><option value="selected">Selected</option><option value="all">All</option></select></label>
         <label>Project<select aria-label="Project" value={planning?.projectId ?? ''} onChange={(event) => {
@@ -58,6 +67,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
           onPlanningChange?.({ projectId: selected?.id ?? '', status: field(/^status$/i), weight: field(/^(weight|estimate|points)$/i), priority: field(/^priority$/i), sprint: field(/^(sprint|iteration)$/i) });
         }}><option value="">None</option>{projects.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}</select></label>
         {planning?.projectId && planningRoles.map((role) => <label key={role}>{role}<select aria-label={`${role} field`} value={planning[role]} onChange={(event) => onPlanningChange?.({ ...planning, [role]: event.currentTarget.value })}><option value="">None</option>{project?.fields.map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>)}
+        <CardColourSettings />
         {!projects.length && <p>{[...metadata.values()].some((value) => value.status === 'ready' && value.item.context?.status === 'unavailable') ? 'Project data unavailable. Check GitHub access and refresh.' : 'No projects on these cards.'}</p>}
       </div></section>}
     </div>
@@ -79,7 +89,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
       </section>}
     </div>
     {children}</div>
-    {selected && dismissed !== selected.id && active !== 'settings' && active !== 'boards' && <section className="workspace-detail workspace-floating-panel" data-native-ui="details" aria-label="Card details" onPointerDown={(event) => event.stopPropagation()}>
+    {selected && detailsOpen && <section ref={detailRef} style={detailPosition} className="workspace-detail workspace-floating-panel" data-native-ui="details" aria-label="Card details" onPointerDown={(event) => event.stopPropagation()}>
       <div className="incoming-heading"><h2>Card details</h2><button type="button" data-native-dismiss aria-label="Close details" onClick={() => { setDismissed(selected.id); editor.getContainer().focus({ preventScroll: true }); editor.focus(); }}><Icon name="close" /></button></div>
       <div className="workspace-panel-body">{item ? <>
         <p className="detail-locator">{item.locator.owner}/{item.locator.repository} #{item.locator.number}</p>

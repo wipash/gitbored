@@ -15,5 +15,4 @@ Single-context: root `GLOSSARY.md` and `architecture/decisions/`. See `.agents/d
 ### Implementation and review
 
 Before writing or reviewing code, read `docs/CODING-CONVENTIONS.md`.
-When planning tickets, assigning agents, integrating work, or handing over, read `docs/PROJECT_MANAGEMENT.md`.
 Agents and subagents implementing interface features must use the `better-interface` skill before handoff.

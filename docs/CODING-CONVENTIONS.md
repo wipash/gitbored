@@ -2,7 +2,7 @@
 
 Apply these rules when implementing or reviewing GitBored. This is a small local-first tool, not a general application framework. Prefer platform capabilities, the selected libraries, and a complete vertical slice over speculative abstractions.
 
-**Enforcement:** `pnpm lint` includes configured oxlint rules and the import-seam check; `pnpm type-check` applies the TypeScript configs. Those files are the exact automated rule set. Rules labelled **Review** below require evidence in code review, not a claim that a tool already enforces them. `pnpm gate` combines the executable checks and production application tests. Follow [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) for check cadence and integration: focused checks during development and one full gate on the final integrated candidate; documentation-only changes do not require application checks.
+**Enforcement:** `pnpm lint` includes configured oxlint rules and the import-seam check; `pnpm type-check` applies the TypeScript configs. Those files are the exact automated rule set. Rules labelled **Review** below require evidence in code review, not a claim that a tool already enforces them. `pnpm gate` combines the executable checks and production application tests. Run focused checks during development and one full gate on the final integrated candidate; documentation-only changes do not require application checks.
 
 ## TypeScript and modules
 
@@ -25,13 +25,13 @@ Apply these rules when implementing or reviewing GitBored. This is a small local
 
 ## Interface work
 
-Every agent or subagent implementing interface features must use **`better-interface`** and its owning domain skills before handoff. Apply it to the concrete screen/flow, not an unbounded review of the whole repository. The project manager supplies the accepted design and reachable preview; report any unreviewed domain or unverified state.
+Every agent or subagent implementing interface features must use **`better-interface`** and its owning domain skills before handoff. Apply it to the concrete screen/flow, not an unbounded review of the whole repository. Use the agreed design and a reachable preview; report any unreviewed domain or unverified state.
 
 - **Review/browser:** preserve Atlas + Contextual, including the dark theme. Use semantic tokens for both themes, native controls where suitable, accessible names, visible focus, and appropriate status announcements.
 - **Review/browser:** inspect actual desktop rendering and the affected interactions. Cover loading, empty, failure, and long-content states when they exist. At 320px and enlarged text, controls remain reachable and the document does not scroll sideways; the spatial canvas may scroll internally.
 - **Review/browser:** when React state or callbacks around the canvas change, check editor lifetime, in-flight gestures and native history across panel rerenders. Use the existing real-key and pointer regressions to verify continuity.
 - **Review/browser:** an anchored panel is non-modal: it must not block the canvas or trap focus. Verify placement, direct card switching, dismissal, and focus return. Dragging and keyboard alternatives must produce the same intended operation.
-- **Review/browser:** respect reduced-motion preferences and communicate state with more than color or motion alone. Judge failures against evidence, not personal taste. Periodic independent Claude Fable review follows the management guide; it does not replace implementation validation.
+- **Review/browser:** respect reduced-motion preferences and communicate state with more than color or motion alone. Judge failures against evidence, not personal taste. Keep independent review focused on the requested behavior and concrete regressions.
 
 ## Tests and verification
 

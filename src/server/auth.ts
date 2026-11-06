@@ -179,6 +179,7 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
   }
 
   function invalidateAuthorization(userId: string): void {
+    database.prepare('DELETE FROM github_cache WHERE user_id = ?').run(userId);
     database.prepare(`UPDATE users SET reauthorize = 1, access_token = NULL, refresh_token = NULL,
       access_expires = NULL, refresh_expires = NULL WHERE id = ?`).run(userId);
   }

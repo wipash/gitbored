@@ -12,18 +12,12 @@
 .incoming-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .incoming-drag-handle { padding: 0.5rem 0.75rem; border: 1px dashed var(--color-border-control); border-radius: 0.375rem; user-select: none; }
 .incoming-drag-handle[draggable="true"] { cursor: grab; }
-.incoming-panel .source-browser { padding: 0; margin-block: 1.25rem; border: 0; background: none; }
-.incoming-panel .source-browser h2 { font-size: 1rem; }
-.incoming-panel .source-browser h3 { font-size: 1rem; }
-.incoming-panel .source-choices button { text-align: start; }
-.incoming-panel .source-choices, .incoming-panel .source-items { padding: 0; }
 .incoming-announcement { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
 @media (max-width: 400px) { .incoming-panel { padding: 0.75rem; } .incoming-shell { inset-block-start: calc(84px + 1.5rem); inset-inline-start: 0.5rem; max-inline-size: calc(100% - 1rem); } }
 .board-source-host:empty { display: none; }
 .board-source-host { margin-block-end: 1.5rem; min-inline-size: 0; }
 .board-source-panel { padding: clamp(1rem, 3vw, 2rem); border: 1px solid var(--color-border-subtle); border-radius: .75rem; background: var(--color-bg-surface); min-inline-size: 0; }
 .board-source-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
-.board-source-panel .source-browser { margin-block-start: 1rem; padding: 0; border: 0; }
 .incoming-shell { top: 12px; right: 12px; left: auto; max-width: calc(100% - 24px); font-size: 0.75rem; }
 .incoming-controls { display: flex; gap: 4px; justify-content: flex-end; }
 .incoming-shell button { min-height: 30px; padding: 4px 8px; border-radius: 3px; font-size: 0.75rem; }
@@ -50,7 +44,6 @@
 .incoming-empty { padding: 20px 12px; }
 .board-source-host { position: fixed; z-index: 600; top: 52px; right: 12px; width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 140px); overflow: auto; overscroll-behavior: contain; margin: 0; }
 .board-source-panel { padding: 0; border-radius: 4px; box-shadow: 0 6px 24px #00000020; }
-.board-source-panel .source-browser { padding: 12px; margin: 0; }
 .incoming-sources { margin: 0; padding: 12px; gap: 0; }
 .incoming-sources li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; font-size: 0.75rem; }
 @media (max-width: 700px) { .incoming-shell { top: 124px; left: 12px; right: auto; } .board-source-host { top: 164px; } .incoming-panel { max-height: calc(100dvh - 230px); } }

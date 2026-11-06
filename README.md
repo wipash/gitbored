@@ -65,10 +65,11 @@ Unknown API routes and missing assets return errors, not the application HTML.
 
 After sign-in, `/` restores the last board for the current account (or opens the
 board picker for a new account). The canvas fills the viewport. **Boards ▾**
-switches or creates boards; **···** opens rename/delete settings. Board navigation
+switches or creates boards; **Settings** combines rename/delete, view filters,
+connections and project fields. Board navigation
 runs in the client and drains pending saves before switching. A failed save keeps
-the current editor open with retry/copy controls. Account and advanced Sources
-remain directly accessible at `/account` and `/sources`.
+the current editor open with retry/copy controls. Sign-out and theme controls remain
+available in the workspace; retired page URLs return to Boards.
 
 Each board is private to its creator. Deletion requires the exact board name and
 does not change GitHub. The desktop workspace has light/dark themes, a faint dot
@@ -285,59 +286,24 @@ and Space, comma with changed modifiers/focus, Meta reconciliation, repeats,
 dismissal, blur and ordinary native editing/shortcuts. A successful install or
 type-check alone does not establish correct keyboard behavior.
 
-## Authorized source browsing
+## Authorized repository browsing
 
-After sign-in, open **Sources** and enter a full repository name such as
-`HolmesGroup/email-filer`, or paste its GitHub repository URL. **Find repository**
-checks access directly; paging through installations is unnecessary. Recently
-used repositories are account-specific shortcuts shared across boards and retained
-on the server. Opening a shortcut rechecks access.
+Open a board's **Repositories** panel to search installed repositories or paste an
+`owner/repository` name or GitHub URL. Select a repository, choose its state, kind
+and label filters, then **Connect repository**. Recently used repositories are
+account-specific shortcuts retained on the server. The **Incoming** panel handles
+discovery, refreshing, filtering and placement without leaving the canvas.
 
-**Choose a board** carries the repository name into the board picker, including a
-newly created board. The board's floating **Repositories** panel opens with that
-name filled in; select the result and connect it. Its automatic discovery and bulk
-placement flow is described above. The remaining controls in this section belong
-to the standalone advanced `/sources` route.
+Paste a canonical HTTPS `github.com/owner/repository/issues/123` or `/pull/123`
+URL to add an individual item to Incoming. Public and private URL reads use the
+signed-in user's token. URL access does not imply installation coverage, and
+neither browsing nor resolving changes GitHub. Organization owners may need to
+approve the app and select repositories. An empty installation list does not prove
+that public URLs are unavailable.
 
-**Browse installed repositories** is a secondary path with a filter for loaded
-repository names. **Add an individual issue or pull request URL** provides the
-single-item path. Sign-in, installation selection and organization approval remain
-separate; organization owners may need to approve the app and select repositories.
-An empty installation list does not prove that public URLs are unavailable.
-
-Repository browsing loads mixed issue/PR pages, including PR-only and empty pages.
-**Load next page** advances explicitly; a transient failure retains loaded results
-and **Retry page** retries the failed cursor. Provider access loss clears affected
-repository values, aborts their pending reads and offers **Retry repository**.
-Denials are remembered per repository for this source/session lifetime, regardless
-of which repository was selected when the failed request began. Back/navigation,
-**Reload installations**, unrelated denials and successful URL reads do not forget
-them. **Retry repository** clears only the selected repository's block and starts
-fresh page 1; it never restores old rows or recovers another repository.
-An unrelated unavailable URL does not revoke other repositories. Account/session
-context loss clears all source representations and offers explicit **Reload current
-account** through application composition; SourceBrowser does not own another auth
-flow. Title/number and kind filters apply only to the loaded subset, never to a
-complete repository search. Two-line row titles and bounded previews expand
-through native, keyboard-accessible **View full available details** disclosures.
-Full titles, labels, assignees, state reason and available timestamps are retained;
-no bodies or comments are requested for rows or details.
-
-Pagination and URL controls stay focusable while busy and ignore repeat activation.
-After the final page, the same pagination button displays **All pages loaded** as
-unavailable, preserving keyboard focus. Completion never steals focus if you move
-to another control while a request is pending.
-If access loss removes the content you currently focused, focus moves to its
-access notice after removal. Focus in the URL form, an unaffected repository or
-another live control is left alone. A fresh URL submission may show a newly
-authorized item without clearing that repository's separate browsing block.
-
-**Resolve URL** accepts canonical HTTPS `github.com/owner/repository/issues/123`
-and `/pull/123` URLs, optionally ending in `/`, without credentials, ports, encoded
-paths, queries or fragments. Public URLs outside the picker and authorized private
-URLs use the signed-in user's token, never an installation token. API paths are
-constructed from validated parts. URL access does not imply installation/webhook
-coverage. Neither browsing nor resolving creates a canvas placement.
+Repository or account access loss clears affected private representations. Session
+recovery stays in the workspace through **Check account** and **Renew sign-in**;
+failed board saves still require explicit retry.
 
 `src/shared/sources.ts` owns source responses; `ItemReference` / `ItemMetadata`
 remain the shared native contracts. IDs are decoded from original JSON numeric
@@ -375,7 +341,19 @@ bounded to 4 MB; over-limit or malformed pages fail without advancing progress.
 Titles are bounded to 65,536 characters, label/assignee lists to 1,000 values,
 label names to 1,024 and assignee values to 256 characters. Values are rejected,
 not silently truncated, at the provider boundary. The registry stores identity
-and locators, not private titles or a browser-persisted metadata cache.
+and locators. A separate account-scoped SQLite cache stores private card metadata,
+repository item pages and project context for 15 minutes. Browser reloads and
+server restarts reuse that cache; **Refresh** bypasses it. Entries are tied to the
+current credential, and detected access loss evicts them. Permission changes may
+therefore take up to 15 minutes to appear without Refresh. Proxy/browser HTTP
+responses remain `no-store`; private metadata never enters the canvas document.
+
+Select a card to set its saved colour with the drawing palette. **Settings → Card
+colours** can temporarily colour cards by status, priority, labels or type, and
+provides editable category defaults. Multiple labels split the card's top edge.
+Choosing **Off — original colours** restores each card's saved colour. Category
+colours and colour-by preferences stay per account and board in this browser;
+manual colours use the board's normal persistence and undo history.
 
 ## GitHub App setup
 
@@ -569,7 +547,7 @@ or **Authorize Bob** on the explicitly controlled provider. Alice has private
 `alice/project` and `alice/other`; page 2 of installations exposes `example-org`.
 Use `https://github.com/public/outside/issues/1` for public URL resolution and
 `https://github.com/alice/project/pull/2` for distinct PR identity/enrichment.
-The same environment with `pnpm exec playwright test tests/e2e/sources.spec.ts`
+The same environment with `pnpm exec playwright test tests/e2e/sources-http.spec.ts`
 starts/stops the preview automatically. Omit `CONTROLLED_SESSION_SECONDS` to
 retain the default ten-second expiry proof. The runner supports the same port
 variables for other isolated worktrees (test callbacks allow only 3001/3005/3100).
@@ -834,9 +812,7 @@ browser-safe first-party code; it does not audit third-party package internals.
 ## Working on the project
 
 - [Coding conventions](docs/CODING-CONVENTIONS.md)
-- [Project management guide](docs/PROJECT_MANAGEMENT.md)
 - [Current progress and handover](.scratch/issue-canvas/PROGRESS.md)
 
-Interface implementers must use `better-interface`. The management guide
-defines independent review, exact-commit evidence, and periodic Claude Fable
-reviews of the rendered interface.
+Interface implementers must use `better-interface`. Keep independent review
+focused on requested behavior and concrete regressions.

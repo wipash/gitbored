@@ -65,7 +65,7 @@ test('project mappings preserve zero and remain outside canvas history; related 
   await saved(page);
   const initial = await board(page, id);
   await page.getByRole('button', { name: 'Close Incoming' }).click();
-  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Delivery' });
   await expect(page.locator('.workspace-card').filter({ has: page.locator('.workspace-card-heading', { hasText: 'Issue #1' }) }).locator('.card-project-fields')).toContainText('In progress');
   await expect(page.locator('.workspace-card').filter({ has: page.locator('.workspace-card-heading', { hasText: 'Issue #1' }) }).locator('.card-project-fields').locator('dd').nth(1)).toHaveText('0');
@@ -82,7 +82,7 @@ test('project mappings preserve zero and remain outside canvas history; related 
   expect(mapped.document).toEqual(initial.document);
   expect(mapped.incoming.planning).toMatchObject({ projectId: 'P_alice', weight: 'F_weight' });
   expect(JSON.stringify(mapped.document)).not.toMatch(/Delivery|Sprint 12|In progress/);
-  await page.getByRole('button', { name: 'Close View', exact: true }).click();
+  await page.getByRole('button', { name: 'Close Settings', exact: true }).click();
   await page.getByRole('button', { name: /^Find/ }).click();
   await page.locator('.workspace-find-results button').first().click();
   await page.getByLabel('Card size').selectOption('expanded');
@@ -225,7 +225,7 @@ test('account recovery messages leave account actions and theme reachable', asyn
     if (!status || !check || !account || !theme) throw new Error('Missing account recovery controls');
     expect(status.y + status.height).toBeLessThanOrEqual(check.y);
     expect(account.x + account.width <= theme.x || account.y + account.height <= theme.y).toBe(true);
-    for (const control of [page.getByRole('link', { name: 'Account', exact: true }), page.getByLabel('Theme'), page.getByRole('button', { name: 'Check account', exact: true })]) {
+    for (const control of [page.getByRole('link', { name: 'Boards', exact: true }), page.getByLabel('Theme'), page.getByRole('button', { name: 'Check account', exact: true })]) {
       await control.scrollIntoViewIfNeeded();
       expect(await control.evaluate((element) => {
         const bounds = element.getBoundingClientRect();
@@ -251,4 +251,40 @@ test('Add selected stays reachable at the bottom of Incoming without scrolling t
   await expect(page.locator('.workspace-card')).toHaveCount(1);
   await expect(page.locator('.incoming-candidates > li')).toHaveCount(4);
   await expect(page.locator('#incoming-panel')).toBeVisible();
+});
+
+test('one Settings panel keeps board and view controls keyboard reachable in both themes', async ({ page }, info) => {
+  const id = await create(page, 'Combined settings');
+  const canvas = await page.locator('.tl-container').elementHandle();
+  if (!canvas) throw new Error('Missing canvas');
+  await expect(page.getByRole('button', { name: 'View', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Board settings', exact: true })).toHaveCount(0);
+  for (const theme of ['light', 'dark']) {
+    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    for (const width of [1440, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate((narrow) => { document.documentElement.style.fontSize = narrow ? '200%' : '100%'; }, width === 320);
+      const trigger = page.getByRole('button', { name: 'Settings', exact: true });
+      expect(await trigger.evaluate((element) => { const rect = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)); })).toBe(true);
+      await trigger.focus(); await page.keyboard.press('Enter');
+      const panel = page.getByRole('region', { name: 'Settings', exact: true });
+      for (const control of [panel.getByLabel('Board name', { exact: true }), panel.getByLabel('Hide closed'), panel.getByLabel('Connections', { exact: true })]) {
+        await control.focus();
+        await expect(control).toBeFocused();
+        await expect(control).toBeInViewport();
+        expect(await control.evaluate((element) => { const rect = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)); })).toBe(true);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+      await panel.getByLabel('Board name', { exact: true }).fill('Combined settings renamed');
+      await panel.getByRole('button', { name: 'Rename board', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Combined settings renamed', exact: true })).toBeVisible();
+      await panel.getByLabel('Board name', { exact: true }).focus();
+      await page.screenshot({ path: info.outputPath(`settings-${theme}-${width}.png`) });
+      await page.keyboard.press('Escape');
+      await expect(panel).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      expect(await canvas.evaluate((element) => element.isConnected)).toBe(true);
+    }
+  }
+  expect((await board(page, id)).title).toBe('Combined settings renamed');
 });

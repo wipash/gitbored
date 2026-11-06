@@ -39,7 +39,7 @@ test('two identities remain distinct and a renamed GitHub login retains the appl
     expect(renamed.user.id).toBe(alice.user.id);
     expect(renamed.user.login).toBe('alice-renamed');
     expect(renamed.csrfToken).not.toBe(alice.csrfToken);
-    await expect(page.getByText('@alice-renamed', { exact: true })).toBeVisible();
+    await expect(page.locator('.application-account')).toHaveText('Account: @alice-renamed');
   } finally { await other.close(); }
 });
 
@@ -126,8 +126,8 @@ test('expired access tokens refresh once across concurrent requests and revocati
   expect(revoked.status === 'signed-in' && revoked.authorization).toBe('reauthorize');
   await page.getByRole('link', { name: 'Reconnect GitHub' }).click();
   await page.getByRole('link', { name: 'Authorize Alice' }).click();
-  await page.goto('/account');
-  await expect(page.getByText('Signed in securely.', { exact: false })).toBeVisible();
+  await page.goto('/boards');
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
 });
 
 test('refresh rejection and refresh expiry are actionable without substituting authority', async ({ page }) => {
@@ -173,8 +173,8 @@ test('provider failure and consent denial offer recovery without leaking provide
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   await controlProvider(page.request, { fail: false });
   await page.getByRole('button', { name: 'Try again' }).click();
-  await page.goto('/account');
-  await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
+  await page.goto('/boards');
+  await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
   await controlProvider(page.request, { rateLimit: true });
   const limited = await page.request.get('/api/session');
   expect(limited.status()).toBe(502);

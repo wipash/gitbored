@@ -8,7 +8,7 @@ Reviewed against `origin/main` (one commit ahead). Read-only; no files changed, 
 
 **Boundary.** The `/account` and `/sources` routes were loaded only to confirm they are unchanged by the `inWorkspace` split. RTL, forced-colors, screen-reader announcement timing and touch pointers were not exercised. Nothing outside the named flow was reviewed.
 
-**Stack.** React 19 function components, plain CSS with semantic tokens in `src/client/styles.css` (`--color-*`, light and dark under `html[data-theme]`), Fastify server, Playwright e2e against a production build plus a synthetic GitHub provider. Project interface conventions found: `docs/CODING-CONVENTIONS.md` (Interface work section), `docs/PROJECT_MANAGEMENT.md`, `AGENTS.md`. No Storybook or design-system doc.
+**Stack.** React 19 function components, plain CSS with semantic tokens in `src/client/styles.css` (`--color-*`, light and dark under `html[data-theme]`), Fastify server, Playwright e2e against a production build plus a synthetic GitHub provider. Project interface conventions found: `docs/CODING-CONVENTIONS.md` (Interface work section), `AGENTS.md`. No Storybook or design-system doc.
 
 | Domain | Evidence inspected | Result |
 | --- | --- | --- |
