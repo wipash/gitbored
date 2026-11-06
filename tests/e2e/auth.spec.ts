@@ -126,6 +126,7 @@ test('expired access tokens refresh once across concurrent requests and revocati
   expect(revoked.status === 'signed-in' && revoked.authorization).toBe('reauthorize');
   await page.getByRole('link', { name: 'Reconnect GitHub' }).click();
   await page.getByRole('link', { name: 'Authorize Alice' }).click();
+  await page.goto('/account');
   await expect(page.getByText('Signed in securely.', { exact: false })).toBeVisible();
 });
 
@@ -172,6 +173,7 @@ test('provider failure and consent denial offer recovery without leaking provide
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   await controlProvider(page.request, { fail: false });
   await page.getByRole('button', { name: 'Try again' }).click();
+  await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
   await controlProvider(page.request, { rateLimit: true });
   const limited = await page.request.get('/api/session');

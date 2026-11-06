@@ -5,6 +5,8 @@ import { isThemePreference, useTheme } from './theme';
 import { SourceBrowser } from './SourceBrowser';
 import { Boards } from './boards/Boards';
 import './auth.css';
+import { navigate, usePathname } from './navigation';
+import './desktop.css';
 
 type View = { status: 'loading' } | { status: 'error' } | SessionResponse;
 type AccountCheck = { status: 'ready' | 'checking' | 'blocked'; message: string };
@@ -18,6 +20,7 @@ const signInErrors: Record<string, string> = {
 
 export function AuthLanding() {
   const theme = useTheme();
+  const pathname = usePathname();
   const [view, setView] = useState<View>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -118,8 +121,8 @@ export function AuthLanding() {
     }
   }
 
-  const inBoard = window.location.pathname.startsWith('/boards');
-  const inSources = window.location.pathname.startsWith('/sources');
+  const inBoard = view.status === 'signed-in' && !pathname.startsWith('/account') && !pathname.startsWith('/sources');
+  const inSources = pathname.startsWith('/sources');
   const inAccount = view.status !== 'signed-in' || (!inBoard && !inSources);
   useEffect(() => {
     if (!inAccount || view.status === 'loading') return;
@@ -128,9 +131,14 @@ export function AuthLanding() {
   }, [inAccount, view.status]);
 
   return (
-    <div className="runtime-shell auth-shell">
+    <div className={`runtime-shell auth-shell${view.status === 'signed-in' && inBoard ? ' desktop-app' : ''}`} onClick={(event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+      if (!anchor || anchor.target || anchor.origin !== window.location.origin || !/^\/(boards|account|sources)(\/|$)/.test(anchor.pathname)) return;
+      event.preventDefault(); void navigate(anchor.pathname + anchor.search);
+    }}>
       <a className="skip-link" href="#auth-content">Skip to content</a>
-      <header className="runtime-header">
+      <header className="runtime-header account-controls">
         <div className="identity"><span className="identity-mark" aria-hidden="true">G</span><span className="brand">GitBored</span></div>
         <div className="theme-control">
           <label htmlFor="theme">Theme</label>

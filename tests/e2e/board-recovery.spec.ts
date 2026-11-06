@@ -105,7 +105,7 @@ async function seedMixed(page: Page, board: Board) {
     { id: 'binding:arrow-card', typeName: 'binding', type: 'arrow', fromId: 'shape:arrow', toId: 'shape:card', meta: {}, props: { terminal: 'start', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: true, snap: 'none' } },
   ];
   const document = validateNativeDocument({ ...empty, snapshot: { ...empty.snapshot, store: { ...empty.snapshot.store, ...Object.fromEntries(records.map((record) => [record.id, record])) } } });
-  const incoming: Board['incoming'] = { version: 1, sources: [{ repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, loadedPage: 1, nextPage: result.nextPage, status: 'partial' }],
+  const incoming: Board['incoming'] = { version: 1, sources: [{ repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, loadedPage: 1, nextPage: null, status: 'complete' }],
     queue: result.items.slice(1).map(({ reference }) => ({ referenceId: reference.id, kind: reference.kind })), seen: result.items.map(({ reference }) => reference.id) };
   expect((await page.request.put(`/api/boards/${board.id}`, { headers: await headers(page), data: { expectedRevision: board.revision, document, incoming } })).status()).toBe(200);
   return read(page, board.id);
@@ -123,7 +123,7 @@ test('two independent contexts preserve the latest conflicting mixed pair as a p
     await draw(page, 140); await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'conflict');
     await nudgeLatest(page);
     await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
-    await page.getByRole('button', { name: 'Add to board', exact: true }).click();
+    await page.getByRole('button', { name: /^Add to board:/ }).click();
     await expect.poll(async () => (await stored(page))[0]?.value.incoming.queue).toEqual([]);
     const drafts = await stored(page); expect(drafts).toHaveLength(1);
     const draft = drafts[0]; if (!draft) throw new Error('No local draft');
@@ -271,6 +271,7 @@ test('same-revision recovery waits for explicit retry and account/logout isolati
   await page.reload(); await expect(page.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Sign in with GitHub', exact: true }).click();
   await page.getByRole('link', { name: 'Authorize Bob', exact: true }).click();
+  await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
   await page.goto(`/boards/${board.id}`);
   await expect(page.getByRole('button', { name: 'Retry opening' })).toBeVisible();
@@ -278,6 +279,7 @@ test('same-revision recovery waits for explicit retry and account/logout isolati
   await expect(page.locator('.tl-container')).toHaveCount(0);
   expect(await stored(page)).toEqual([original]);
   await page.goto('/api/auth/github'); await page.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
+  await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
   await page.unroute(`**/api/boards/${board.id}`);
   await page.goto(`/boards/${board.id}`);
@@ -522,8 +524,8 @@ for (const paused of ['failed', 'conflict']) {
 
 test('an Incoming-only operation commits even when the native document is unchanged', async ({ page }) => {
   await signIn(page); const board = await seedMixed(page, await create(page)); await page.goto(`/boards/${board.id}`);
-  await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
-  await page.getByRole('button', { name: 'Remove source', exact: true }).click();
+  await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect.poll(async () => (await read(page, board.id)).revision).toBe(board.revision + 1);
   const saved = await read(page, board.id);
   expect(saved.document).toEqual(board.document);

@@ -126,13 +126,13 @@ function decode(raw: string): unknown {
     return context.source;
   });
 }
-export async function providerRead(origin: string, token: string, path: string, page?: number, canonicalPaginationPath?: string): Promise<{ value: unknown; nextPage: number | null }> {
+export async function providerRead(origin: string, token: string, path: string, page?: number, canonicalPaginationPath?: string, graphql?: { query: string; variables: { id: string } }): Promise<{ value: unknown; nextPage: number | null }> {
   const url = new URL(path, origin);
   if (page !== undefined) { url.searchParams.set('per_page', '30'); url.searchParams.set('page', String(page)); }
   let response: Response;
   try {
-    response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-      redirect: 'error', signal: AbortSignal.timeout(15000) });
+    response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
+      ...(graphql ? { method: 'POST', body: JSON.stringify(graphql) } : {}), redirect: 'error', signal: AbortSignal.timeout(15000) });
   } catch { throw new AuthenticationError(502, 'provider_unavailable', 'GitHub could not be reached. Retry this page shortly.'); }
   if (!response.ok) {
     const rate = response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after');

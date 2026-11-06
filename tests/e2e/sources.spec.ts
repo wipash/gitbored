@@ -192,6 +192,7 @@ test('loading, empty and malformed pages recover; detected access loss clears lo
   await expect(page.locator('.source-item')).toHaveCount(0);
   await page.getByRole('link', { name: 'Reconnect GitHub', exact: true }).click();
   await page.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
+  await page.goto('/account');
   await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await expect(page.getByRole('button', { name: /alice · Personal/ })).toBeVisible();
 });

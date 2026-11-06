@@ -26,6 +26,7 @@ async function read(page: Page, id: string) {
 async function authorize(page: Page, identity: 'Alice' | 'Bob') {
   await page.goto('/api/auth/github');
   await page.getByRole('link', { name: `Authorize ${identity}`, exact: true }).click();
+  await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
 }
 async function draw(page: Page) {
@@ -59,7 +60,7 @@ test('Account, Boards and Sources have one primary view, keyboard route focus an
   await expect(page.locator('.boards-list, .source-browser')).toHaveCount(0);
   for (const theme of ['light', 'dark']) {
     await page.getByLabel('Theme', { exact: true }).selectOption(theme);
-    for (const route of ['Sources', 'Boards', 'Account']) {
+    for (const route of ['Sources', 'Account']) {
       await page.getByRole('link', { name: route, exact: true }).focus();
       await page.keyboard.press('Enter');
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
@@ -103,9 +104,8 @@ test('same-user session rotation retains native lifetime, acknowledged revision,
   // Observe beyond two document-save debounce windows: new input must not replay a failed write.
   await page.waitForTimeout(650);
   expect(writes).toBe(1); expect((await read(page, board.id)).revision).toBe(1);
-  const leaving = page.waitForEvent('dialog');
-  const click = page.getByRole('link', { name: 'Sources', exact: true }).click({ noWaitAfter: true });
-  const warning = await leaving; expect(warning.type()).toBe('beforeunload'); await warning.dismiss(); await click;
+  await page.getByRole('link', { name: 'Account', exact: true }).click();
+  await expect(page.getByText('Save this board or save a copy before switching boards.')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/boards/${board.id}$`));
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
@@ -140,6 +140,7 @@ test('signed-out and transient reconciliation retain a dirty canvas until same-u
   await page.screenshot({ path: testInfo.outputPath('signed-out-draft-dark-narrow.png'), fullPage: true });
   await other.getByRole('link', { name: 'Sign in with GitHub', exact: true }).click();
   await other.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
+  await other.goto('/account');
   await expect(other.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
   await page.route('**/api/session', async (route) => { await route.abort('connectionfailed'); });
   await page.getByRole('button', { name: 'Check account', exact: true }).focus(); await page.keyboard.press('Enter');
@@ -172,7 +173,7 @@ test('a confirmed different account unmounts the old dirty canvas before exposin
   await expect(page.locator('.tl-container')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Alice confidential board', exact: true })).toHaveCount(0);
   expect((await page.request.get(`/api/boards/${alice.id}`, { headers: await headers(page) })).status()).toBe(404);
-  await page.getByRole('link', { name: 'Boards', exact: true }).click();
+  await page.getByRole('link', { name: 'Return to Boards', exact: true }).click();
   await expect(page.getByRole('link', { name: bob.title, exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: alice.title, exact: true })).toHaveCount(0);
   await other.close();

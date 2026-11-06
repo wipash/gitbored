@@ -19,7 +19,7 @@ declare module '@tldraw/tlschema' {
 }
 export type ItemCardShape = TLShape<typeof ITEM_CARD_TYPE>;
 const dimension = T.number.check((value) => {
-  if (!Number.isFinite(value) || value < 240 || value > 960) throw new Error('Invalid card dimension');
+  if (!Number.isFinite(value) || value < 180 || value > 1920) throw new Error('Invalid card dimension');
 });
 export const itemCardProps = {
   version: T.literal(1), referenceId: itemReferenceIdValidator,

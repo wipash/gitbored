@@ -4,7 +4,7 @@ import { validateBoard } from '../../src/shared/boards.js';
 import type { Board } from '../../src/shared/boards.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
 import type { SourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn, openSourceTools } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
 
 test.use({ viewport: { width: 1440, height: 1000 } });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires controlled GitHub authorization.');
@@ -48,7 +48,7 @@ async function seed(page: Page, title: string) {
   const board = validateBoard(await created.json());
   const incoming = {
     version: 1,
-    sources: [{ repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, loadedPage: 1, nextPage: sourcePage.nextPage, status: sourcePage.nextPage === null ? 'complete' : 'partial' }],
+    sources: [{ repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, loadedPage: 1, nextPage: title === 'Incoming global discovery boundary' ? sourcePage.nextPage : null, status: title === 'Incoming global discovery boundary' ? 'partial' : 'complete' }],
     queue: items.map((item) => ({ referenceId: item.reference.id, kind: item.reference.kind })),
     seen: items.map((item) => item.reference.id),
   };
@@ -71,7 +71,7 @@ async function privateValuesAbsent(page: Page, items: SourceItem[]) {
     await expect(page.locator('.native-workspace')).not.toContainText(item.metadata.title);
     for (const label of item.metadata.labels) await expect(page.locator('.native-workspace')).not.toContainText(label);
   }
-  await expect(page.locator('.source-item')).toHaveCount(0);
+  await expect(page.locator('.repository-preview')).toHaveCount(0);
 }
 function metadataNotPersisted(board: Board, items: SourceItem[]) {
   const durable = JSON.stringify({ document: board.document, incoming: board.incoming });
@@ -144,10 +144,10 @@ test('an initially reauthorization-required GitHub session withholds Incoming re
   const original = await page.locator('.tl-container').elementHandle();
   if (!original) throw new Error('Missing native editor');
   const added = page.waitForResponse((response) => response.request().method() === 'PUT' && new URL(response.url()).pathname === `/api/boards/${board.id}`);
-  await incoming.locator(`[data-reference-id="${first.reference.id}"]`).getByRole('button', { name: 'Add to board', exact: true }).click();
+  await incoming.locator(`[data-reference-id="${first.reference.id}"]`).getByRole('button', { name: /^Add to board:/ }).click();
   expect((await added).status()).toBe(200);
-  await expect(incoming).toHaveCount(0);
-  await expect(page.locator('.tl-container')).toBeFocused();
+  await expect(incoming).toBeVisible();
+  await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
   const placed = await read(page, board.id);
   expect(placed.revision).toBe(board.revision + 1);
@@ -155,7 +155,9 @@ test('an initially reauthorization-required GitHub session withholds Incoming re
   expect(shapes(placed)).toHaveLength(1);
   const placement = shapes(placed)[0];
   if (!placement) throw new Error('Missing durable placement');
-  expect(placement).toMatchObject({ x: 0, y: 0, props: { referenceId: first.reference.id, kind: first.reference.kind } });
+  expect(placement).toMatchObject({ props: { referenceId: first.reference.id, kind: first.reference.kind } });
+  await page.getByRole('button', { name: /^Find/ }).click();
+  await page.locator('.workspace-find-results button').first().click();
   const moved = page.waitForResponse((response) => response.request().method() === 'PUT' && new URL(response.url()).pathname === `/api/boards/${board.id}`);
   await page.locator('.tl-container').focus();
   await page.keyboard.press('ArrowRight');
@@ -181,6 +183,7 @@ test('an initially reauthorization-required GitHub session withholds Incoming re
   const reconnect = await authorization;
   try {
     await reconnect.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
+    await reconnect.goto('/account');
     await expect(reconnect.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
     await page.bringToFront();
     const check = incoming.getByRole('button', { name: 'Check GitHub access', exact: true });
@@ -190,7 +193,7 @@ test('an initially reauthorization-required GitHub session withholds Incoming re
     await expect(incoming.getByRole('link', { name: 'Reconnect GitHub', exact: true })).toHaveCount(0);
     for (const item of items) await expect(page.locator('.native-workspace')).toContainText(item.metadata.title);
     await frames(page);
-    expect(referenceRequests).toHaveLength(items.length);
+    expect(referenceRequests.filter((url) => !url.endsWith('/context'))).toHaveLength(items.length);
     expect(sessionRequests).toHaveLength(checkedSessions + 1);
     expect(await original.evaluate((element) => element.isConnected)).toBe(true);
     expect(await read(page, board.id)).toEqual(edited);
@@ -230,9 +233,9 @@ test('a retained SourceBrowser session loss invalidates accepted hydration repli
     const original = await page.locator('.tl-container').elementHandle();
     if (!original) throw new Error('Missing retained native editor');
     await page.getByRole('button', { name: 'Incoming 2', exact: true }).click();
-    await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
-    const browser = page.getByRole('region', { name: 'Connect a repository', exact: true });
-    await expect(browser.getByRole('button', { name: /alice · Personal/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    const browser = page.getByRole('region', { name: 'Board repository connection', exact: true });
+    await expect(browser.getByLabel('Search repositories')).toBeVisible();
     await privateValuesAbsent(page, items);
     await other.goto('/account');
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -241,9 +244,8 @@ test('a retained SourceBrowser session loss invalidates accepted hydration repli
     // The retained browser, not an autosave or credential shortcut, reports this loss.
     // Freeze any resulting root reconciliation until the late-response assertion ends.
     await page.route('**/api/session', holdReconciliation);
-    await browser.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
     const rejected = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/sources/resolve');
-    await browser.getByRole('button', { name: 'Resolve URL', exact: true }).click();
+    await browser.getByLabel('Search repositories', { exact: true }).fill('https://github.com/alice/project/issues/1');
     const lost = await rejected;
     expect(lost.status()).toBe(401);
     await lost.finished();
@@ -261,8 +263,9 @@ test('a retained SourceBrowser session loss invalidates accepted hydration repli
     await expect(page.locator('.tl-container')).toBeVisible();
     expect(await original.evaluate((element) => element.isConnected)).toBe(true);
     await expect(page.getByRole('button', { name: 'Incoming 2', exact: true })).toBeVisible();
-    await expect(page.locator('.incoming-panel')).toContainText('Incoming reads are paused');
-    await expect(page.locator('.incoming-sources, .incoming-candidates, .source-browser')).toHaveCount(0);
+    await page.getByRole('button', { name: /^Incoming/ }).click();
+    await expect(page.locator('.incoming-panel')).toContainText('Check your account');
+    await expect(page.locator('.repository-connector')).toHaveCount(0);
     await expect.poll(() => checks.length).toBeGreaterThan(0);
     holdSession = false;
     await Promise.all(checks.splice(0).map((route) => route.continue()));
@@ -312,20 +315,20 @@ test('global source-context loss rejects a previously authorized discovery page 
     for (const item of items) await expect(page.locator('.incoming-candidates')).toContainText(item.metadata.title);
     const original = await page.locator('.tl-container').elementHandle();
     if (!original) throw new Error('Missing native editor');
-    await page.getByRole('button', { name: 'Discover next page', exact: true }).click();
-    await expect.poll(() => accepted.length).toBe(1);
+    // Discovery starts automatically on opening the board.
+    await expect.poll(() => accepted.length).toBeGreaterThanOrEqual(1);
     await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
     const loading = await read(page, board.id);
     expect(loading.incoming.sources[0]).toMatchObject({ status: 'loading', loadedPage: 1, nextPage: 2 });
-    await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
-    await expect(page.getByRole('button', { name: /alice · Personal/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    await expect(page.getByLabel('Search repositories')).toBeVisible();
     await other.goto('/account');
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
     await page.route('**/api/session', holdReconciliation);
-    await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
     const rejected = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/sources/resolve');
-    await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
+    await page.getByLabel('Search repositories').fill('');
+  await page.getByLabel('Search repositories').fill('https://github.com/alice/project/issues/1');
     expect((await rejected).status()).toBe(401);
     await expect.poll(() => checks.length).toBeGreaterThan(0);
     const late = accepted.splice(0);

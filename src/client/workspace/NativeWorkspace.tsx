@@ -2,22 +2,28 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import {
   ArrowToolbarItem, DefaultToolbar, DrawToolbarItem, EraserToolbarItem, FrameToolbarItem,
   RectangleToolbarItem, HandToolbarItem, HighlightToolbarItem, NoteToolbarItem, SelectToolbarItem,
-  TextToolbarItem, Tldraw, computed, createTLStore, defaultHandleExternalTldrawContent,
+  TextToolbarItem, Tldraw, atom, computed, createTLStore, defaultHandleExternalTldrawContent,
   DefaultStylePanel, StylePanelColorPicker, StylePanelFillPicker, StylePanelDashPicker,
   StylePanelSizePicker, StylePanelFontPicker, StylePanelTextAlignPicker, StylePanelLabelAlignPicker,
   StylePanelGeoShapePicker, StylePanelArrowKindPicker, StylePanelArrowheadPicker, StylePanelSplinePicker,
   useStylePanelContext, type TLUiStylePanelProps,
-  useEditor, useValue, type Editor, type TLComponents, type TLUiOverrides, type TLUserStore,
+  useEditor, useValue, type Editor, type TLShape, type TLComponents, type TLUiOverrides, type TLUiEventHandler, type TLUserStore,
 } from 'tldraw';
-import { githubItemUrl, type WorkspaceMetadata } from '../../shared/items';
+import type { WorkspaceMetadata } from '../../shared/items';
 import { ITEM_CARD_TYPE, nativeSchema, validateNativeDocument, validateNativeShape, type NativeDocument } from '../../shared/nativeDocument';
 import { validateNativeClipboard } from '../../shared/nativeClipboard';
 import { ItemCardShapeUtil } from './ItemCardShapeUtil';
-import { MetadataContext, anonymousMetadata, describeItem } from './metadata';
+import { MetadataContext } from './metadata';
 import 'tldraw/tldraw.css';
 import './workspace.css';
+import type { PlanningSelection } from '../../shared/planning';
+import { PlanningContext } from './planning';
+import { WorkspacePanels } from './WorkspacePanels';
 
 export interface NativeWorkspaceProps {
+  planning?: PlanningSelection | undefined;
+  preferenceKey?: string;
+  onPlanningChange?: (selection: PlanningSelection) => void;
   /** Initial only. Remount with an account/board key when switching authority or documents. */
   initialDocument?: NativeDocument;
   /** Replace the immutable map to refresh metadata; it never enters the editor store/history. */
@@ -58,9 +64,17 @@ function WorkspaceOpacity() {
   </label>;
 }
 function WorkspaceStylePanel(props: TLUiStylePanelProps) {
+  const editor = useEditor();
+  const visible = useValue('Drawing styles visible', () => editor.getCurrentToolId() !== 'select' || editor.getSelectedShapes().some((shape) => shape.type !== ITEM_CARD_TYPE), [editor]);
+  if (!visible) return null;
   return <DefaultStylePanel {...props}><StylePanelColorPicker /><WorkspaceOpacity /><StylePanelFillPicker /><StylePanelDashPicker /><StylePanelSizePicker /><StylePanelFontPicker /><StylePanelTextAlignPicker /><StylePanelLabelAlignPicker /><StylePanelGeoShapePicker /><StylePanelArrowKindPicker /><StylePanelArrowheadPicker /><StylePanelSplinePicker /></DefaultStylePanel>;
 }
-const components: TLComponents = { Toolbar: WorkspaceToolbar, StylePanel: WorkspaceStylePanel, MainMenu: null, SharePanel: null };
+function WorkspaceBackground() {
+  const editor = useEditor();
+  const camera = useValue('Canvas dot grid', () => editor.getCamera(), [editor]);
+  return <div className="tl-background" style={{ backgroundImage: 'radial-gradient(var(--color-border-subtle) .8px, transparent .8px)', backgroundSize: `${20 * camera.z}px ${20 * camera.z}px`, backgroundPosition: `${camera.x * camera.z}px ${camera.y * camera.z}px` }} />;
+}
+const components: TLComponents = { Background: WorkspaceBackground, Toolbar: WorkspaceToolbar, StylePanel: WorkspaceStylePanel, MainMenu: null, SharePanel: null };
 const shapeUtils = [ItemCardShapeUtil];
 const overrides: TLUiOverrides = {
   tools(_editor, tools) {
@@ -78,88 +92,11 @@ const workspaceOptions = {
   text: { tipTapConfig: { editorProps: { attributes: { 'aria-label': 'Canvas annotation text', 'aria-multiline': 'true' } } } },
 };
 
-function WorkspaceCards({ metadata }: { metadata: WorkspaceMetadata }) {
-  const editor = useEditor();
-  const listRef = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const ownerDocument = editor.getContainer().ownerDocument;
-    // Track only UI-origin presses; the SDK remains responsible for native releases.
-    // Retain ownership across blur until a real up or a fresh down replaces it.
-    const uiOwnedCodes = new Set<string>();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!event.repeat) uiOwnedCodes.delete(event.code);
-      if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Alt' || event.key === 'Meta' || event.key === 'AltGraph') return;
-      const ui = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-native-ui]') : null;
-      const inCards = ui !== null && editor.getContainer().contains(ui);
-      if (!event.repeat) {
-        if (!inCards) return;
-        uiOwnedCodes.add(event.code);
-      } else if (!uiOwnedCodes.has(event.code) && !inCards) return;
-      event.stopPropagation();
-      if (event.key === 'Escape' && inCards && uiOwnedCodes.has(event.code)) {
-        if (ui?.dataset['nativeUi'] === 'incoming') {
-          ui.querySelector<HTMLButtonElement>('[data-native-dismiss]')?.click();
-          return;
-        }
-        const list = listRef.current;
-        if (list) {
-          list.open = false;
-          list.querySelector('summary')?.focus();
-        }
-      }
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (uiOwnedCodes.delete(event.code)) event.stopPropagation();
-    };
-    const onBlur = () => uiOwnedCodes.clear();
-    ownerDocument.defaultView?.addEventListener('blur', onBlur);
-    ownerDocument.addEventListener('keydown', onKeyDown, true);
-    ownerDocument.addEventListener('keyup', onKeyUp, true);
-    return () => {
-      ownerDocument.removeEventListener('keydown', onKeyDown, true);
-      ownerDocument.removeEventListener('keyup', onKeyUp, true);
-      ownerDocument.defaultView?.removeEventListener('blur', onBlur);
-      uiOwnedCodes.clear();
-    };
-  }, [editor]);
-  useEffect(() => {
-    const dismiss = (event: PointerEvent) => {
-      if (event.target instanceof Node && listRef.current && !listRef.current.contains(event.target)) listRef.current.open = false;
-    };
-    document.addEventListener('pointerdown', dismiss, true);
-    return () => document.removeEventListener('pointerdown', dismiss, true);
-  }, []);
-  const cards = useValue('Workspace cards', () => editor.getCurrentPageShapes().filter((shape) => shape.type === ITEM_CARD_TYPE), [editor]);
-  return <details className="workspace-cards" ref={listRef} data-native-ui="cards">
-    <summary>Cards <span>{cards.length}</span></summary>
-    <section aria-label="Cards on this page">
-      <p>Select a card here, then use the arrow keys to move it on the canvas. Native menus provide grouping, stacking and duplication.</p>
-      {cards.length === 0 && <p>No cards placed. Add references from your board’s Incoming tray. You can draw or type on the canvas now.</p>}
-      <ul>{cards.map((shape) => {
-        const state = metadata.get(shape.props.referenceId) ?? anonymousMetadata;
-        const item = state.status === 'ready' && state.item.kind === shape.props.kind ? state.item : null;
-        const url = item ? githubItemUrl(shape.props.kind, item.locator) : null;
-        return <li key={shape.id}>
-          <p>{describeItem(shape.props.kind, state)}</p>
-          {item && <><p>Labels: {item.labels.join(', ') || 'None'}</p><p>Assignees: {item.assignees.join(', ') || 'None'}</p></>}
-          <button type="button" onClick={(event) => {
-            editor.complete();
-            editor.setCurrentTool('select');
-            editor.select(shape.id);
-            editor.zoomToSelection({ animation: { duration: 0 } });
-            event.currentTarget.closest('details')?.removeAttribute('open');
-            // SDK focus() returns early when logical focus is already true, even inside Cards.
-            editor.getContainer().focus({ preventScroll: true });
-            editor.focus();
-          }}>Select card</button>
-          {url && <a href={url} target="_blank" rel="noreferrer">Open in GitHub</a>}
-        </li>;
-      })}</ul>
-    </section>
-  </details>;
-}
-
 export function NativeWorkspace(props: NativeWorkspaceProps) {
+  const [hiddenReferences] = useState(() => atom<ReadonlySet<string>>('Filtered board references', new Set()));
+  const getShapeVisibility = useCallback((shape: TLShape) => shape.type === ITEM_CARD_TYPE && hiddenReferences.get().has(shape.props.referenceId) ? 'hidden' as const : 'inherit' as const, [hiddenReferences]);
+  const [hideClosed, setHideClosed] = useState(false);
+  useEffect(() => { hiddenReferences.set(new Set([...props.metadata].filter(([, value]) => hideClosed && value.status === 'ready' && (value.item.state === 'closed' || value.item.state === 'merged' || value.item.sourceState === 'closed')).map(([id]) => id))); }, [props.metadata, hideClosed, hiddenReferences]);
   const [pasteError, setPasteError] = useState('');
   const latest = useRef(props);
   useLayoutEffect(() => { latest.current = props; });
@@ -168,6 +105,14 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
     ...(props.initialDocument ? { snapshot: validateNativeDocument(props.initialDocument).snapshot } : {}),
   }));
   useEffect(() => { editorRef.current?.user.updateUserPreferences({ colorScheme: props.theme }); }, [props.theme]);
+  // SDK keyboard registrations depend on the event handler identity. Keep it stable
+  // while floating panels and fetched metadata change around a held native key.
+  const handleUiEvent = useCallback<TLUiEventHandler>((name) => {
+        if (name !== 'undo' && name !== 'redo') return;
+        // The supported UI event precedes the synchronous native command. Observe its
+        // completed document in a microtask, before deferred store-listener delivery.
+        queueMicrotask(() => { const editor = editorRef.current; if (editor) latest.current.onNativeHistory?.(editor, name); });
+  }, []);
   const mount = useCallback((editor: Editor) => {
     editorRef.current = editor;
     editor.user.updateUserPreferences({ colorScheme: latest.current.theme });
@@ -203,17 +148,11 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
     return () => { stop(); unmount?.(); editorRef.current = null; };
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
-    <MetadataContext value={props.metadata}>
-      <Tldraw store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={(name) => {
-        if (name !== 'undo' && name !== 'redo') return;
-        // The supported UI event precedes the synchronous native command. Observe its
-        // completed document in a microtask, before deferred store-listener delivery.
-        queueMicrotask(() => { const editor = editorRef.current; if (editor) latest.current.onNativeHistory?.(editor, name); });
-      }}>
-        <WorkspaceCards metadata={props.metadata} />
+    <MetadataContext value={props.metadata}><PlanningContext value={props.planning}>
+      <Tldraw getShapeVisibility={getShapeVisibility} store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
+        <WorkspacePanels hideClosed={hideClosed} onHideClosedChange={setHideClosed} metadata={props.metadata} planning={props.planning} onPlanningChange={props.onPlanningChange} preferenceKey={props.preferenceKey}>{props.children}</WorkspacePanels>
         <div className="workspace-status" role="status">{pasteError}</div>
-        {props.children}
       </Tldraw>
-    </MetadataContext>
+    </PlanningContext></MetadataContext>
   </section>;
 }

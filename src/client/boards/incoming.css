@@ -24,3 +24,43 @@
 .board-source-panel { padding: clamp(1rem, 3vw, 2rem); border: 1px solid var(--color-border-subtle); border-radius: .75rem; background: var(--color-bg-surface); min-inline-size: 0; }
 .board-source-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
 .board-source-panel .source-browser { margin-block-start: 1rem; padding: 0; border: 0; }
+.incoming-shell { top: 12px; right: 12px; left: auto; max-width: calc(100% - 24px); font-size: 0.75rem; }
+.incoming-controls { display: flex; gap: 4px; justify-content: flex-end; }
+.incoming-shell button { min-height: 30px; padding: 4px 8px; border-radius: 3px; font-size: 0.75rem; }
+.incoming-panel { width: 376px; max-width: calc(100vw - 24px); height: min(680px, calc(100dvh - 140px)); max-height: calc(100dvh - 140px); margin-top: 8px; padding: 0; display: flex; flex-direction: column; border-radius: 4px; border-color: var(--color-border-subtle); overflow: hidden; }
+.incoming-heading { padding: 10px 12px; flex-wrap: nowrap; border-bottom: 1px solid var(--color-border-subtle); }
+.incoming-heading h2 { font-size: 0.8125rem; }
+.incoming-heading h2 span { color: var(--color-text-secondary); margin-left: 6px; font-weight: 400; }
+.incoming-panel p { margin: 0; }
+.incoming-filters { display: grid; gap: 6px; padding: 10px 12px; }
+.incoming-filters > input { width: 100%; }
+.incoming-filters > div { display: flex; gap: 6px; }
+.incoming-filters select { flex: 1; width: 50%; }
+.incoming-selection { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-block: 1px solid var(--color-border-subtle); }
+.incoming-selection label { display: flex; align-items: center; gap: 6px; }
+.incoming-shell input[type='checkbox'] { width: 16px; min-height: 16px; height: 16px; accent-color: var(--color-accent-fill); margin: 0; }
+.incoming-candidates { margin: 0; display: block; overflow: auto; overscroll-behavior: contain; flex: 1; min-height: 0; }
+.incoming-candidates li { display: grid; grid-template-columns: 16px minmax(0, 1fr) 30px; align-items: center; gap: 8px; padding: 10px 12px; border-top: 0; border-bottom: 1px solid var(--color-border-subtle); }
+.incoming-card-preview { min-width: 0; cursor: grab; }
+.incoming-card-preview p { font-weight: 550; line-height: 1.5; margin: 3px 0; }
+.incoming-item-meta { display: flex; align-items: center; gap: 4px; font-size: 0.6875rem; color: var(--color-text-secondary); }
+.incoming-item-meta span { margin-left: auto; }
+.incoming-card-preview small { font-size: 0.6875rem; color: var(--color-text-secondary); }
+.incoming-footer { display: flex; justify-content: space-between; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--color-border-subtle); margin-top: auto; }
+.incoming-empty { padding: 20px 12px; }
+.board-source-host { position: fixed; z-index: 600; top: 52px; right: 12px; width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 140px); overflow: auto; overscroll-behavior: contain; margin: 0; }
+.board-source-panel { padding: 0; border-radius: 4px; box-shadow: 0 6px 24px #00000020; }
+.board-source-panel .source-browser { padding: 12px; margin: 0; }
+.incoming-sources { margin: 0; padding: 12px; gap: 0; }
+.incoming-sources li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; font-size: 0.75rem; }
+@media (max-width: 700px) { .incoming-shell { top: 124px; left: 12px; right: auto; } .board-source-host { top: 164px; } .incoming-panel { max-height: calc(100dvh - 230px); } }
+.incoming-card-preview .incoming-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; border: 0; padding: 0; min-height: 0; text-align: left; font-size: 0.75rem; font-weight: 550; line-height: 1.5; margin: 3px 0; background: transparent; }
+.incoming-card-preview .incoming-title[aria-expanded='true'] { display: block; }
+.incoming-candidates:empty { flex: none; }
+
+.incoming-controls { width: max-content; margin-inline-start: auto; }
+.incoming-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.incoming-heading, .incoming-footer { flex: none; }
+.incoming-footer { flex-wrap: wrap; }
+.incoming-candidates { overflow: visible; }
+@media (max-width: 700px) { .incoming-panel { max-height: calc(100dvh - 300px); } }

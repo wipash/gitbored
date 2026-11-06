@@ -5,7 +5,7 @@ import type { Board, BoardSave } from '../../src/shared/boards.js';
 import { validateIncoming } from '../../src/shared/incoming.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { readSourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn, openSourceTools } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -34,14 +34,13 @@ async function queuedBoard(page: Page, title: string) {
   await expect(page.locator('.tl-container')).toBeVisible();
   await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
   await expect(page.getByRole('heading', { name: /^Incoming \d+$/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
-  await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
+  await page.getByRole('button', { name: 'Repositories', exact: true }).click();
   const resolved = page.waitForResponse((result) => new URL(result.url()).pathname === '/api/sources/resolve' && result.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
+  await page.getByLabel('Search repositories').fill('https://github.com/alice/project/issues/1');
   const result = await resolved;
   expect(result.status()).toBe(200);
   const item = readSourceItem(await result.json());
-  await page.getByRole('button', { name: 'Send to Incoming', exact: true }).click();
+  await page.getByRole('button', { name: 'Add to Incoming', exact: true }).click();
   const candidate = { referenceId: item.reference.id, kind: item.reference.kind };
   await expect.poll(async () => (await validatedBoard(page, board.id)).incoming.queue).toEqual([candidate]);
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
@@ -52,11 +51,14 @@ async function queuedBoard(page: Page, title: string) {
   return { board: queued, candidate };
 }
 async function add(page: Page) {
-  if (!(await page.getByRole('button', { name: 'Add to board', exact: true }).isVisible())) {
+  if (!(await page.getByRole('button', { name: /^Add to board:/ }).isVisible())) {
     await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
   }
-  await page.getByRole('button', { name: 'Add to board', exact: true }).click();
-  await expect(page.locator('#incoming-panel')).toHaveCount(0);
+  await page.getByRole('button', { name: /^Add to board:/ }).click();
+  await expect(page.locator('#incoming-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
+  await page.getByRole('button', { name: /^Find/ }).click();
+  await page.locator('.workspace-find .workspace-find-results button').click();
   await expect(page.locator('.tl-container')).toBeFocused();
 }
 async function durable(page: Page, id: string, referenceId: string, count: number, queued: boolean, after: number) {
@@ -81,7 +83,7 @@ test('first-placement history owns Incoming consumption, unlike native duplicati
   await add(page);
   const placed = await check(1, false);
   const original = shapes(placed)[0];
-  expect(original).toMatchObject({ x: 0, y: 0, props: { referenceId: candidate.referenceId, kind: candidate.kind } });
+  expect(original).toMatchObject({ props: { referenceId: candidate.referenceId, kind: candidate.kind } });
   await page.keyboard.press('Control+z'); await check(0, true);
   await page.keyboard.press('Control+Shift+z'); await check(1, false);
   await page.keyboard.press('Control+d'); await check(2, false);
@@ -111,19 +113,16 @@ for (const reopened of [false, true]) {
     if (!original) throw new Error('Missing original placement');
     if (reopened) {
       await page.reload();
-      await page.locator('.workspace-cards summary').click();
-      await page.getByRole('button', { name: 'Select card', exact: true }).click();
+      await page.getByRole('button', { name: /^Find/ }).click();
+      await page.locator('.workspace-find .workspace-find-results button').click();
       await expect(page.locator('.tl-container')).toBeFocused();
     }
     await page.keyboard.press('Delete');
     const deleted = await durable(page, board.id, candidate.referenceId, 0, false, placed.revision);
     await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
-    if (!(await page.getByLabel('GitHub item URL', { exact: true }).isVisible())) {
-      await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
-    }
-    await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
-    await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
-    await page.getByRole('button', { name: 'Send to Incoming', exact: true }).click();
+    await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    await page.getByLabel('Search repositories').fill('https://github.com/alice/project/issues/1');
+    await page.getByRole('button', { name: 'Add to Incoming', exact: true }).click();
     const requeued = await durable(page, board.id, candidate.referenceId, 0, true, deleted.revision);
     expect(requeued.incoming.seen).toEqual([candidate.referenceId]);
     await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
@@ -180,7 +179,9 @@ test('transport failure retains the atomic local placement, explicit retry saves
   expect(saved.incoming.queue).toEqual([]);
   const placement = shapes(saved)[0];
   expect(shapes(saved)).toHaveLength(1);
-  expect(placement).toMatchObject({ x: 1, y: 1, props: { referenceId: candidate.referenceId, kind: candidate.kind } });
+  const initialPlacement = Object.values(failed.document.snapshot.store).find((record) => record.typeName === 'shape');
+  if (initialPlacement?.typeName !== 'shape') throw new Error('Missing failed placement geometry');
+  expect(placement).toMatchObject({ x: initialPlacement.x + 1, y: initialPlacement.y + 1, props: { referenceId: candidate.referenceId, kind: candidate.kind } });
   // A real second writer wins the CAS; this tab still owns its unsaved movement.
   const external = await page.request.put(`/api/boards/${board.id}`, {
     headers: await headers(page),
@@ -199,7 +200,7 @@ test('transport failure retains the atomic local placement, explicit retry saves
   expect(local.incoming).toEqual(saved.incoming);
   const localBoard = validateBoard({ ...saved, document: local.document, incoming: local.incoming });
   expect(shapes(localBoard)).toHaveLength(1);
-  expect(shapes(localBoard)[0]).toMatchObject({ id: placement?.id, x: 2, y: 1, props: { referenceId: candidate.referenceId } });
+  expect(shapes(localBoard)[0]).toMatchObject({ id: placement?.id, x: initialPlacement.x + 2, y: initialPlacement.y + 1, props: { referenceId: candidate.referenceId } });
   await expect(page.locator('.tl-shape')).toHaveCount(1);
   await expect(page.getByRole('button', { name: /^Incoming \d+$/ })).toHaveText('Incoming 0');
   await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toHaveCount(0);

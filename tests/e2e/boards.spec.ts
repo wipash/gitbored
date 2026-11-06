@@ -117,8 +117,8 @@ test('authenticated board controls and mixed native geometry survive reload and 
   const styles = await page.getByRole('button', { name: 'Styles', exact: true }).boundingBox();
   expect(styles).not.toBeNull();
   expect(styles && styles.x >= 0 && styles.x + styles.width <= 320).toBe(true);
-  await page.getByText('Board settings', { exact: true }).click();
-  await page.getByLabel('Board name (1–160 characters)', { exact: true }).fill('Renamed board');
+  await page.getByRole('button', { name: 'Board settings', exact: true }).click();
+  await page.getByLabel('Board name', { exact: true }).fill('Renamed board');
   await page.getByRole('button', { name: 'Rename board', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Renamed board', exact: true })).toBeVisible();

@@ -38,6 +38,7 @@ const sourceItemValidator = T.object({
     locator: T.object({ owner: T.string, repository: T.string, number: T.number }),
     title: T.string, state: T.literalEnum('open', 'closed', 'draft', 'merged', 'unknown'),
     labels: T.arrayOf(T.string), assignees: T.arrayOf(T.string), freshness: T.literalEnum('current', 'stale'),
+    sourceState: T.literalEnum('open', 'closed').optional(),
     stateReason: T.string.nullable(), createdAt: T.string, updatedAt: T.string, closedAt: T.string.nullable(),
   }),
 });

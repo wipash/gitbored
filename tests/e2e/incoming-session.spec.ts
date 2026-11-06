@@ -6,7 +6,7 @@ import { validateIncoming } from '../../src/shared/incoming.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
 import type { SourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn, openSourceTools } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -52,7 +52,7 @@ async function seed(page: Page, title: string) {
   expect(board.incoming).toEqual({ version: 1, sources: [], queue: [], seen: [] });
   const incoming = {
     version: 1,
-    sources: [{ repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, loadedPage: 1, nextPage: sourcePage.nextPage, status: sourcePage.nextPage === null ? 'complete' : 'partial' }],
+    sources: [{ repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, loadedPage: 1, nextPage: title === 'Incoming global discovery boundary' ? sourcePage.nextPage : null, status: title === 'Incoming global discovery boundary' ? 'partial' : 'complete' }],
     queue: items.map((item) => ({ referenceId: item.reference.id, kind: item.reference.kind })),
     seen: items.map((item) => item.reference.id),
   };
@@ -70,13 +70,20 @@ async function open(page: Page, board: Board, items: SourceItem[]) {
 }
 async function add(page: Page, referenceId: string) {
   if (!(await page.locator('.incoming-panel').isVisible())) await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
-  await page.locator(`.incoming-candidates [data-reference-id="${referenceId}"]`).getByRole('button', { name: 'Add to board', exact: true }).click();
-  await expect(page.locator('.incoming-panel')).toHaveCount(0);
+  const title = await page.locator(`.incoming-candidates [data-reference-id="${referenceId}"] .incoming-title`).innerText();
+  await page.locator(`.incoming-candidates [data-reference-id="${referenceId}"]`).getByRole('button', { name: /^Add to board:/ }).click();
+  await expect(page.locator('.incoming-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
+  await page.getByRole('button', { name: /^Find/ }).click();
+  const results = page.locator('.workspace-find .workspace-find-results button');
+  if (await results.count() === 1) await results.click();
+  else await results.filter({ hasText: title }).click();
   await expect(page.locator('.tl-container')).toBeFocused();
 }
 async function authorize(page: Page, identity: 'Alice' | 'Bob') {
   await page.goto('/api/auth/github');
   await page.getByRole('link', { name: `Authorize ${identity}`, exact: true }).click();
+  await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
 }
 async function privateValuesAbsent(page: Page, items: SourceItem[]) {
@@ -84,7 +91,7 @@ async function privateValuesAbsent(page: Page, items: SourceItem[]) {
     await expect(page.locator('.native-workspace')).not.toContainText(item.metadata.title);
     for (const label of item.metadata.labels) await expect(page.locator('.native-workspace')).not.toContainText(label);
   }
-  await expect(page.locator('.source-item')).toHaveCount(0);
+  await expect(page.locator('.repository-preview')).toHaveCount(0);
 }
 async function metadataNotPersisted(page: Page, board: Board, items: SourceItem[]) {
   const durable = JSON.stringify({ document: board.document, incoming: board.incoming });
@@ -105,7 +112,7 @@ test('current-session queue and placed hydration stay ephemeral, and resource de
   const lookups: { id: string; csrf: string | undefined }[] = [];
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
-    if (path.startsWith('/api/references/')) lookups.push({ id: path.slice('/api/references/'.length), csrf: request.headers()['x-csrf-token'] });
+    if (/^\/api\/references\/[^/]+$/.test(path)) lookups.push({ id: path.slice('/api/references/'.length), csrf: request.headers()['x-csrf-token'] });
   });
   await open(page, board, items);
   const csrf = (await headers(page))['X-CSRF-Token'];
@@ -128,24 +135,25 @@ test('current-session queue and placed hydration stay ephemeral, and resource de
   expect(lookups.every((lookup) => lookup.csrf === csrf)).toBe(true);
   const original = await page.locator('.tl-container').elementHandle();
   if (!original) throw new Error('Missing native editor');
-  await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
-  const url = page.getByLabel('GitHub item URL', { exact: true });
+  await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+  const url = page.getByLabel('Search repositories', { exact: true });
   await url.fill('https://github.com/alice/project/issues/1');
-  await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
-  await expect(page.locator('.source-item')).toContainText(first.metadata.title);
+  await expect(page.locator('.repository-preview')).toContainText(first.metadata.title);
   await controlProvider(page.request, { sourceDenied: true, sourceDenialStatus: 404 });
   const denied = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/sources/resolve');
-  await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
+  await page.getByLabel('Search repositories').fill('');
+  await page.getByLabel('Search repositories').fill('https://github.com/alice/project/issues/1');
   expect((await denied).status()).toBe(404);
   await privateValuesAbsent(page, items);
-  await expect(page.locator('.incoming-candidates')).toContainText('unavailable');
-  await expect(page.locator('.workspace-card-title')).toContainText('unavailable');
+  await page.getByRole('button', { name: 'Incoming 1', exact: true }).click();
+  await expect(page.locator('.incoming-candidates')).toContainText(/unavailable/i);
+  await expect(page.locator('.workspace-card-title')).toContainText(/unavailable/i);
   await expect(page.getByRole('button', { name: 'Incoming 1', exact: true })).toBeVisible();
   expect(await original.evaluate((element) => element.isConnected)).toBe(true);
   expect(await read(page, board.id)).toEqual(placed);
   await metadataNotPersisted(page, placed, items);
   await controlProvider(page.request, { sourceDenied: false });
-  await page.getByRole('button', { name: 'Retry reference details', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry unavailable details', exact: true }).click();
   await expect(page.locator('.workspace-card-title')).toHaveText(first.metadata.title);
   await expect(page.locator('.incoming-candidates')).toContainText(second.metadata.title);
   expect(await read(page, board.id)).toEqual(placed);
@@ -196,8 +204,8 @@ test('same-user rotation and temporary sign-out retain dirty Incoming placements
     expect([401, 403]).toContain((await rejected).status());
     await expect.poll(() => checks.length).toBeGreaterThan(0);
     await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
-    await expect(page.locator('.incoming-panel')).toContainText('Incoming reads are paused');
-    await expect(page.locator('.incoming-sources, .incoming-candidates, .source-browser')).toHaveCount(0);
+    await expect(page.locator('.incoming-panel')).toContainText('Check your account');
+    await expect(page.locator('.repository-connector')).toHaveCount(0);
     await privateValuesAbsent(page, items);
     expect(await original.evaluate((element) => element.isConnected)).toBe(true);
     await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
@@ -228,7 +236,9 @@ test('same-user rotation and temporary sign-out retain dirty Incoming placements
     expect(saved.incoming.queue).toEqual(board.incoming.queue.slice(index + 1));
     expect(saved.incoming.seen).toEqual(board.incoming.seen);
     expect(shapes(saved)).toHaveLength(index + 1);
-    expect(shapes(saved).find((shape) => 'referenceId' in shape.props && shape.props.referenceId === item.reference.id)).toMatchObject({ x: 1 });
+    const placed = Object.values(writes[previousWrites]?.document.snapshot.store ?? {}).find((record) => record.typeName === 'shape' && record.type === 'item-card' && record.props.referenceId === item.reference.id);
+    if (placed?.typeName !== 'shape') throw new Error('Missing attempted placement');
+    expect(shapes(saved).find((shape) => 'referenceId' in shape.props && shape.props.referenceId === item.reference.id)).toMatchObject({ x: placed.x + 1, y: placed.y });
     expect(saved.document).toEqual(writes.at(-1)?.document);
     expect(saved.incoming).toEqual(writes.at(-1)?.incoming);
     expect(writes).toHaveLength(previousWrites + 2);

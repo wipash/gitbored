@@ -21,6 +21,8 @@ export async function signIn(page: Page, identity: 'Alice' | 'Bob' = 'Alice'): P
   await page.goto('/');
   await page.getByRole('link', { name: 'Sign in with GitHub' }).click();
   await page.getByRole('link', { name: `Authorize ${identity}` }).click();
+  await expect(page.locator('.application-nav')).toBeVisible();
+  await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
 }
 

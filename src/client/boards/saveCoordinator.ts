@@ -104,5 +104,19 @@ export class SaveCoordinator {
           : { status: 'unsaved', retryable: true, message: 'Unsaved — saving failed. Your current work is still here. Check your connection, then Retry save, or save a private copy. If your session ended, sign in in another tab first.' });
     } finally { this.flight = false; }
   }
+  /** Drain the latest native checkpoint before a client-side board switch. */
+  async flush(): Promise<boolean> {
+    this.checkpoint();
+    if (!this.dirty) return true;
+    if (this.state.retryable || this.state.status === 'conflict') return false;
+    return await new Promise<boolean>((resolve) => {
+      const stop = this.subscribe(() => {
+        if (!this.dirty || this.state.retryable || this.state.status === 'conflict') {
+          stop(); resolve(!this.dirty);
+        }
+      });
+      void this.save();
+    });
+  }
   dispose(): void { this.checkpoint(); this.stopped = true; this.captureLatest = undefined; clearTimeout(this.timer); this.listeners.clear(); }
 }

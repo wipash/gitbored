@@ -7,6 +7,8 @@ import { AuthenticationError, type AuthenticatedUser } from './auth.js';
 import type { AuthConfig } from './config.js';
 import { boolean, id, installation, invalidProvider, list, number, object, opaque, parseItemUrl, providerRead, repository, text } from './sourceProvider.js';
 
+import { itemContextQuery, normalizeContext } from './itemContext.js';
+
 interface SourceContext { request: FastifyRequest; user: AuthenticatedUser; token: string; origin: string }
 interface NormalizedItem {
   item: Omit<SourceItem, 'reference'>;
@@ -68,7 +70,7 @@ function normalize(value: unknown, repo: RepositorySource, detail?: unknown): No
   }
   const reason = row['state_reason'];
   const metadata: ItemMetadata = { kind, locator: { owner: repo.owner, repository: repo.name, number: itemNumber },
-    title: text(row['title']), state, labels: list(row['labels'], 1000).map((label) => text(object(label)['name'], 1024)),
+    title: text(row['title']), state, sourceState: commonState, labels: list(row['labels'], 1000).map((label) => text(object(label)['name'], 1024)),
     assignees: list(row['assignees'], 1000).map((assignee) => text(object(assignee)['login'], 256)), freshness: 'current',
     stateReason: reason === undefined || reason === null ? null : text(reason, 256),
     createdAt: timestamp(row['created_at']), updatedAt: timestamp(row['updated_at']),
@@ -209,6 +211,21 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const ctx = await context(request);
     if (typeof request.body !== 'object' || request.body === null || !('url' in request.body)) return badRequest('Enter a supported GitHub item URL.');
     return await resolve(ctx, request.body.url);
+  });
+  app.get<{ Params: { id: string } }>('/api/references/:id/context', async (request) => {
+    const ctx = await context(request);
+    const row = database.prepare('SELECT node_id AS nodeId FROM item_references WHERE id=? AND user_id=?').get(request.params.id, ctx.user.id);
+    if (!row) throw new AuthenticationError(404, 'unavailable', 'Reference unavailable. Refresh the board.');
+    try {
+      const result = await providerRead(ctx.origin, ctx.token, '/graphql', undefined, undefined,
+        { query: itemContextQuery, variables: { id: opaque(row['nodeId']) } });
+      app.authentication.assertUserContext(request, ctx.user);
+      return normalizeContext(result.value);
+    } catch (error) {
+      if (error instanceof AuthenticationError && error.code === 'reauthorize') app.authentication.invalidateAuthorizationIfCurrent(ctx.user.id, ctx.token);
+      app.authentication.assertUserContext(request, ctx.user);
+      throw error;
+    }
   });
   app.get<{ Params: { id: string } }>('/api/references/:id', async (request) => {
     const ctx = await context(request);

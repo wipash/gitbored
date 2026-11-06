@@ -63,20 +63,16 @@ Unknown API routes and missing assets return errors, not the application HTML.
 
 ## Private durable boards
 
-Authenticated navigation has one primary view at a time: **Account** (`/` or
-`/account`), **Boards** (`/boards`, `/boards/:id`) and **Sources** (`/sources`).
-Each route has a named, keyboard-focused primary heading; browsing does not
-automatically create a board or placement.
+After sign-in, `/` restores the last board for the current account (or opens the
+board picker for a new account). The canvas fills the viewport. **Boards ▾**
+switches or creates boards; **···** opens rename/delete settings. Board navigation
+runs in the client and drains pending saves before switching. A failed save keeps
+the current editor open with retry/copy controls. Account and advanced Sources
+remain directly accessible at `/account` and `/sources`.
 
-Sign in, open **Boards**, enter a name and select **Create board**. Each board is
-private to its signed-in creator. **Board settings** renames the board or opens a
-permanent-deletion confirmation requiring the exact board name. Deleting a board
-does not change GitHub. The list and workspace support both themes and keyboard
-controls; the spatial canvas scrolls independently of the surrounding document.
-The narrow board canvas reaches the viewport edges so native mobile controls stay
-available at enlarged text sizes. The named deletion dialog keeps its confirmation
-field focused on open; asynchronous board actions preserve keyboard focus, with
-an acknowledged retry returning focus to the save status.
+Each board is private to its creator. Deletion requires the exact board name and
+does not change GitHub. The desktop workspace has light/dark themes, a faint dot
+grid, compact floating controls, and independently scrollable non-modal panels.
 
 `src/shared/boards.ts` owns the board/save contract. `GET /api/boards` lists only
 the current owner's summaries; `POST` creates an empty native board with `{title}`.
@@ -173,36 +169,27 @@ never copy just the live main SQLite file or replace an active data directory.
 
 ## Incoming discovery and placement
 
-Open a board and select **Incoming → Connect a repository**. Find a repository
-by full name or URL, or open a recent choice, then **Connect to this board**.
-The first issue/PR page loads into Incoming automatically. For one item, open
-**Add an individual issue or pull request URL**, resolve its URL and select
-**Send to Incoming**. These actions never create canvas shapes. Sources are
-selected per owner and board using the immutable repository node ID; mutable
-names are request locators. After a rename or transfer, find its current location
-and connect it again: trusted locators update without resetting discovery progress.
+Open **Repositories**, search by name or paste a repository URL, choose the
+repository, set State/Kind/Label import filters and select **Connect repository**.
+Accessible repository pages preload while the board is open. Search filters the
+catalogue as you type; a full owner/name also performs a direct lookup. An issue
+or PR URL produces an **Add to Incoming** action. Connecting never places shapes.
+Sources use immutable repository IDs with mutable request locators; reconnecting
+at a new name updates the locator without resetting discovery progress.
 
-**Discover next page** reads one additional bounded mixed issue/PR page;
-**Discover first page** starts a newly reset source pass.
-PR-only pages still advance the cursor. The tray distinguishes
-loading, partial, complete and failed progress, including an interrupted pass
-after reopen. **Retry discovery** repeats only the retained failed page.
-**Reconcile source again** explicitly starts another bounded pass after completion;
-already seen references are deduplicated, not requeued. Removing a selected source
-stops future discovery without deleting its existing candidates or canvas objects.
-Seen references remain known after ordinary canvas deletion. Explicit source
-browsing or a URL can send an intentionally deleted reference to Incoming again.
+Incoming loads successive issue/PR pages automatically. A failed page retains
+loaded work and offers Retry; **Add all matching** stays disabled until discovery
+and metadata loading complete. **Refresh** starts a fresh pass while retaining
+seen IDs. **Disconnect** stops discovery without deleting queued or placed work.
+Deleting a canvas card does not rediscover it; paste its URL to explicitly requeue.
 
-Drag a candidate's **Drag to canvas** handle onto the native canvas. A successful
-drop uses the editor's screen-to-page and native receiving-parent transforms, so
-pan, zoom and rotated frames do not change the intended drop point. Cancelled,
-outside and invalid drops do not change the document or queue. **Add to board** is
-the keyboard/single-pointer alternative: its labelled **Receiving row** starts at
-page x=0 below existing work, never moves existing objects, reveals/selects the new
-card, closes Incoming and returns native canvas focus. Native drops may leave
-Incoming open. Sending an already placed reference through ordinary browsing
-focuses its existing placement; native duplicate/copy actions create explicit
-additional placements.
+Filter Incoming by text, state, kind or label, then add one, selected, or all
+matching cards. The panel stays open and placement never changes the camera.
+New cards occupy rows below existing work in the current viewport's horizontal
+region. Dragging a preview onto the canvas places it at the drop point, including
+inside rotated frames. Invalid or cancelled drops change nothing. Batch placement
+is one native undo operation. Already placed URLs do not create duplicates;
+explicit native duplication remains available.
 
 First placement consumes its queue entry in the same revisioned save as the native
 document. On failure the local placement and consumed local queue remain a single
@@ -232,10 +219,27 @@ previous workspace before private reads. GitHub reauthorization pauses source an
 reference reads without blocking native editing or saving under a valid application
 session. Use **Reconnect GitHub** in a new tab, then **Check GitHub access** in the
 retained tray to resume authorized reads; no failed write replays automatically.
-Incoming is a non-modal region: Escape/Close returns to its trigger, outside
-pointer dismissal does not consume the canvas action, and its controls remain
-scrollable at narrow widths. Board view filters and contextual card details are
-separate later features, not fabricated controls in this tray.
+Incoming is a non-modal region: Escape/Close returns to its trigger and canvas
+interaction leaves it open. **Find** selects a card without changing zoom; selected
+cards expose full details. Cards resize with native handles or the **Card size**
+control in details. **View → Hide closed** hides closed/merged cards without changing
+the saved document.
+
+**View → Project** selects one project and maps Status, Weight, Priority and Sprint
+to its actual field IDs. Values—including zero—stay separate from native history;
+missing values are not inferred. **Connections** offers Off, Selected (default),
+and All. Curves indicate generic relationships from GitHub cross-references and
+linked issues; they make no claim about whether a PR closes an issue. Off-board
+references are links in details and never create cards automatically.
+
+`GET /api/references/:id/context` reads optional project fields and relationships
+through GitHub GraphQL under the current user's authorization. Responses are
+bounded (20 memberships, 100 fields/values/events) and report partial/unavailable
+data explicitly. The app needs access to the chosen project as well as the
+repository; review GitHub's [App permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)
+and [Projects API](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects)
+when enabling private Projects. Controlled-provider tests exercise this integration;
+live Project access must be verified against the deployment's App permissions.
 
 ## Native workspace keyboard boundary
 
@@ -249,7 +253,7 @@ that bookkeeping or dispatch substitute keyboard events.
 Repeats cannot transfer a press already accepted by another native handler when
 modifiers change its reported character.
 
-Cards uses one editor-lifetime document capture gate for UI-origin physical key
+Floating panels use one editor-lifetime document capture gate for UI-origin physical key
 sequences. Browser defaults remain native. UI-owned repeats/releases stay out of
 the canvas after focus changes or dismissal; native-owned releases reach the
 patched SDK. UI ownership remains quarantined across window blur until a real
@@ -274,7 +278,7 @@ do not broaden the SDK's original keydown eligibility.
 must update or remove the exact-version patch registrations and regenerate
 coherent source, ESM/CJS runtime artifacts and source maps. Remove these patches
 only after the upstream release provides equivalent accepted-key ownership and
-the real-browser matrix passes: both press directions across Cards, held arrows
+the real-browser matrix passes: both press directions across Find and details, held arrows
 and Space, comma with changed modifiers/focus, Meta reconciliation, repeats,
 dismissal, blur and ordinary native editing/shortcuts. A successful install or
 type-check alone does not establish correct keyboard behavior.
@@ -288,11 +292,10 @@ used repositories are account-specific shortcuts shared across boards and retain
 on the server. Opening a shortcut rechecks access.
 
 **Choose a board** carries the repository name into the board picker, including a
-newly created board. On a board, open **Incoming → Connect a repository**. The
-connection form opens in a normal page section above the canvas, with the editor
-kept mounted. Find the repository or open a recent choice, then **Connect to this
-board**. Connection starts the first issue/PR page in Incoming; adding cards to
-the canvas remains deliberate. Additional pages remain explicit and bounded.
+newly created board. The board's floating **Repositories** panel opens with that
+name filled in; select the result and connect it. Its automatic discovery and bulk
+placement flow is described above. The remaining controls in this section belong
+to the standalone advanced `/sources` route.
 
 **Browse installed repositories** is a secondary path with a filter for loaded
 repository names. **Add an individual issue or pull request URL** provides the

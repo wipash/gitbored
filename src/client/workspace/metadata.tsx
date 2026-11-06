@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { ItemMetadataState, WorkspaceMetadata } from '../../shared/items';
+import type { ItemMetadata, ItemMetadataState, WorkspaceMetadata } from '../../shared/items';
 
 export const MetadataContext = createContext<WorkspaceMetadata>(new Map());
 export const anonymousMetadata: ItemMetadataState = { status: 'unresolved' };
@@ -13,4 +13,9 @@ export function describeItem(kind: 'issue' | 'pull-request', state: ItemMetadata
   }
   const { item } = state;
   return `${label} ${item.locator.owner}/${item.locator.repository} #${item.locator.number}: ${item.title}. ${item.state}${item.freshness === 'stale' ? ' · Stale metadata' : ''}`;
+}
+
+export function itemStateLabel(item: ItemMetadata): string {
+  const state = item.state === 'unknown' ? item.sourceState : item.state;
+  return state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Status unavailable';
 }

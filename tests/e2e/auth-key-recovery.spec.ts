@@ -29,6 +29,7 @@ for (const credential of ['access', 'refresh']) {
       await page.reload();
       await page.getByRole('link', { name: 'Reconnect GitHub' }).click();
       await page.getByRole('link', { name: 'Authorize Alice' }).click();
+      await page.goto('/account');
       await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
       const reconnected = await currentSession(page.request);
       expect(reconnected.status === 'signed-in' && reconnected.authorization).toBe('ready');

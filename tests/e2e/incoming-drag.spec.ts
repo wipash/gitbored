@@ -74,7 +74,7 @@ test('only a live Incoming drag onto the native canvas consumes the queue, prese
   await page.clock.pauseAt(now + 1000);
   await page.getByRole('button', { name: 'Incoming 1', exact: true }).click();
   await expect(page.locator('.incoming-panel')).toBeVisible();
-  const handle = page.locator('.incoming-drag-handle');
+  const handle = page.locator('.incoming-card-preview');
   await expect(handle).toHaveAttribute('draggable', 'true');
   await handle.evaluate((element) => {
     element.addEventListener('dragstart', () => { element.setAttribute('data-observed-start', 'yes'); });

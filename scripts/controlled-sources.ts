@@ -85,6 +85,22 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (settings().sourceMode === 'untrusted-link') url.host = 'example.invalid';
     reply.header('Link', `<${url.href}>; rel="next"`);
   }
+  app.post('/graphql', (request, reply) => {
+    const user = authorize(request, reply); if (!user) return reply;
+    const body = request.body;
+    if (typeof body !== 'object' || body === null || !('variables' in body) || typeof body.variables !== 'object' || body.variables === null || !('id' in body.variables) || typeof body.variables.id !== 'string') return reply.code(400).send({ errors: [{ message: 'Missing node' }] });
+    const match = /^(I|PR)_([^_]+)_([^_]+)_([0-9]+)$/.exec(body.variables.id);
+    const owner = match?.[2]; const name = match?.[3]; const number = Number(match?.[4]);
+    if (!match || !owner || !name || (owner !== (user === 101 ? 'alice' : 'bob') && owner !== 'example-org')) return { data: { node: null } };
+    const connection = (nodes: unknown[]) => ({ nodes, pageInfo: { hasNextPage: false } });
+    const field = (id: string, name: string) => ({ id, name, dataType: id === 'F_weight' ? 'NUMBER' : id === 'F_sprint' ? 'ITERATION' : 'SINGLE_SELECT' });
+    return { data: { node: {
+      projectItems: connection([{ project: { id: `P_${owner}`, title: 'Delivery', fields: connection([field('F_status', 'Status'), field('F_weight', 'Estimate'), field('F_priority', 'Priority'), field('F_sprint', 'Iteration')]) },
+        fieldValues: connection([{ field: { id: 'F_status' }, name: number === 1 ? 'In progress' : 'Ready' }, { field: { id: 'F_weight' }, number: number === 1 ? 0 : 3 }, { field: { id: 'F_priority' }, name: 'High' }, { field: { id: 'F_sprint' }, title: 'Sprint 12' }]) }]),
+      timelineItems: connection(number === 1 ? [{ source: { url: `https://github.com/${owner}/${name}/pull/2` } }] : []),
+      ...(match[1] === 'PR' ? { closingIssuesReferences: connection([{ url: `https://github.com/${owner}/${name}/issues/1` }]) } : {}),
+    } } };
+  });
   app.get('/__source-stats', () => ({ requests }));
   app.post('/__source-stats/reset', () => { requests.length = 0; return { ok: true }; });
   app.get('/user/installations', (request, reply) => {
@@ -140,7 +156,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (!authorize(request, reply)) return reply;
     const { owner, name, number } = request.params;
     if (!await hold('issue-detail')) await hold('issue-detail-next');
-    return raw(reply, issue(owner, name, Number(number), Number(number) % 2 === 0));
+    return raw(reply, issue(owner, name, Number(number), (Number(number) % 2 === 0 || Number(number) === 3)));
   });
   app.get<{ Params: { owner: string; name: string; number: string } }>('/repos/:owner/:name/pulls/:number', (request, reply) => {
     if (!authorize(request, reply)) return reply;

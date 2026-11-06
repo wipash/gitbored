@@ -1,3 +1,4 @@
+import type { ItemContext } from './planning.js';
 import { T } from '@tldraw/validate';
 
 export type ItemKind = 'issue' | 'pull-request';
@@ -41,6 +42,7 @@ export function githubItemUrl(kind: ItemKind, locator: GitHubLocator): string | 
 }
 
 export interface ItemMetadata {
+  context?: ItemContext;
   kind: ItemKind;
   locator: GitHubLocator;
   title: string;
@@ -48,6 +50,7 @@ export interface ItemMetadata {
   labels: readonly string[];
   assignees: readonly string[];
   freshness: 'current' | 'stale';
+  sourceState?: 'open' | 'closed' | undefined;
   stateReason?: string | null;
   createdAt?: string;
   updatedAt?: string;

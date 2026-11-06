@@ -1,8 +1,11 @@
+import { planningSelectionValidator, type PlanningSelection } from './planning.js';
 import { T } from '@tldraw/validate';
 import type { ItemKind } from './items.js';
 
+export interface SourceFilter { state: 'all' | 'open'; kind: 'all' | ItemKind; label: string }
 export interface IncomingCandidate { referenceId: string; kind: ItemKind }
 export interface IncomingSource {
+  filter?: SourceFilter | undefined;
   repositoryNodeId: string;
   owner: string;
   repository: string;
@@ -11,6 +14,7 @@ export interface IncomingSource {
   status: 'idle' | 'loading' | 'partial' | 'complete' | 'error';
 }
 export interface IncomingState {
+  planning?: PlanningSelection | undefined;
   version: 1;
   sources: IncomingSource[];
   queue: IncomingCandidate[];
@@ -22,7 +26,9 @@ const page = T.number.check((value) => { if (!Number.isSafeInteger(value) || val
 const loadedPage = T.number.check((value) => { if (!Number.isSafeInteger(value) || value < 0 || value > 10000) throw new Error('Invalid Incoming progress'); });
 const validator = T.object({
   version: T.literal(1),
+  planning: planningSelectionValidator.optional(),
   sources: T.arrayOf(T.object({ repositoryNodeId: identifier, owner: identifier, repository: identifier,
+    filter: T.object({ state: T.literalEnum('all', 'open'), kind: T.literalEnum('all', 'issue', 'pull-request'), label: T.string.check((value) => { if (value.length > 1024) throw new Error('Label filter is too long'); }) }).optional(),
     nextPage: page.nullable(), loadedPage, status: T.literalEnum('idle', 'loading', 'partial', 'complete', 'error') })),
   queue: T.arrayOf(T.object({ referenceId: identifier, kind: T.literalEnum('issue', 'pull-request') })),
   seen: T.arrayOf(identifier),

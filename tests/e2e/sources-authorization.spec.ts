@@ -24,6 +24,7 @@ async function browseProject(page: Page): Promise<void> {
 async function authorizeBob(page: Page): Promise<void> {
   await page.goto('/api/auth/github');
   await page.getByRole('link', { name: 'Authorize Bob', exact: true }).click();
+  await page.goto('/account');
   await expect(page.getByText('@bob', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await expect(page.getByRole('button', { name: /bob · Personal/ })).toBeVisible();
@@ -68,6 +69,7 @@ test('same-context account changes reject stale repository continuation and URL 
   expect(await (await context.request.get(`${providerOrigin}/__source-stats`)).json()).toEqual({ requests: [] });
   expect((await context.request.get('/api/sources/installations', { headers: aliceHeaders })).status()).toBe(409);
   await page.getByRole('link', { name: 'Reload current account', exact: true }).click();
+  await page.goto('/account');
   await expect(page.getByText('@bob', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await expect(page.getByRole('button', { name: /bob · Personal/ })).toBeVisible();

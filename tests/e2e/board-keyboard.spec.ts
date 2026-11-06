@@ -27,8 +27,8 @@ test('Cards traversal, native-held arrow release and modifier-changed Comma pres
   const card = { id: 'shape:keyboard-card', typeName: 'shape', type: 'item-card', parentId: 'page:page', index: 'a1', x: 100, y: 100, rotation: 0, opacity: 1, isLocked: false, meta: {}, props: { version: 1, referenceId: 'ref-keyboard-fixture', kind: 'issue', w: 320, h: 240 } };
   expect((await page.request.put(`/api/boards/${board.id}`, { headers, data: { expectedRevision: 0, incoming: board.incoming, document: { ...document, snapshot: { ...document.snapshot, store: { ...document.snapshot.store, [card.id]: card } } } } })).ok()).toBe(true);
   await page.goto(`/boards/${board.id}`);
-  const summary = page.locator('.workspace-cards summary');
-  const selectCard = page.getByRole('button', { name: 'Select card', exact: true });
+  const summary = page.getByRole('button', { name: /^Find/ });
+  const selectCard = page.locator('.workspace-find-results button');
   const canvas = page.locator('.tl-container');
   await summary.click();
   await selectCard.click();
@@ -41,7 +41,7 @@ test('Cards traversal, native-held arrow release and modifier-changed Comma pres
   await page.keyboard.press('ArrowRight');
   expect(await cardPosition(page, board.id)).toEqual({ x: 100, y: 100 });
   await page.keyboard.press('Escape');
-  await expect(page.locator('.workspace-cards')).not.toHaveAttribute('open');
+  await expect(page.getByRole('region', { name: 'Find cards', exact: true })).toHaveCount(0);
   await expect(summary).toBeFocused();
   await page.keyboard.press('Enter');
   await selectCard.click();
