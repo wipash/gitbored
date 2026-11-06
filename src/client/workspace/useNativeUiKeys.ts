@@ -17,7 +17,7 @@ export function useNativeUiKeys() {
         uiOwnedCodes.add(event.code);
       } else if (!uiOwnedCodes.has(event.code) && !inUi) return;
       event.stopPropagation();
-      if (event.key === 'Escape' && inUi && uiOwnedCodes.has(event.code)) ui.querySelector<HTMLButtonElement>('[data-native-dismiss]')?.click();
+      if (event.key === 'Escape' && inUi && uiOwnedCodes.has(event.code)) (ui.querySelector<HTMLButtonElement>('[data-native-dismiss]') ?? ui.closest('[data-menu-open="true"]')?.querySelector<HTMLButtonElement>('[data-mobile-dismiss]'))?.click();
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (uiOwnedCodes.delete(event.code)) event.stopPropagation();

@@ -1,0 +1,74 @@
+/* Account controls live in Settings; the canvas keeps its full lower edge. */
+.mobile-menu-control { display: none; }
+.standalone-settings { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 700; }
+.standalone-settings > button { min-height: 36px; }
+.standalone-settings .workspace-floating-panel { position: absolute; top: calc(100% + 8px); right: 0; width: min(350px, calc(100vw - 24px)); max-height: calc(100dvh - 88px); }
+.account-settings { display: grid; gap: 12px; }
+.account-settings .theme-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.account-settings .application-account { display: block; }
+.account-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.account-settings .account-feedback { width: auto; max-height: none; overflow: visible; }
+.account-settings .account-feedback > p, .account-settings .account-check { padding: 0; border: 0; }
+
+@media (max-width: 900px) {
+  /* The fixed canvas isolates z-order; lift an open panel above save notices. */
+  .desktop-app .board-canvas:has(.workspace-tools[data-menu-open='true'], .workspace-tools .workspace-floating-panel, .incoming-panel) { z-index: 600; }
+  .desktop-app .board-heading {
+    z-index: 650;
+    top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left));
+    right: 64px; width: auto; max-width: none; min-height: 44px; padding: 3px 6px;
+  }
+  .desktop-app .board-heading h1 { max-width: none; font-size: .8125rem; }
+  .desktop-app .board-heading > button { flex-shrink: 0; min-height: 36px; padding-inline: 6px; }
+  .desktop-app .board-notices { top: calc(max(8px, env(safe-area-inset-top)) + 48px); left: 8px; right: 8px; max-width: none; z-index: 390; }
+  .desktop-app .board-save[data-save-state='saved'] { font-size: .625rem; padding-inline: 6px; }
+  .desktop-app .board-save p { margin: 0; }
+  .desktop-app .workspace-tools {
+    position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 52px); left: auto; right: 8px;
+    width: min(336px, calc(100vw - 16px)); max-height: calc(100dvh - 150px);
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 4px;
+    padding: 8px; border-radius: 8px; z-index: 620;
+  }
+  .desktop-app .workspace-tools[data-menu-open='false'] { width: 0; padding: 0; border: 0; background: transparent; }
+  .desktop-app .workspace-tools .workspace-view, .desktop-app .workspace-tools .workspace-find,
+  .desktop-app .workspace-tools .incoming-shell, .desktop-app .workspace-tools .incoming-controls { display: contents; }
+  .desktop-app .workspace-tools[data-menu-open='false'] .workspace-view > button,
+  .desktop-app .workspace-tools[data-menu-open='false'] .workspace-find > button,
+  .desktop-app .workspace-tools[data-menu-open='false'] .incoming-controls > button { display: none; }
+  .desktop-app .workspace-tools .workspace-view > button,
+  .desktop-app .workspace-tools .workspace-find > button,
+  .desktop-app .workspace-tools .incoming-controls > button { min-height: 44px; width: 100%; font-size: .875rem; display: flex; align-items: center; justify-content: start; gap: 6px; padding: 8px; }
+  .desktop-app .mobile-menu-control { display: contents; }
+  .desktop-app .mobile-workspace-menu {
+    position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+    display: flex; align-items: center; justify-content: center; gap: 6px; width: 48px; min-height: 44px;
+    font-size: .75rem; padding: 4px; background: var(--color-bg-surface); border: 1px solid var(--color-border-control); border-radius: 6px;
+  }
+  .desktop-app .mobile-workspace-menu .app-icon { width: 20px; height: 20px; }
+  .desktop-app .mobile-workspace-menu span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .desktop-app .mobile-menu-dismiss { grid-column: 2; justify-self: end; min-width: 36px; min-height: 36px; }
+  .desktop-app .workspace-tools .workspace-floating-panel,
+  .desktop-app .workspace-tools .incoming-panel,
+  .desktop-app .board-source-host,
+  .desktop-app .board-switcher {
+    position: fixed; inset: auto 8px calc(112px + env(safe-area-inset-bottom)) 8px;
+    width: auto; max-width: none; margin: 0; border-radius: 10px;
+    max-height: calc(100dvh - 188px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .desktop-app .workspace-tools .workspace-floating-panel { display: flex; flex-direction: column; overflow: hidden; }
+  .desktop-app .workspace-tools .workspace-panel-body { max-height: none; min-height: 0; overflow: auto; }
+  .desktop-app .workspace-tools .incoming-panel { height: min(600px, calc(100dvh - 188px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); }
+  .desktop-app .workspace-tools .incoming-heading { flex-shrink: 0; }
+  .desktop-app .workspace-tools .incoming-heading button,
+  .desktop-app .board-source-host .incoming-heading button { min-width: 36px; min-height: 36px; }
+  .desktop-app .board-source-host { z-index: 630; overflow: auto; }
+  .desktop-app .board-source-host .incoming-heading { position: sticky; top: 0; z-index: 1; background: var(--color-bg-surface); }
+  .desktop-app .board-switcher { z-index: 640; display: flex; flex-direction: column; }
+  .desktop-app .board-switcher .boards-list { max-height: none; min-height: 0; overflow: auto; }
+  .desktop-app .workspace-tools input:not([type='checkbox']):not([type='color']),
+  .desktop-app .workspace-tools select, .desktop-app .board-source-host input,
+  .desktop-app .standalone-settings select { font-size: max(1rem, 16px); }
+  .desktop-app .standalone-settings .workspace-floating-panel { position: fixed; inset: 64px 8px auto; width: auto; max-width: none; max-height: calc(100dvh - 80px); }
+  .desktop-app .standalone-settings { top: max(8px, env(safe-area-inset-top)); right: 8px; }
+  .desktop-app .tlui-layout__bottom__main { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+}

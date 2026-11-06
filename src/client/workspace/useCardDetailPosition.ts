@@ -11,7 +11,7 @@ export function useCardDetailPosition(open: boolean) {
     const root = editor.getContainer().closest('.desktop-app');
     if (!open || !root) return;
     const topControls = [...root.querySelectorAll('.board-heading, .workspace-tools')];
-    const bottomControls = [...root.querySelectorAll('.workspace-account, .tlui-layout__bottom .tlui-toolbar, .tlui-navigation-panel, .tlui-layout__top__left')];
+    const bottomControls = [...root.querySelectorAll('.tlui-layout__bottom .tlui-toolbar, .tlui-navigation-panel, .tlui-layout__top__left')];
     const measure = () => {
       const viewport = editor.getContainer().getBoundingClientRect();
       const bottom = bottomControls.map((element) => element.getBoundingClientRect()).filter((box) => box.height && box.width);

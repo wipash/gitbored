@@ -8,7 +8,7 @@ export function usePanelClearance(ref: RefObject<HTMLElement | null>, open: bool
     if (!open || !panel || !tools) return;
     const root = panel.closest('.desktop-app');
     if (!root) return;
-    const obstacles = '.workspace-account, .tlui-layout__bottom .tlui-toolbar, .tlui-navigation-panel, .tlui-layout__top__left';
+    const obstacles = '.tlui-layout__bottom .tlui-toolbar, .tlui-navigation-panel, .tlui-layout__top__left';
     const measure = () => {
       const bounds = panel.getBoundingClientRect();
       let bottom = window.innerHeight - 12;
