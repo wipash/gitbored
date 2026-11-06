@@ -15,6 +15,7 @@ import { requestBoard, type BoardAuthority } from './boardRequest';
 import type { SaveCoordinator } from './saveCoordinator';
 import './incoming.css';
 import { useWorkspacePanel } from '../workspace/panels';
+import { usePanelClearance } from '../workspace/usePanelClearance';
 
 interface PlacementHistory { candidate: IncomingCandidate; shapeId: TLShapeId }
 interface WorkspaceModel {
@@ -260,6 +261,7 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
   const heading = useRef<HTMLHeadingElement>(null);
   const panel = useRef<HTMLElement>(null);
   const shell = useRef<HTMLDivElement>(null);
+  usePanelClearance(panel, open);
   const drag = useRef<{ token: string; candidate: IncomingCandidate } | null>(null);
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);

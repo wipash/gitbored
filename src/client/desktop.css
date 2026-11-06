@@ -21,9 +21,8 @@
 .desktop-app .board-settings { position: fixed; left: 12px; top: 84px; z-index: 500; margin: 0; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 3px; }
 .desktop-app .board-settings summary { padding: 6px 10px; font-size: 0.75rem; }
 .desktop-app .board-settings[open] { width: min(350px, calc(100vw - 24px)); padding: 8px; }
-.desktop-app .board-editor > .board-error, .desktop-app .account-check { position: fixed; z-index: 700; top: 130px; left: 12px; max-width: min(460px, calc(100vw - 24px)); padding: 12px; background: var(--color-bg-surface); border: 1px solid var(--color-border-control); }
+.desktop-app .board-editor > .board-error { position: fixed; z-index: 700; top: 130px; left: 12px; max-width: min(460px, calc(100vw - 24px)); padding: 12px; background: var(--color-bg-surface); border: 1px solid var(--color-border-control); }
 .desktop-app .account-context-status:empty { display: none; }
-.desktop-app .account-context-status:not(:empty) { position: fixed; z-index: 700; bottom: 100px; right: 12px; padding: 8px; max-width: 420px; background: var(--color-bg-surface); }
 .desktop-app .boards-list, .desktop-app .board-loading, .desktop-app .board-recovery, .desktop-app .sources-route { position: relative; z-index: 500; width: min(440px, calc(100vw - 24px)); margin: 70px auto; padding: 20px; max-height: calc(100dvh - 150px); overflow: auto; overscroll-behavior: contain; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 4px; }
 .desktop-app:has(.boards-list) { min-height: 100dvh; background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px); background-size: 20px 20px; }
 .desktop-app .boards-list h1 { font-size: 1.125rem; }
@@ -65,15 +64,17 @@
 .desktop-app .board-notices > p { margin: 0; padding: 8px; background: var(--color-bg-surface); }
 .desktop-app input::placeholder { color: var(--color-text-secondary); opacity: 1; }
 .skip-link:focus { z-index: 900; }
-.desktop-app .account-context-status:not(:empty) { bottom: 140px; max-width: min(420px, calc(100vw - 24px)); }
-.desktop-app .account-check { top: auto; bottom: 180px; left: auto; right: 12px; max-height: 45dvh; overflow: auto; }
 
 .desktop-app .board-editor:has(.board-settings, .board-switcher) .board-notices:has(.board-save[data-save-state='saved']) { display: none; }
-.desktop-app .workspace-tools .incoming-panel { max-height: calc(100dvh - 12rem); }
-@media (max-width: 700px) { .desktop-app .workspace-tools .incoming-panel { max-height: calc(100dvh - 19rem); } }
 
 .app-loading { max-inline-size: none; margin: 0; padding: 0; min-height: 100dvh; display: grid; place-items: center; background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px); background-size: 20px 20px; }
 .app-loading p { color: var(--color-text-secondary); font-size: 0.8125rem; }
 .desktop-app .workspace-account { position: fixed; bottom: 48px; right: 12px; z-index: 500; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: calc(100vw - 24px); }
 @media (max-width: 700px) { .desktop-app .workspace-account { right: 6px; } }
-@media (max-width: 400px) { .desktop-app .workspace-account { bottom: 100px; } }
+@media (max-width: 400px) { .desktop-app .workspace-account { bottom: 120px; } }
+
+.desktop-app .account-feedback { display: flex; flex-direction: column; gap: 6px; max-height: 30dvh; width: min(420px, calc(100vw - 24px)); overflow: auto; overscroll-behavior: contain; }
+.desktop-app .account-feedback:not(:has(.account-check, .auth-error, .account-context-status:not(:empty), p:not(:empty))) { display: none; }
+.desktop-app .account-feedback > p, .desktop-app .account-check { flex: none; margin: 0; padding: 8px; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 3px; }
+.desktop-app .workspace-tools .incoming-panel { max-height: var(--workspace-panel-height, calc(100dvh - 240px)); }
+.desktop-app .incoming-footer button:disabled { cursor: default; }

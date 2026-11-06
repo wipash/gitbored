@@ -150,6 +150,17 @@ export function AuthLanding() {
           {!inAccount && <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>}
         </nav>;
 
+  const accountFeedback = <div className="account-feedback">
+        {!inAccount && busy && <p role="status">Signing out…</p>}
+        {!inAccount && actionError && <p className="auth-error" role="alert">{actionError}</p>}
+        {view.status === 'signed-in' && <p className="auth-status account-context-status" ref={accountStatus} tabIndex={-1} role="status">{accountCheck.message}</p>}
+        {view.status === 'signed-in' && accountCheck.status !== 'ready' && <section className="account-check runtime-panel" aria-label="Account check" aria-busy={accountCheck.status === 'checking'}>
+          <p>Previously checked account: @{view.user.login}. A confirmed different account clears this account's canvas from the page.</p>
+          <div className="account-check-actions"><button ref={checkButton} type="button" aria-disabled={accountCheck.status === 'checking'} onClick={() => { void reconcileAccount(view.user.id); }}>{accountCheck.status === 'checking' ? 'Checking account…' : 'Check account'}</button>
+            <a href="/api/auth/github" target="_blank" rel="noopener">Renew sign-in in a new tab</a></div>
+        </section>}
+  </div>;
+
   return (
     <div className={`runtime-shell auth-shell${view.status === 'signed-in' && inBoard ? ' desktop-app' : ''}`} onClick={(event) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -161,14 +172,7 @@ export function AuthLanding() {
       {!inBoard && themeControls}
       <main id="auth-content">
         {!inBoard && accountNavigation}
-        {!inAccount && busy && <p role="status">Signing out…</p>}
-        {!inAccount && actionError && <p className="auth-error" role="alert">{actionError}</p>}
-        {view.status === 'signed-in' && <p className="auth-status account-context-status" ref={accountStatus} tabIndex={-1} role="status">{accountCheck.message}</p>}
-        {view.status === 'signed-in' && accountCheck.status !== 'ready' && <section className="account-check runtime-panel" aria-label="Account check" aria-busy={accountCheck.status === 'checking'}>
-          <p>Previously checked account: @{view.user.login}. A confirmed different account clears this account's canvas from the page.</p>
-          <div className="account-check-actions"><button ref={checkButton} type="button" aria-disabled={accountCheck.status === 'checking'} onClick={() => { void reconcileAccount(view.user.id); }}>{accountCheck.status === 'checking' ? 'Checking account…' : 'Check account'}</button>
-            <a href="/api/auth/github" target="_blank" rel="noopener">Renew sign-in in a new tab</a></div>
-        </section>}
+        {!inBoard && accountFeedback}
         {inAccount && <>
         <p className="eyebrow">Your work, in perspective</p>
         <h1 ref={accountHeading} tabIndex={-1}>{view.status === 'signed-in' ? 'Your GitBored account' : 'A little space for the big picture.'}</h1>
@@ -207,7 +211,7 @@ export function AuthLanding() {
         {view.status === 'signed-in' && inSources && <SourcesRoute key={view.user.id} session={view} ready={accountCheck.status === 'ready'} />}
         {!theme.persistenceAvailable && <p id="theme-storage-note" className="storage-note" role="status">Theme changes apply for this visit. Allow site storage to keep your preference after reloading.</p>}
       </main>
-      {inBoard && <div className="workspace-account">{accountNavigation}{themeControls}</div>}
+      {inBoard && <div className="workspace-account">{accountFeedback}{accountNavigation}{themeControls}</div>}
       <footer><span>GitBored</span><a href="/runtime">Runtime diagnostics</a></footer>
     </div>
   );

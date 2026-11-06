@@ -121,7 +121,7 @@
 .workspace-tools { position: absolute; top: 12px; right: 12px; z-index: 420; display: flex; align-items: start; gap: 2px; padding: 3px; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 3px; pointer-events: auto; }
 .workspace-tools .workspace-view, .workspace-tools .workspace-find, .workspace-tools .incoming-shell { position: static; margin: 0; max-width: none; }
 .workspace-tools .incoming-controls { gap: 2px; }
-.workspace-tools .incoming-panel, .workspace-tools .workspace-floating-panel { position: absolute; top: 40px; right: 0; left: auto; margin: 0; }
+.workspace-tools .incoming-panel, .workspace-tools .workspace-floating-panel { position: absolute; top: 100%; right: 0; left: auto; margin: 6px 0 0; }
 .workspace-tools .incoming-controls > button, .workspace-tools .workspace-view > button, .workspace-tools .workspace-find > button { border-color: transparent; }
 .card-size { display: flex; align-items: center; justify-content: space-between; margin: 12px 0; }
 @media (max-width: 700px) {

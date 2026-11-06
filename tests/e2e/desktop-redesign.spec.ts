@@ -136,14 +136,61 @@ test('session restoration does not render the signed-out landing screen', async 
 
 test('account and theme controls have separate hit areas at normal and enlarged text sizes', async ({ page }) => {
   await create(page, 'Account controls');
-  for (const width of [1440, 1280, 320]) {
-    await page.setViewportSize({ width, height: 800 });
-    for (const fontSize of ['100%', '200%']) {
+  await connect(page);
+  await expect(page.locator('.incoming-candidates > li')).toHaveCount(5);
+  for (const width of [1440, 1280, 640, 320]) {
+    await page.setViewportSize({ width, height: width === 640 ? 400 : 800 });
+    // 640×400 already represents the CSS viewport at 200% browser zoom.
+    for (const fontSize of width === 640 ? ['100%'] : ['100%', '200%']) {
       await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
       const theme = await page.locator('.account-controls').boundingBox();
       const account = await page.locator('.application-nav').boundingBox();
       if (!theme || !account) throw new Error('Missing account controls');
       expect.soft(theme.y - (account.y + account.height), `${width}px ${fontSize} gap`).toBeGreaterThanOrEqual(6);
+      await expect.poll(async () => await page.locator('.incoming-body').evaluate((body) => body.clientHeight), { message: `${width}px ${fontSize} list space` }).toBeGreaterThan(0);
+      const panel = await page.locator('#incoming-panel').boundingBox();
+      const stack = await page.locator('.workspace-account').boundingBox();
+      if (!panel || !stack) throw new Error('Missing floating controls');
+      const overlaps = panel.x < stack.x + stack.width && panel.x + panel.width > stack.x && panel.y < stack.y + stack.height && panel.y + panel.height > stack.y;
+      expect.soft(overlaps, `${width}px ${fontSize} panel/stack overlap`).toBe(false);
+      for (const label of ['Add selected', 'Add all matching']) {
+        const hit = await page.getByRole('button', { name: label, exact: true }).evaluate((button) => {
+          const bounds = button.getBoundingClientRect();
+          return button.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+        });
+        expect.soft(hit, `${width}px ${fontSize} ${label} is uncovered`).toBe(true);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    }
+  }
+});
+
+test('account recovery messages leave account actions and theme reachable', async ({ page }) => {
+  const id = await create(page, 'Account recovery controls');
+  await page.route('**/api/session', (route) => route.abort('failed'));
+  await page.route(`**/api/boards/${id}`, (route) => route.request().method() === 'PATCH'
+    ? route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }) : route.continue());
+  await page.getByRole('button', { name: 'Board settings', exact: true }).click();
+  await page.getByLabel('Board name', { exact: true }).fill('Trigger account check');
+  await page.getByRole('button', { name: 'Rename board', exact: true }).click();
+  await expect(page.locator('.account-context-status')).toContainText('Your account could not be checked');
+  await page.getByRole('button', { name: 'Close board settings' }).click();
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const status = await page.locator('.account-context-status').boundingBox();
+    const check = await page.locator('.account-check').boundingBox();
+    const account = await page.locator('.application-nav').boundingBox();
+    const theme = await page.locator('.account-controls').boundingBox();
+    if (!status || !check || !account || !theme) throw new Error('Missing account recovery controls');
+    expect(status.y + status.height).toBeLessThanOrEqual(check.y);
+    expect(account.y + account.height).toBeLessThanOrEqual(theme.y);
+    for (const control of [page.getByRole('link', { name: 'Account', exact: true }), page.getByLabel('Theme'), page.getByRole('button', { name: 'Check account', exact: true })]) {
+      await control.scrollIntoViewIfNeeded();
+      expect(await control.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return element.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+      })).toBe(true);
     }
   }
 });
