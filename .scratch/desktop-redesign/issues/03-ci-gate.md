@@ -1,7 +1,7 @@
 # 03: Run the existing gate automatically in CI
 
 Status: ready-for-agent
-Work state: in-review
+Work state: done
 Blocked by: none
 
 ## Evidence
@@ -19,3 +19,5 @@ The repository has lint/type/test commands but no checked-in CI workflow or acti
 
 - 2026-11-06 — Recorded from the desktop redesign retrospective. Implementation has not started.
 - 2026-11-06 — Implemented in [PR #2](https://github.com/wipash/gitbored/pull/2) at Sean's request, including tested-image publication to GHCR after successful main checks. CI asserts both direct and pnpm Node versions and isolates authentication modes in separate runners; local-runner improvements in 01/02 remain follow-ups rather than blockers. Local gate, image smoke, actionlint and independent review passed. Remote execution caught an Account heading overflow and an invalid unchanged-state expectation while automatic Incoming discovery was running; both are corrected. The unfinished-import durability test retains exact cursor/queue/history/document assertions through real HTTP and SQLite restart, with browser reopening covered by the separate discovery scenario. All seven focused Incoming tests pass. Final remote checks and image smoke are tracked on the PR; publication awaits merge.
+
+- 2026-11-06: PR #2 merged. All CI modes, container smoke and main image publication passed; the published image is deployed in the homelab.
