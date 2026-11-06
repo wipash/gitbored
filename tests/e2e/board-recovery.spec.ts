@@ -135,6 +135,7 @@ test('two independent contexts preserve the latest conflicting mixed pair as a p
       await selectTheme(page, theme);
       await page.screenshot({ path: testInfo.outputPath(`conflict-${theme}-desktop.png`), fullPage: true });
     }
+    await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
     await page.setViewportSize({ width: 320, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
