@@ -12,6 +12,7 @@ import { useNativeUiKeys } from './useNativeUiKeys';
 import { useCardDetailPosition } from './useCardDetailPosition';
 import { CardColourSettings } from './cardColours';
 import { usePanelClearance } from './usePanelClearance';
+import { useCardDetails } from './cardDetails';
 import { focusPanelTrigger } from './focusPanelTrigger';
 
 export function WorkspacePanels({ children, metadata, planning, onPlanningChange, preferenceKey, hideClosed, onHideClosedChange }: { children?: ReactNode; metadata: WorkspaceMetadata; hideClosed: boolean; onHideClosedChange: (value: boolean) => void; planning?: PlanningSelection | undefined; onPlanningChange?: ((selection: PlanningSelection) => void) | undefined; preferenceKey?: string | undefined }) {
@@ -40,7 +41,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   const open = active === 'find';
   const setOpen = (value: boolean) => setActive(value ? 'find' : null);
   const [query, setQuery] = useState('');
-  const [dismissed, setDismissed] = useState<string | null>(null);
+  const { detailId, setDetailId } = useCardDetails();
   const viewTrigger = useRef<HTMLButtonElement>(null);
   const settingsPanel = useRef<HTMLElement>(null);
   usePanelClearance(settingsPanel, settingsOpen);
@@ -54,11 +55,12 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
     isEqual: (a: ItemCardShape[], b: ItemCardShape[]) => a.length === b.length && a.every((shape, index) => shape.id === b[index]?.id && shape.props === b[index]?.props),
   }), [editor]));
   const selected = useValue(useMemo(() => computed('Inspected card', () => {
-    const shape = editor.getOnlySelectedShape();
-    return shape?.type === ITEM_CARD_TYPE ? shape : null;
-  }, { isEqual: (a: ItemCardShape | null, b: ItemCardShape | null) => a?.id === b?.id && a?.props === b?.props }), [editor]));
-  const detailsOpen = !mobileMenuOpen && !!selected && dismissed !== selected.id && active !== 'settings' && active !== 'boards';
-  const { ref: detailRef, position: detailPosition } = useCardDetailPosition(detailsOpen);
+    const shape = detailId ? editor.getShape(detailId) : undefined;
+    return shape?.type === ITEM_CARD_TYPE && !editor.isShapeHidden(shape) ? shape : null;
+  }, { isEqual: (a: ItemCardShape | null, b: ItemCardShape | null) => a?.id === b?.id && a?.props === b?.props }), [editor, detailId]));
+  const detailsOpen = !mobileMenuOpen && !!selected && active !== 'settings' && active !== 'boards';
+  const { ref: detailRef, position: detailPosition } = useCardDetailPosition(detailsOpen ? selected?.id ?? null : null);
+  useEffect(() => { if (detailsOpen) detailRef.current?.querySelector<HTMLButtonElement>('[data-native-dismiss]')?.focus({ preventScroll: true }); }, [detailsOpen, detailId, detailRef]);
   const state = selected ? metadata.get(selected.props.referenceId) : undefined;
   const item = state?.status === 'ready' ? state.item : null;
   const url = item ? githubItemUrl(item.kind, item.locator) : null;
@@ -108,7 +110,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
             editor.complete(); editor.setCurrentTool('select'); editor.select(shape.id);
             const bounds = editor.getShapePageBounds(shape.id);
             if (bounds) editor.centerOnPoint(bounds.center, { animation: { duration: 0 } });
-            setDismissed(null); setOpen(false);
+            setDetailId(null); setOpen(false);
             editor.getContainer().focus({ preventScroll: true }); editor.focus();
           }}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} /><span>{value?.status === 'ready' ? <><small>{value.item.locator.repository} #{value.item.locator.number} · {itemStateLabel(value.item)}</small>{value.item.title}</> : 'Unavailable card'}</span></button></li>;
         })}</ul>{!cards.length && <p>No cards on this board.</p>}</div>
@@ -116,17 +118,18 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
     </div>
     {children}</div>
     {selected && detailsOpen && <section ref={detailRef} style={detailPosition} className="workspace-detail workspace-floating-panel" data-native-ui="details" aria-label="Card details" onPointerDown={(event) => event.stopPropagation()}>
-      <div className="incoming-heading"><h2>Card details</h2><button type="button" data-native-dismiss aria-label="Close details" onClick={() => { setDismissed(selected.id); editor.getContainer().focus({ preventScroll: true }); editor.focus(); }}><Icon name="close" /></button></div>
+      <div className="incoming-heading"><h2>Card details</h2><button type="button" data-native-dismiss aria-label="Close details" onClick={() => { setDetailId(null); const trigger = editor.getContainer().querySelector<HTMLButtonElement>(`[data-detail-card="${CSS.escape(selected.id)}"]`); if (trigger) trigger.focus({ preventScroll: true }); else { editor.getContainer().focus({ preventScroll: true }); editor.focus(); } }}><Icon name="close" /></button></div>
       <div className="workspace-panel-body">{item ? <>
         <p className="detail-locator">{item.locator.owner}/{item.locator.repository} #{item.locator.number}</p>
         <h3>{item.title}</h3>
+        <div className="card-detail-body">{item.body?.trim() ? item.body : 'No description provided.'}</div>
         <ProjectFields item={item} />
         <label className="card-size">Card size<select aria-label="Card size" value={selected.props.w === 280 && selected.props.h === 200 ? 'compact' : selected.props.w === 420 && selected.props.h === 300 ? 'expanded' : 'custom'} onChange={(event) => { const size = event.currentTarget.value; if (size === 'custom') return; editor.markHistoryStoppingPoint('resize-card'); editor.updateShape({ id: selected.id, type: selected.type, props: size === 'compact' ? { w: 280, h: 200 } : { w: 420, h: 300 } }); }}><option value="compact">Compact</option><option value="expanded">Expanded</option><option value="custom" disabled>Custom</option></select></label>
         <dl className="detail-values"><div><dt>State</dt><dd>{itemStateLabel(item)}</dd></div><div><dt>Labels</dt><dd>{item.labels.join(', ') || '—'}</dd></div><div><dt>Assignees</dt><dd>{item.assignees.map((login) => `@${login}`).join(', ') || '—'}</dd></div></dl>
         <h4>Related <span>{related.length}</span></h4>
         <ul className="workspace-find-results">{related.map((shape) => {
           const value = metadata.get(shape.props.referenceId);
-          return <li key={shape.id}><button type="button" onClick={() => { editor.select(shape.id); setDismissed(null); }}><Icon name="link" />{value?.status === 'ready' ? `#${value.item.locator.number} ${value.item.title}` : 'Related card'}</button></li>;
+          return <li key={shape.id}><button type="button" onClick={() => { editor.select(shape.id); setDetailId(shape.id); }}><Icon name="link" />{value?.status === 'ready' ? `#${value.item.locator.number} ${value.item.title}` : 'Related card'}</button></li>;
         })}</ul>
         {item.context?.related.filter((link) => !cards.some((shape) => { const value = metadata.get(shape.props.referenceId); return value?.status === 'ready' && value.item.locator.owner === link.owner && value.item.locator.repository === link.repository && value.item.locator.number === link.number; })).map((link) => {
           const href = githubItemUrl(link.kind, link);
