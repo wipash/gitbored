@@ -136,19 +136,22 @@ export async function providerRead(origin: string, token: string, path: string, 
   } catch { throw new AuthenticationError(502, 'provider_unavailable', 'GitHub could not be reached. Retry this page shortly.'); }
   if (!response.ok) {
     const rate = response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after');
-    if ((response.status === 403 || response.status === 429) && /^\/user\/installations\/[1-9][0-9]*\/repositories$/.test(path)) {
-      throw new RepositoryAccessError(rate ? 429 : 403, rate ? 'rate_limit' : 'missing_access', rate
-        ? 'GitHub is limiting requests. Wait before retrying this page.'
-        : 'GitHub denied this read. Check the app installation, selected repositories and organization approval, then retry.',
-      await repositoryDenial(response, rate));
+    if (response.status === 403 || response.status === 429) {
+      const diagnostic = await repositoryDenial(response, rate);
+      const ssoRequired = !rate && diagnostic['category'] === 'sso_required';
+      const code = rate ? 'rate_limit' : ssoRequired ? 'sso_required' : 'missing_access';
+      const message = rate ? 'GitHub is limiting requests. Wait before retrying this page.'
+        : ssoRequired ? 'Your organization requires GitHub SSO. Authorize access with your organization, then retry.'
+          : 'GitHub denied this read. Check the app installation, selected repositories and organization approval, then retry.';
+      if (/^\/user\/installations\/[1-9][0-9]*\/repositories$/.test(path)) {
+        throw new RepositoryAccessError(rate ? 429 : 403, code, message, diagnostic);
+      }
+      // This owner comes from the validated request path, never an upstream SSO URL.
+      const ssoOrganization = ssoRequired ? /^\/repos\/([A-Za-z0-9-]{1,39})\//.exec(path)?.[1] : undefined;
+      throw new AuthenticationError(rate ? 429 : 403, code, message, ssoOrganization);
     }
     await response.body?.cancel();
     if (response.status === 401) throw new AuthenticationError(401, 'reauthorize', 'GitHub authorization ended. Reconnect GitHub to continue.');
-    if (response.status === 403 || response.status === 429) {
-      throw new AuthenticationError(rate ? 429 : 403, rate ? 'rate_limit' : 'missing_access', rate
-        ? 'GitHub is limiting requests. Wait before retrying this page.'
-        : 'GitHub denied this read. Check the app installation, selected repositories and organization approval, then retry.');
-    }
     if (response.status === 404) throw new AuthenticationError(404, 'unavailable', 'This item or repository is unavailable to your GitHub authorization. Check the URL, installation access and organization approval, then retry. A private 404 does not mean deletion.');
     throw new AuthenticationError(502, 'provider_unavailable', 'GitHub could not complete this read. Retry this page shortly.');
   }

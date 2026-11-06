@@ -59,7 +59,7 @@ export interface ItemMetadata {
 
 export type ItemMetadataState =
   | { status: 'ready'; item: ItemMetadata }
-  | { status: 'unresolved' | 'loading' | 'unavailable' | 'error' };
+  | { status: 'unresolved' | 'loading' | 'unavailable' | 'sso-required' | 'error' };
 
 // The owner replaces/clears this map on authorization changes. No card fetches data.
 export type WorkspaceMetadata = ReadonlyMap<string, ItemMetadataState>;

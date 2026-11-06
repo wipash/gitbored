@@ -213,6 +213,7 @@ function BoardEditor({ initialBoard, authority, theme, restored = false, source 
   return coordinator ? <EditableBoard board={initialBoard} authority={authority} theme={theme} coordinator={coordinator} source={source} /> : <p role="status">Opening canvas…</p>;
 }
 function EditableBoard({ board, authority, theme, coordinator, source }: { board: Board; authority: BoardAuthority; theme: 'light' | 'dark'; coordinator: SaveCoordinator; source?: StoredRecovery | undefined }) {
+  const [accessNoticeHost, setAccessNoticeHost] = useState<HTMLDivElement | null>(null);
   const save = useSyncExternalStore(coordinator.subscribe, coordinator.getSnapshot);
   const [title, setTitle] = useState(board.title);
   const panels = useWorkspacePanel();
@@ -310,9 +311,9 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
     {save.recoveryUnavailable && <p role="alert" className="board-error">Browser recovery storage is unavailable. Keep this tab open until saving succeeds, or save a private copy. Browser recovery is best effort, not a server backup.</p>}
     {copyReceiptUnavailable && <p role="status">Your private copy is saved. Browser storage could not remember its link on the original recovery draft, so that draft may still appear unmarked.</p>}
     {copy && <p role="status">A private copy was saved, but you made newer changes while it was saving. Those changes remain in this tab.{copy.receiptUnavailable ? ' Browser storage could not remember the saved copy’s link on the original recovery draft.' : ''} <a href={`/boards/${encodeURIComponent(copy.id)}`} target="_blank" rel="noopener">Open saved copy (new tab)</a></p>}
-    {error && <p className="board-error" role="alert">{error}</p>}</div>
+    {error && <p className="board-error" role="alert">{error}</p>}<div ref={setAccessNoticeHost} /></div>
 
-    <IncomingWorkspace board={board} authority={authority} coordinator={coordinator} theme={theme} />
+    <IncomingWorkspace noticeHost={accessNoticeHost} board={board} authority={authority} coordinator={coordinator} theme={theme} />
     <dialog ref={dialog} className="board-dialog" aria-labelledby="delete-board-heading" onClose={() => {
       if (confirmation.current) { confirmation.current.value = ''; confirmation.current.setCustomValidity(''); }
     }}><h2 id="delete-board-heading">Delete “{title}”?</h2><p>This permanently deletes the board and all its notes, drawings and placements. It cannot be undone.</p><form aria-busy={busy} onSubmit={(event) => {

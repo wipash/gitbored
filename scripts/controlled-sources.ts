@@ -7,6 +7,8 @@ export interface ControlledSourceSettings {
   pullUnavailable: boolean;
   sourceDelayMs: number;
   sourceDenied: boolean;
+  sourceSsoRequired: boolean;
+  sourceSsoPath: string;
   sourceDenialStatus: 403 | 404;
   sourceThrottlePage: number;
   sourceRepositoryRenamed: boolean;
@@ -75,6 +77,10 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     const user = identity(request);
     if (!user) { void reply.code(401).send({ message: 'Controlled unauthorized' }); return null; }
     requests.push({ user, path: request.url });
+    if (settings().sourceSsoRequired && (!settings().sourceSsoPath || request.url.split('?')[0] === settings().sourceSsoPath)) {
+      void reply.header('X-GitHub-SSO', 'required; url=https://example.invalid/private-sso-token').code(403).send({ message: 'Controlled private SSO payload' });
+      return null;
+    }
     if (checkDenial && settings().sourceDenied) { void reply.code(settings().sourceDenialStatus).send({ message: 'Controlled missing approval' }); return null; }
     return user;
   }

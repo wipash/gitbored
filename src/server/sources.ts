@@ -6,7 +6,7 @@ import { readRepository, readSourceItem, readSourcePage, type RepositorySource, 
 import { readItemContext } from '../shared/planning.js';
 import { AuthenticationError, type AuthenticatedUser } from './auth.js';
 import type { AuthConfig } from './config.js';
-import { boolean, id, installation, invalidProvider, list, number, object, opaque, parseItemUrl, providerRead, repository, text } from './sourceProvider.js';
+import { boolean, id, installation, invalidProvider, list, number, object, opaque, owner, parseItemUrl, providerRead, repository, text } from './sourceProvider.js';
 
 import { itemContextQuery, normalizeContext } from './itemContext.js';
 
@@ -152,7 +152,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       return result;
     }
     catch (error) {
-      if (error instanceof AuthenticationError && ['reauthorize', 'missing_access', 'unavailable'].includes(error.code)) forgetCache(ctx);
+      if (error instanceof AuthenticationError && ['reauthorize', 'missing_access', 'sso_required', 'unavailable'].includes(error.code)) forgetCache(ctx);
       if (error instanceof AuthenticationError && error.code === 'reauthorize') {
         app.authentication.invalidateAuthorizationIfCurrent(ctx.user.id, ctx.token);
       }
@@ -240,7 +240,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       try { detail = (await read(ctx, `${path}/pulls/${locator.number}`)).value; }
       catch (error) {
         // Common-field authority is not authority to deliver old PR enrichment.
-        if (!(error instanceof AuthenticationError) || error.code === 'reauthorize') throw error;
+        if (!(error instanceof AuthenticationError) || (error.code === 'reauthorize' || error.code === 'sso_required')) throw error;
       }
     }
     const normalized = detail === undefined ? common : normalize(issue, repo, detail);
@@ -257,7 +257,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
   });
   app.get<{ Params: { id: string } }>('/api/references/:id/context', async (request) => {
     const ctx = await context(request);
-    const row = database.prepare('SELECT node_id AS nodeId FROM item_references WHERE id=? AND user_id=?').get(request.params.id, ctx.user.id);
+    const row = database.prepare('SELECT node_id AS nodeId, owner FROM item_references WHERE id=? AND user_id=?').get(request.params.id, ctx.user.id);
     if (!row) throw new AuthenticationError(404, 'unavailable', 'Reference unavailable. Refresh the board.');
     const cacheKey = `context:${request.params.id}`;
     const previous = cached(ctx, cacheKey, readItemContext);
@@ -270,9 +270,13 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       cache(ctx, cacheKey, itemContext);
       return itemContext;
     } catch (error) {
-      if (error instanceof AuthenticationError && ['reauthorize', 'missing_access', 'unavailable'].includes(error.code)) forgetCache(ctx);
+      if (error instanceof AuthenticationError && ['reauthorize', 'missing_access', 'sso_required', 'unavailable'].includes(error.code)) forgetCache(ctx);
       if (error instanceof AuthenticationError && error.code === 'reauthorize') app.authentication.invalidateAuthorizationIfCurrent(ctx.user.id, ctx.token);
       app.authentication.assertUserContext(request, ctx.user);
+      if (error instanceof AuthenticationError && error.code === 'sso_required') {
+        // Context reads use /graphql, so recover the owner from this user's reference.
+        throw new AuthenticationError(error.statusCode, error.code, error.message, owner(row['owner']));
+      }
       throw error;
     }
   });

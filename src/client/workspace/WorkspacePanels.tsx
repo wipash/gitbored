@@ -135,7 +135,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
         {item.context?.status === 'unavailable'  && <p>Related items unavailable. Refresh to retry.</p>}
         {item.context?.status === 'partial' && <p>Some project fields or links are unavailable. Open GitHub for the full list.</p>}
         {url && <a href={url} target="_blank" rel="noreferrer"><Icon name="external" /> Open in GitHub</a>}
-      </> : <p>{state?.status === 'loading' ? 'Loading…' : 'Details unavailable. Refresh to retry.'}</p>}</div>
+      </> : <p>{state?.status === 'loading' ? 'Loading…' : state?.status === 'sso-required' ? 'GitHub SSO required. Use the recovery notice to reconnect your organisation.' : 'Details unavailable. Refresh to retry.'}</p>}</div>
     </section>}
   </>;
 }
