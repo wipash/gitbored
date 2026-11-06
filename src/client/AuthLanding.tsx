@@ -157,12 +157,12 @@ export function AuthLanding() {
   const needsAttention = view.status === 'signed-in' && (accountCheck.status === 'blocked' || view.authorization === 'reauthorize' || !!actionError);
   const accountSettings = <div className="account-settings">
     {accountFeedback}
-    <label className="theme-control" htmlFor="theme">Theme
+    <div className="theme-control"><label htmlFor="theme">Theme</label>
       <select id="theme" value={theme.preference} aria-describedby={!theme.persistenceAvailable ? 'theme-storage-note' : undefined}
         onChange={(event) => { if (isThemePreference(event.currentTarget.value)) theme.selectTheme(event.currentTarget.value); }}>
         <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
       </select>
-    </label>
+    </div>
     {!theme.persistenceAvailable && <p id="theme-storage-note" className="storage-note" role="status">Theme changes apply for this visit. Allow site storage to keep your preference after reloading.</p>}
     {view.status === 'signed-in' && <>
       <p className="application-account">{accountCheck.status === 'ready' ? 'Account' : 'Last checked'}: @{view.user.login}</p>
