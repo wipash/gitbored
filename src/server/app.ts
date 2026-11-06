@@ -1,4 +1,5 @@
 import { access } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { extname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import fastifyStatic from '@fastify/static';
@@ -10,6 +11,7 @@ import { AuthenticationError, registerAuthentication } from './auth.js';
 import { registerSources } from './sources.js';
 import { registerBoards } from './boards.js';
 import { RepositoryAccessError } from './sourceProvider.js';
+import { requestErrorDetails } from './requestDiagnostics.js';
 
 function isClientNavigation(request: FastifyRequest): boolean {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -36,17 +38,25 @@ function isClientNavigation(request: FastifyRequest): boolean {
 }
 
 export async function createApp(config: RuntimeConfig, database: DatabaseSync): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, requestIdHeader: false, genReqId: () => randomUUID() });
 
-  app.setErrorHandler((error: unknown, _request, reply) => {
+  app.setErrorHandler((error: unknown, request, reply) => {
+    const status = error instanceof AuthenticationError ? error.statusCode
+      : error instanceof Error && 'statusCode' in error
+        && typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500
+        ? error.statusCode : 500;
+    if (status >= 500) {
+      // Only the registered route template is safe: raw URLs, headers and exception
+      // messages can contain OAuth codes, credentials or private board content.
+      console.error(JSON.stringify({ event: 'server_request_failed', level: 'error',
+        requestId: request.id, method: request.method, route: request.routeOptions.url ?? 'unmatched',
+        statusCode: status, ...requestErrorDetails(error) }));
+      reply.header('X-Request-Id', request.id);
+    }
     if (error instanceof AuthenticationError) {
       if (error instanceof RepositoryAccessError) console.warn(JSON.stringify(error.diagnostic));
       return reply.code(error.statusCode).send({ error: error.code, message: error.message });
     }
-    const status = error instanceof Error && 'statusCode' in error
-      && typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500
-      ? error.statusCode
-      : 500;
     return reply.code(status).send({ error: status === 500 ? 'Internal server error' : 'Invalid request' });
   });
 

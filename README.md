@@ -592,6 +592,17 @@ revocation under the actual App's permissions.
 
 ## Operate one durable backend
 
+HTTP failures with status 500 or higher emit one JSON `server_request_failed`
+event to standard error. It includes the level, server-generated request ID,
+method, registered route template, status, native error type and an allowlisted
+error code when available. The response's `X-Request-Id` matches the event so an
+operator can correlate a reported failure. Client-supplied request IDs are ignored.
+Raw URLs, query strings, headers, bodies, error messages, stacks and causes are
+excluded because they can contain credentials or private board/GitHub content.
+Expected 4xx responses do not produce these events; existing OAuth and repository
+diagnostics retain their separate, bounded events. Capture stderr in the service
+manager or container logs when hosting the application.
+
 Use one application process and one SQLite database on a local filesystem. No
 container, secondary database, backup daemon or HA service is required. Do not put
 SQLite on a shared/network filesystem. Backups contain private board notes,
