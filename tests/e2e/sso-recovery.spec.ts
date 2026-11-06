@@ -57,7 +57,7 @@ async function expectHitTarget(control: Locator) {
   })).toBe(true);
 }
 
-test('one SSO notice preserves native editing and retries cold cards without reloading', async ({ page }, testInfo) => {
+test('one SSO notice preserves editing across same-account reauthorization in another tab', async ({ page }, testInfo) => {
   const { board, headers, items } = await seed(page);
   await controlProvider(page.request, { sourceSsoRequired: true });
   for (const item of items) {
@@ -109,8 +109,16 @@ test('one SSO notice preserves native editing and retries cold cards without rel
   }
   await notice.locator('summary').click();
   await controlProvider(page.request, { sourceSsoRequired: false });
+  const newTab = page.waitForEvent('popup');
+  await notice.getByRole('link', { name: 'reauthorize GitBored' }).click();
+  const authorization = await newTab;
+  await authorization.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
+  await expect(authorization.locator('.desktop-app')).toBeVisible();
+  await page.bringToFront();
+  // Headless tab activation does not consistently emit window focus; use the documented recovery action.
   await notice.getByRole('button', { name: 'Check access' }).click();
   await expect(notice).toHaveCount(0);
+  await authorization.close();
   for (const [index, item] of items.entries()) await expect(page.locator(`[data-shape-id="shape:sso-card-${index}"]`)).toContainText(item.metadata.title);
   expect(await editor.evaluate((element) => element.isConnected)).toBe(true);
   expect(documentNavigations).toBe(0);
@@ -164,4 +172,46 @@ test('project-context-only SSO recovers and ordinary access denial remains unava
   await page.reload();
   await expect(card).toContainText('Unavailable');
   await expect(notice).toHaveCount(0);
+});
+
+
+test('a direct repository SSO denial redacts matching cards while native edits still save', async ({ page }) => {
+  const { board, items } = await seed(page);
+  await page.goto(`/boards/${board.id}`);
+  for (const [index, item] of items.entries()) await expect(page.locator(`[data-shape-id="shape:sso-card-${index}"]`)).toContainText(item.metadata.title);
+  await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+  await expect(page.locator('.repository-results').getByRole('button', { name: /alice\/project/ })).toBeVisible();
+  await controlProvider(page.request, { sourceSsoRequired: true, sourceSsoPath: '/repos/alice/project' });
+  await page.getByRole('searchbox', { name: 'Search repositories' }).fill('alice/project');
+  const notice = page.getByRole('complementary', { name: 'GitHub SSO recovery' });
+  await expect(notice).toHaveCount(1);
+  await expect(page.locator('.workspace-card').filter({ hasText: 'SSO required. Reconnect your organisation.' })).toHaveCount(2);
+  for (const [index, item] of items.entries()) await expect(page.locator(`[data-shape-id="shape:sso-card-${index}"]`)).not.toContainText(item.metadata.title);
+  expect((await currentSession(page.request)).status).toBe('signed-in');
+  await page.getByRole('button', { name: 'Close repositories', exact: true }).click();
+  await page.locator('[data-shape-id="shape:editable-note"]').click();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => notePosition(page, board.id)).toEqual({ x: 501, y: 500 });
+  await notice.locator('summary').click();
+  await controlProvider(page.request, { sourceSsoRequired: false });
+  await notice.getByRole('button', { name: 'Check access' }).click();
+  await expect(notice).toHaveCount(0);
+  for (const [index, item] of items.entries()) await expect(page.locator(`[data-shape-id="shape:sso-card-${index}"]`)).toContainText(item.metadata.title);
+});
+
+test('removing the last SSO-blocked card removes its obsolete recovery notice', async ({ page }) => {
+  const { board, headers, items } = await seed(page, 1);
+  const item = items[0];
+  if (!item) throw new Error('Missing seeded issue');
+  await controlProvider(page.request, { sourceSsoRequired: true, sourceSsoPath: '/repos/alice/project/issues/1' });
+  expect((await page.request.get(`/api/references/${item.reference.id}?refresh=1`, { headers })).status()).toBe(403);
+  await page.goto(`/boards/${board.id}`);
+  const notice = page.getByRole('complementary', { name: 'GitHub SSO recovery' });
+  await expect(notice).toHaveCount(1);
+  await page.getByRole('button', { name: /^Find/ }).click();
+  await page.locator('.workspace-find-results button').click();
+  await page.keyboard.press('Delete');
+  await expect(page.locator('.workspace-card')).toHaveCount(0);
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
 });
