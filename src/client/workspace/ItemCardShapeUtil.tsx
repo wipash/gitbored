@@ -9,6 +9,9 @@ import { badgeStyle, itemType, useCardColours } from './cardColours';
 
 function ItemCard({ shape }: { shape: ItemCardShape }) {
   const editor = useEditor();
+  const compact = shape.props.h < 260;
+  // Geometry alone sets the title budget: loading metadata never resizes a card.
+  const titleLines = Math.max(1, Math.floor((shape.props.h - (compact ? 134 : 154)) / 21));
   const { detailId, setDetailId } = useCardDetails();
   const showDetails = () => { editor.select(shape.id); setDetailId(shape.id); };
   const state = useItemMetadata(shape.props.referenceId);
@@ -22,18 +25,16 @@ function ItemCard({ shape }: { shape: ItemCardShape }) {
       : state.status === 'unavailable' || state.status === 'ready' ? 'Unavailable. Check GitHub access.'
         : 'Unresolved reference.';
   return <HTMLContainer className="workspace-card-container">
-    <article className="workspace-card" style={colours.cardStyle} data-card-colour={shape.props.color} data-colour-by={colours.mode} aria-label={description} data-reference-id={shape.props.referenceId}>
+    <article className="workspace-card" style={colours.cardStyle} data-card-density={compact ? 'compact' : 'expanded'} data-card-colour={shape.props.color} data-colour-by={colours.mode} aria-label={description} data-reference-id={shape.props.referenceId}>
       <div className="workspace-card-repository"><bdi>{item ? `${item.locator.owner}/${item.locator.repository}` : 'GitHub reference'}</bdi>
         {state.status === 'ready' && state.refreshing && <span className="card-refresh-indicator" role="status" aria-label="Refreshing card"><Icon name="refresh" /></span>}
         <button type="button" className="card-details-trigger" data-native-ui="card-action" data-detail-card={shape.id} aria-label="Card details" aria-expanded={detailId === shape.id} title="Card details" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); if (detailId === shape.id) setDetailId(null); else showDetails(); }}><Icon name="details" /></button>
       </div>
-      <div className="workspace-card-heading"><strong className="card-category" style={badgeStyle(colours.type)}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} />{shape.props.kind === 'issue' ? 'Issue' : 'Pull request'}{item ? ` #${item.locator.number}` : ''}</strong><span className="card-category" style={badgeStyle(colours.status)}>{item ? itemStateLabel(item) : state.status === 'loading' ? 'Loading…' : state.status === 'sso-required' ? 'SSO required' : 'Unavailable'}</span></div>
-      {item && itemType(item) !== 'Issue' && itemType(item) !== 'Pull request' && <span className="card-category card-type" style={badgeStyle(colours.type)}>{itemType(item)}</span>}
-      <p className="workspace-card-title">{item?.title ?? anonymousMessage}</p>
+      <div className="workspace-card-heading"><strong className="card-category" style={badgeStyle(colours.type)}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} />{shape.props.kind === 'issue' ? 'Issue' : 'Pull request'}{item ? ` #${item.locator.number}` : ''}</strong>{item && itemType(item) !== 'Issue' && itemType(item) !== 'Pull request' && <span className="card-category card-type" style={badgeStyle(colours.type)}>{itemType(item)}</span>}<span className="card-category" style={badgeStyle(colours.status)}>{item ? itemStateLabel(item) : state.status === 'loading' ? 'Loading…' : state.status === 'sso-required' ? 'SSO required' : 'Unavailable'}</span></div>
+      <p className="workspace-card-title" style={{ WebkitLineClamp: titleLines, blockSize: `${titleLines * 1.5}em` }}>{item?.title ?? anonymousMessage}</p>
       <div className="workspace-card-labels">{item?.labels.slice(0, 2).map((label, index) => <span className="card-category" style={badgeStyle(colours.label(label))} title={label} key={index}><bdi>{label}</bdi></span>)}{item && item.labels.length > 2 && <span>+{item.labels.length - 2}</span>}</div>
       {item && <ProjectFields item={item} />}
-      <footer><span>{item?.assignees.slice(0, 2).map((name) => `@${name}`).join(', ') || 'Unassigned'}</span>{!!item?.context?.related.length && <button type="button" className="card-related-count" data-native-ui="card-action" aria-label={`${item.context.related.length} related items`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); showDetails(); }}><Icon name="link" />{item.context.related.length}</button>}{url && <a href={url} target="_blank" rel="noreferrer" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} aria-label="Open in GitHub"><Icon name="external" /></a>}</footer>
-      {item?.freshness === 'stale' && !(state.status === 'ready' && state.refreshing) && <small>Stale metadata</small>}
+      <footer><span>{item?.freshness === 'stale' && !(state.status === 'ready' && state.refreshing) ? 'Stale metadata' : item?.assignees.slice(0, 2).map((name) => `@${name}`).join(', ') || 'Unassigned'}</span>{!!item?.context?.related.length && <button type="button" className="card-related-count" data-native-ui="card-action" aria-label={`${item.context.related.length} related items`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); showDetails(); }}><Icon name="link" />{item.context.related.length}</button>}{url && <a href={url} target="_blank" rel="noreferrer" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} aria-label="Open in GitHub"><Icon name="external" /></a>}</footer>
     </article>
   </HTMLContainer>;
 }

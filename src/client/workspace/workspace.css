@@ -142,3 +142,40 @@
 .card-detail-body { margin-block: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; user-select: text; }
 @keyframes card-refresh { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .card-refresh-indicator .app-icon { animation: none; } }
+
+/* Reserve whole title lines; compact metadata leaves the default 280×200 shape intact. */
+.workspace-card { padding: 8px; gap: 2px; }
+.workspace-card-repository { min-height: 24px; }
+.workspace-card .card-details-trigger { width: 24px; min-height: 24px; padding: 3px; }
+.workspace-card-heading { flex-wrap: nowrap; justify-content: start; gap: 6px; min-height: 17px; }
+.workspace-card-heading > :last-child { margin-inline-start: auto; }
+.workspace-card-heading .card-category { white-space: nowrap; }
+.workspace-card-title {
+  flex: none; min-block-size: 0; margin: 2px 0; display: -webkit-box; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.5; pointer-events: auto;
+}
+.workspace-card-labels:empty { display: none; }
+.workspace-card-labels > span { min-inline-size: 0; max-inline-size: 60%; }
+.workspace-card-labels > span:not(.card-category) { flex: none; max-inline-size: none; }
+.workspace-card .card-project-fields { margin: 0; gap: 3px; }
+.workspace-card[data-card-density='compact'] .card-project-fields dt {
+  position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.workspace-card .card-project-fields dd { margin: 0; }
+.workspace-card footer { padding: 0; min-height: 24px; align-items: center; gap: 6px; }
+.workspace-card footer > span { flex: 1; min-width: 0; }
+.workspace-card footer a, .workspace-card .card-related-count { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 24px; min-height: 24px; }
+
+/* Large user text takes priority over secondary metadata in a fixed canvas shape.
+   The visible details button keeps every omitted field available. */
+.workspace-card-container { container-type: size; }
+@container (max-height: 10rem) {
+  .workspace-card-labels, .workspace-card .card-project-fields, .workspace-card footer > span, .workspace-card-heading .card-type { display: none; }
+  .workspace-card-title { -webkit-line-clamp: 2 !important; block-size: 3em !important; }
+  .workspace-card footer { margin-block-start: auto; line-height: 1; }
+  .workspace-card .card-related-count { line-height: 1; }
+  .workspace-card-heading strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
+@container (max-height: 6rem) {
+  .workspace-card-title { -webkit-line-clamp: 1 !important; block-size: 1.5em !important; }
+}

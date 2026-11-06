@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { controlProvider, signIn, selectTheme } from './auth-support.js';
+import { controlProvider, signIn, selectTheme, openWorkspaceMenu } from './auth-support.js';
 import { expectNativePoint } from './board-gestures.js';
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -19,7 +19,7 @@ async function expectAnchored(page: Page) {
   }).toBeLessThan(2);
 }
 
-test('details open explicitly, show escaped body, follow zoom and pan, and return focus', async ({ page }, testInfo) => {
+async function openBoardWithCards(page: Page) {
   await controlProvider(page.request, { reset: true });
   await signIn(page);
   await page.getByLabel('Board name', { exact: true }).fill('Anchored details');
@@ -34,6 +34,10 @@ test('details open explicitly, show escaped body, follow zoom and pan, and retur
   await page.getByRole('button', { name: 'Close Incoming' }).click();
   await page.getByRole('button', { name: /^Find/ }).click();
   await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).click();
+}
+
+test('details open explicitly, show escaped body, follow zoom and pan, and return focus', async ({ page }, testInfo) => {
+  await openBoardWithCards(page);
   const firstCard = page.locator('.workspace-card').filter({ hasText: 'Issue #1' });
   const secondCard = page.locator('.workspace-card').filter({ has: page.locator('.workspace-card-heading').filter({ hasText: '#2' }) });
   const details = page.getByRole('region', { name: 'Card details', exact: true });
@@ -101,4 +105,73 @@ test('details open explicitly, show escaped body, follow zoom and pan, and retur
   await firstCard.getByRole('button', { name: 'Card details', exact: true }).click();
   await expect(details).toBeVisible();
   await page.getByRole('button', { name: 'Close details', exact: true }).click();
+});
+
+
+test('mobile details follow zoom in both directions and pan with an expanded card', async ({ page }, testInfo) => {
+  await openBoardWithCards(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openWorkspaceMenu(page);
+  await page.getByRole('button', { name: /^Find/ }).click();
+  await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).click();
+  const card = page.locator('.workspace-card').filter({ hasText: 'Issue #1' });
+  await card.getByRole('button', { name: 'Card details', exact: true }).click();
+  const details = page.getByRole('region', { name: 'Card details', exact: true });
+  await details.getByRole('combobox', { name: 'Card size', exact: true }).selectOption('expanded');
+  const initial = await selectedBounds(page);
+  const panelScale = () => details.evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
+  const initialScale = await panelScale();
+  const zoomPoint = { x: 6, y: 500 };
+  await page.locator('.tl-container').focus();
+  await expectNativePoint(page, zoomPoint);
+  await page.mouse.move(zoomPoint.x, zoomPoint.y);
+  await page.keyboard.down('Control');
+  try {
+    await page.mouse.wheel(0, 280);
+    await expect.poll(async () => (await selectedBounds(page)).card.width).toBeLessThan(initial.card.width - 10);
+  } finally { await page.keyboard.up('Control'); }
+  await expect.poll(panelScale).toBeLessThan(initialScale - .01);
+  await expect.poll(async () => (await selectedBounds(page)).panel.width).toBeLessThan(initial.panel.width - 10);
+  const zoomedOut = await selectedBounds(page);
+  await page.mouse.move(zoomPoint.x, zoomPoint.y);
+  await page.keyboard.down('Space');
+  await page.mouse.down();
+  try {
+    await page.mouse.move(zoomPoint.x, zoomPoint.y - 150, { steps: 5 });
+    // Check the anchor during the drag: release starts native inertial panning,
+    // which may carry the card offscreen while the readable panel stays clamped.
+    await expect.poll(async () => (await selectedBounds(page)).card.y).toBeLessThan(zoomedOut.card.y - 100);
+    await expect.poll(async () => (await selectedBounds(page)).panel.y).toBeLessThan(zoomedOut.panel.y - 30);
+    await expect.poll(async () => { const bounds = await selectedBounds(page); return Math.abs(bounds.panel.y - bounds.card.y); }).toBeLessThan(2);
+  } finally {
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+  }
+  await expect.poll(async () => {
+    const { panel } = await selectedBounds(page);
+    return panel.x >= 0 && panel.x + panel.width <= 390 && panel.y >= 60 && panel.y + panel.height <= 740;
+  }).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('mobile-details-zoomed-out.png') });
+  const outScale = await panelScale();
+  await page.mouse.move(zoomPoint.x, zoomPoint.y);
+  await page.keyboard.down('Control');
+  try {
+    await page.mouse.wheel(0, -280);
+    await expect.poll(async () => (await selectedBounds(page)).card.width).toBeGreaterThan(zoomedOut.card.width + 10);
+  } finally { await page.keyboard.up('Control'); }
+  await expect.poll(panelScale).toBeGreaterThan(outScale + .01);
+  await expect.poll(async () => (await selectedBounds(page)).panel.width).toBeGreaterThan(zoomedOut.panel.width + 10);
+  await page.screenshot({ path: testInfo.outputPath('mobile-details-zoomed-in.png') });
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await expect.poll(async () => {
+    const box = await details.boundingBox();
+    return box !== null && box.x >= 0 && box.x + box.width <= 320 && box.y >= 60 && box.y + box.height <= 730;
+  }).toBe(true);
+  await details.getByRole('combobox', { name: 'Card size', exact: true }).selectOption('compact');
+  await page.screenshot({ path: testInfo.outputPath('mobile-details-enlarged-text.png') });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await page.getByRole('button', { name: 'Close details', exact: true }).click();
+  await expect(details).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Card details', exact: true })).toBeFocused();
 });

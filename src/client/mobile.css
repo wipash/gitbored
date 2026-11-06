@@ -47,8 +47,7 @@
   .desktop-app .mobile-menu-dismiss { grid-column: 2; justify-self: end; min-width: 36px; min-height: 36px; }
   .desktop-app .workspace-tools .workspace-floating-panel,
   .desktop-app .workspace-tools .incoming-panel,
-  .desktop-app .board-source-host,
-  .desktop-app .board-switcher {
+  .desktop-app .board-source-host {
     position: fixed; inset: auto 8px calc(112px + env(safe-area-inset-bottom)) 8px;
     width: auto; max-width: none; margin: 0; border-radius: 10px;
     max-height: calc(100dvh - 188px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
@@ -61,8 +60,8 @@
   .desktop-app .board-source-host .incoming-heading button { min-width: 36px; min-height: 36px; }
   .desktop-app .board-source-host { z-index: 630; overflow: auto; }
   .desktop-app .board-source-host .incoming-heading { position: sticky; top: 0; z-index: 1; background: var(--color-bg-surface); }
-  .desktop-app .board-switcher { z-index: 640; display: flex; flex-direction: column; }
-  .desktop-app .board-switcher .boards-list { max-height: none; min-height: 0; overflow: auto; }
+  .desktop-app .board-heading .board-switcher { position: absolute; inset: calc(100% + 8px) auto auto 0; width: calc(100vw - 16px); max-width: none; max-height: calc(100dvh - 188px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .desktop-app .board-switcher-close { min-width: 44px; min-height: 44px; }
   .desktop-app .workspace-tools input:not([type='checkbox']):not([type='color']),
   .desktop-app .workspace-tools select, .desktop-app .board-source-host input,
   .desktop-app .standalone-settings select { font-size: max(1rem, 16px); }

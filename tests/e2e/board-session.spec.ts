@@ -268,8 +268,13 @@ test('dirty Sign out and real Stay retain a truthfully blocked native draft unti
     writes += 1;
     if (writes === 1) pending = route; else await route.continue();
   });
-  await nudge(page, 'ArrowRight'); await page.clock.runFor(350);
-  await expect.poll(() => Boolean(pending)).toBe(true);
+  await nudge(page, 'ArrowRight');
+  // Native store notifications can arrive after a clock advance. Keep advancing
+  // the paused debounce until its real PUT is intercepted, then hold time again.
+  await expect.poll(async () => {
+    await page.clock.runFor(350);
+    return Boolean(pending);
+  }).toBe(true);
   const leaving = page.waitForEvent('dialog');
   const signedOut = page.waitForResponse((response) => response.url().endsWith('/api/auth/logout'));
   await openSettings(page);
