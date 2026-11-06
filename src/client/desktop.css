@@ -7,10 +7,10 @@
 .desktop-app a { color: var(--color-accent-fill); }
 .app-icon { width: 16px; height: 16px; flex: none; vertical-align: -3px; }
 .desktop-app > footer { display: none; }
-.desktop-app .account-controls { position: fixed; bottom: 12px; right: 12px; z-index: 500; padding: 4px; gap: 6px; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 3px; }
+.desktop-app .account-controls { margin: 0; padding: 4px; gap: 6px; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 3px; }
 .desktop-app .account-controls .identity { display: none; }
 .desktop-app .account-controls .theme-control { gap: 4px; font-size: 0.75rem; }
-.desktop-app .application-nav { position: fixed; bottom: 52px; right: 12px; z-index: 500; margin: 0; padding: 4px; gap: 8px; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 3px; font-size: 0.75rem; }
+.desktop-app .application-nav { margin: 0; padding: 4px; gap: 8px; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 3px; font-size: 0.75rem; }
 .desktop-app .application-nav > a, .desktop-app .application-account { display: none; }
 .desktop-app .application-nav > a[href='/account'] { display: inline; }
 .desktop-app .board-canvas { position: fixed; inset: 0; width: 100%; height: 100dvh; min-height: 0; border: 0; border-radius: 0; margin: 0; }
@@ -40,7 +40,6 @@
 @media (max-width: 700px) {
   .desktop-app .board-heading { max-width: calc(100vw - 24px); }
   .desktop-app .board-heading h1 { max-width: 160px; }
-  .desktop-app .account-controls, .desktop-app .application-nav { right: 6px; }
 }
 .repository-connector { padding: 12px; }
 .repository-connector > input { width: 100%; }
@@ -66,15 +65,15 @@
 .desktop-app .board-notices > p { margin: 0; padding: 8px; background: var(--color-bg-surface); }
 .desktop-app input::placeholder { color: var(--color-text-secondary); opacity: 1; }
 .skip-link:focus { z-index: 900; }
-.desktop-app .account-controls { bottom: 48px; }
-.desktop-app .application-nav { bottom: 88px; }
 .desktop-app .account-context-status:not(:empty) { bottom: 140px; max-width: min(420px, calc(100vw - 24px)); }
 .desktop-app .account-check { top: auto; bottom: 180px; left: auto; right: 12px; max-height: 45dvh; overflow: auto; }
 
 .desktop-app .board-editor:has(.board-settings, .board-switcher) .board-notices:has(.board-save[data-save-state='saved']) { display: none; }
 .desktop-app .workspace-tools .incoming-panel { max-height: calc(100dvh - 12rem); }
 @media (max-width: 700px) { .desktop-app .workspace-tools .incoming-panel { max-height: calc(100dvh - 19rem); } }
-@media (max-width: 400px) {
- .desktop-app .account-controls { bottom: 100px; }
- .desktop-app .application-nav { bottom: calc(100px + 2.5rem); }
-}
+
+.app-loading { max-inline-size: none; margin: 0; padding: 0; min-height: 100dvh; display: grid; place-items: center; background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px); background-size: 20px 20px; }
+.app-loading p { color: var(--color-text-secondary); font-size: 0.8125rem; }
+.desktop-app .workspace-account { position: fixed; bottom: 48px; right: 12px; z-index: 500; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: calc(100vw - 24px); }
+@media (max-width: 700px) { .desktop-app .workspace-account { right: 6px; } }
+@media (max-width: 400px) { .desktop-app .workspace-account { bottom: 100px; } }

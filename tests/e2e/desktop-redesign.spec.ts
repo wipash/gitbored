@@ -115,3 +115,53 @@ test('automatic discovery pauses on errors and cannot pretend a partial import i
   const stats = await page.request.get(`${providerOrigin}/__source-stats`);
   expect(stats.ok()).toBe(true);
 });
+
+test('session restoration does not render the signed-out landing screen', async ({ page }) => {
+  const id = await create(page, 'Startup restoration');
+  for (const path of ['/', `/boards/${id}`]) {
+    let release = () => {};
+    let requested = false;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route('**/api/session', async (route) => { requested = true; await held; await route.continue(); });
+    try {
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      await expect.poll(() => requested).toBe(true);
+      await expect(page.getByRole('heading', { name: 'A little space for the big picture.' })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'Connect with GitHub' })).toHaveCount(0);
+    } finally { release(); }
+    await expect(page.locator('.tl-container')).toBeVisible();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+});
+
+test('account and theme controls have separate hit areas at normal and enlarged text sizes', async ({ page }) => {
+  await create(page, 'Account controls');
+  for (const width of [1440, 1280, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const fontSize of ['100%', '200%']) {
+      await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
+      const theme = await page.locator('.account-controls').boundingBox();
+      const account = await page.locator('.application-nav').boundingBox();
+      if (!theme || !account) throw new Error('Missing account controls');
+      expect.soft(theme.y - (account.y + account.height), `${width}px ${fontSize} gap`).toBeGreaterThanOrEqual(6);
+    }
+  }
+});
+
+test('Add selected stays reachable at the bottom of Incoming without scrolling the selection away', async ({ page }) => {
+  await create(page, 'Incoming footer');
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await connect(page);
+  await expect(page.locator('.incoming-candidates > li')).toHaveCount(5);
+  await page.locator('.incoming-candidates input[type=checkbox]').first().check();
+  await page.locator('.incoming-body').evaluate((body) => { body.scrollTop = body.scrollHeight; });
+  const hit = await page.getByRole('button', { name: 'Add selected', exact: true }).evaluate((button) => {
+    const bounds = button.getBoundingClientRect();
+    return button.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+  });
+  expect(hit).toBe(true);
+  await page.getByRole('button', { name: 'Add selected', exact: true }).click();
+  await expect(page.locator('.workspace-card')).toHaveCount(1);
+  await expect(page.locator('.incoming-candidates > li')).toHaveCount(4);
+  await expect(page.locator('#incoming-panel')).toBeVisible();
+});
