@@ -728,7 +728,9 @@ An HTTP origin on a non-loopback host is rejected, not silently upgraded.
 ## Continuous integration and container images
 
 The `CI` workflow runs on pull requests and pushes to `main`. Each authentication
-mode gets an isolated runner: the full `pnpm gate` uses a 900-second controlled
+mode gets an isolated runner using a pinned Playwright Ubuntu image with its
+browser, fonts and system dependencies preinstalled. Keep that image's version
+and digest aligned with `@playwright/test` when upgrading. The full `pnpm gate` uses a 900-second controlled
 session, while separate browser runs exercise short-session expiry and missing
 GitHub configuration. All builds use Node from `.node-version`, pnpm from
 `package.json`, the frozen lockfile and the committed tldraw patches. Failed
