@@ -6,7 +6,7 @@ import { validateIncoming } from '../../src/shared/incoming.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
 import type { SourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn, openSettings } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -192,6 +192,7 @@ test('same-user rotation and temporary sign-out retain dirty Incoming placements
       expect(renewed.user.id).toBe(previousSession.user.id);
       expect(renewed.csrfToken).not.toBe(previousSession.csrfToken);
     } else {
+      await openSettings(other);
       await other.getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
     }
@@ -215,12 +216,15 @@ test('same-user rotation and temporary sign-out retain dirty Incoming placements
     await page.unroute('**/api/session');
     await Promise.all(checks.map((route) => route.continue()));
     if (mode === 'signed-out') {
+      await openSettings(page);
       await expect(page.locator('.account-context-status')).toContainText('Your session ended');
       await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toHaveAttribute('aria-disabled', 'true');
       await privateValuesAbsent(page, items);
       await authorize(other, 'Alice');
+      await openSettings(page);
       await page.getByRole('button', { name: 'Check account', exact: true }).click();
     }
+    await openSettings(page);
     await expect(page.locator('.account-context-status')).toContainText('Your account is confirmed');
     await expect(page.locator('.board-save')).toContainText('saving is paused after an account check');
     await page.clock.runFor(1000);
@@ -289,9 +293,10 @@ test('confirmed Bob unmounts Alice Incoming before another private lookup and ig
   switched = true; holdMetadata = false;
   if (!pending) throw new Error('Missing Alice dirty placement');
   await pending.continue();
-  await expect(page.locator('.application-account')).toHaveText('Account: @bob');
-  expect(await original.evaluate((element) => element.isConnected)).toBe(false);
   await expect(page.locator('.tl-container, .incoming-panel')).toHaveCount(0);
+  expect(await original.evaluate((element) => element.isConnected)).toBe(false);
+  await openSettings(page);
+  await expect(page.locator('.application-account')).toHaveText('Account: @bob');
   await expect(page.getByRole('heading', { name: board.title, exact: true })).toHaveCount(0);
   // These are real Alice-authorized HTTP responses, not fabricated metadata. Late delivery
   // must not recreate the account-scoped editor after its requests have been canceled.

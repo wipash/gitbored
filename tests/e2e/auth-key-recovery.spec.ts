@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { controlProvider, currentSession, providerOrigin, restartApplication, signIn } from './auth-support.js';
+import { controlProvider, currentSession, providerOrigin, restartApplication, signIn, openSettings } from './auth-support.js';
 
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Recovery requires a configured GitHub App.');
 
@@ -27,6 +27,7 @@ for (const credential of ['access', 'refresh']) {
       expect(unreadable.user.githubId).toBe(original.user.githubId);
       expect(JSON.stringify(unreadable)).not.toMatch(/controlled-access|controlled-refresh|Unsupported state|authenticate data/);
       await page.reload();
+      await openSettings(page);
       await page.getByRole('link', { name: 'Reconnect GitHub' }).click();
       await page.getByRole('link', { name: 'Authorize Alice' }).click();
       await page.goto('/boards');
@@ -36,6 +37,7 @@ for (const credential of ['access', 'refresh']) {
       if (reconnected.status !== 'signed-in') throw new Error('Expected reconnected session');
       expect(reconnected.user.id).toBe(original.user.id);
       expect(reconnected.user.githubId).toBe(original.user.githubId);
+      await openSettings(page);
       await page.getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
     } finally {

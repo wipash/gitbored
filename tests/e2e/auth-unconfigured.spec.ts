@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { selectTheme } from './auth-support.js';
 
 test.skip(process.env['E2E_AUTH_MODE'] !== 'unconfigured', 'Run with E2E_AUTH_MODE=unconfigured for missing-credential acceptance.');
 
@@ -9,7 +10,7 @@ test('an unconfigured deployment explains setup and has no fake sign-in path in 
   expect(start.headers()['location']).toBe('/?authError=unconfigured');
   await page.goto('/');
   for (const theme of ['light', 'dark']) {
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await expect(page.getByText('GitHub sign-in is not configured on this deployment.', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Check configuration again' }).click();

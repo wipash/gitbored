@@ -3,7 +3,7 @@ import type { APIResponse, Page, Route } from '@playwright/test';
 import { createEmptyBoardDocument, validateBoard, type Board } from '../../src/shared/boards.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { emptyIncoming } from '../../src/shared/incoming.js';
-import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn, selectTheme, openSettings } from './auth-support.js';
 import { expectNativePoint } from './board-gestures.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -73,7 +73,7 @@ test('owners alone control boards and one atomic revision wins a concurrent save
 test('authenticated board controls and mixed native geometry survive reload and actual server restart', async ({ page }, testInfo) => {
   await controlProvider(page.request, { reset: true });
   await signIn(page);
-  await page.getByRole('link', { name: 'Boards', exact: true }).click();
+  await page.goto('/boards');
   await page.getByLabel('Board name', { exact: false }).fill('Native persistence');
   await page.getByRole('button', { name: 'Create board', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Native persistence', exact: true })).toBeFocused();
@@ -100,7 +100,7 @@ test('authenticated board controls and mixed native geometry survive reload and 
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
   const persisted = await read(page, id);
   for (const theme of ['light', 'dark']) {
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await expect(page.locator('.native-workspace')).toHaveAttribute('data-theme', theme);
     await page.screenshot({ path: testInfo.outputPath(`board-${theme}.png`), fullPage: true });
   }
@@ -117,7 +117,7 @@ test('authenticated board controls and mixed native geometry survive reload and 
   const styles = await page.getByRole('button', { name: 'Styles', exact: true }).boundingBox();
   expect(styles).not.toBeNull();
   expect(styles && styles.x >= 0 && styles.x + styles.width <= 320).toBe(true);
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await openSettings(page);
   await page.getByLabel('Board name', { exact: true }).fill('Renamed board');
   await page.getByRole('button', { name: 'Rename board', exact: true }).focus();
   await page.keyboard.press('Enter');
@@ -209,7 +209,7 @@ for (const { theme, width } of [{ theme: 'light', width: 1440 }, { theme: 'dark'
   test(`keyboard Retry loading deliberately returns focus during the real ${theme} ${width}px list request`, async ({ page }) => {
     await controlProvider(page.request, { reset: true }); await signIn(page);
     const board = await create(page, `Focus recovery ${theme}`);
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await page.setViewportSize({ width, height: 1000 });
     let fail = true;
     let hold = true;
