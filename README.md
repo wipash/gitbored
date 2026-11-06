@@ -249,7 +249,9 @@ registered in `pnpm-workspace.yaml`, correct accepted-key releases in
 `@tldraw/editor` and tldraw's body-owned comma shortcut. A native press must finish
 even if focus moves to a button, link or other UI. The SDK retains its own
 modifier/Meta cleanup and comma pointer lifecycle; the application does not copy
-that bookkeeping or dispatch substitute keyboard events.
+that bookkeeping or dispatch substitute keyboard events. Accepted shortcut registrations
+survive action/tool registry rebuilds while a key is held, so opening a panel
+cannot lose the matching release.
 Repeats cannot transfer a press already accepted by another native handler when
 modifiers change its reported character.
 
