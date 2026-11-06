@@ -27,4 +27,4 @@ The title receives a native tooltip for pointer access to truncated text. Keyboa
 
 Client TypeScript passes: `PATH=/tmp/gitbored-tools:$PATH pnpm exec tsc -p tsconfig.client.json`.
 
-Runtime audit not yet complete. Parent coordinates preview and focused browser queue; no independent browser server started. Existing save failure/delay/conflict test asserts retry focus on status and is the intended regression coverage.
+Coordinated browser audit passed the saved-feedback test: routine Saved occupies no visible space, a failed real save exposes Retry save, and retry returns to Saved. Existing mobile-layout and card-details regressions also pass. Final gate includes existing failure/delay/conflict tests and retry focus behavior. No independent browser server was started.
