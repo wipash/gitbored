@@ -1,6 +1,6 @@
 # Card colours
 
-Work state: in-review
+Work state: done
 
 ## Decisions for morning review
 

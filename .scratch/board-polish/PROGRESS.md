@@ -15,3 +15,11 @@ Implementation evidence:
 - UI colour check caught CSS cascade override; fixed and focused test passed.
 - Menu suite: 28 passed, 1 environment-specific skip; final narrow interaction check in progress.
 - PM-guide references removed at user's request, including stale historical pointers. No replacement management process added.
+
+Integrated validation (application code e6b6c98, diagnostic test correction 4b63870):
+- Node 26.8.1 and pnpm 12.16.1, using `/tmp/gitbored-tools` to bypass the host Volta Node 24 shim.
+- `pnpm gate` passed lint, types and 14 native tests, then exposed a diagnostic fixture expecting uncached data. The fixture now explicitly refreshes; its rejection assertions are unchanged.
+- `pnpm test:server`: 3 passed after that correction.
+- Remaining gate stage `pnpm test:e2e`: 81 passed, 1 unconfigured-mode test skipped in the configured run (3.4 minutes). Hosted CI separately exercises unconfigured mode and short-session expiry.
+- Independent spec and standards reviews: no outstanding findings. UI coverage and exclusions are in the slice reports.
+- Gitboard PR: https://github.com/wipash/gitbored/pull/4. Hosted CI and image publishing precede the homelab update.
