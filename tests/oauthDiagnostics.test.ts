@@ -304,7 +304,7 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
     ], 'Only the validated page number is used; never follow provider URLs or cursors.');
     for (const invalid of ['foreign-repository', 'foreign-origin', 'skip-page'] as const) {
       issuePagination = invalid;
-      const response = await fetch(`${applicationOrigin}/api/sources/repositories/alice/project/items?page=1`, { headers: sourceHeaders });
+      const response = await fetch(`${applicationOrigin}/api/sources/repositories/alice/project/items?page=1&refresh=1`, { headers: sourceHeaders });
       assert.equal(response.status, 502, `Reject ${invalid} pagination.`);
     }
     issuePagination = undefined;
