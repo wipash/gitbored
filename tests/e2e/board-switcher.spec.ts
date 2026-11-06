@@ -20,6 +20,12 @@ test('board switcher stays below its trigger with a fixed header and keyboard-re
   const session = await currentSession(page.request);
   if (session.status !== 'signed-in') throw new Error('Expected signed-in owner');
   const headers = { Origin: applicationOrigin, 'X-CSRF-Token': session.csrfToken };
+  const existingResponse = await page.request.get('/api/boards', { headers });
+  expect(existingResponse.ok()).toBe(true);
+  const existing: unknown = await existingResponse.json();
+  if (typeof existing !== 'object' || existing === null || !('boards' in existing) || !Array.isArray(existing.boards)) throw new Error('Expected board list');
+  // The suite shares its database; provider reset does not delete earlier boards.
+  const expectedCount = existing.boards.length + 13;
   for (let index = 0; index < 12; index += 1) {
     const response = await page.request.post('/api/boards', { headers, data: { title: `Switcher board ${index + 1} with enough text to test wrapping` } });
     expect(response.status()).toBe(201);
@@ -58,8 +64,8 @@ test('board switcher stays below its trigger with a fixed header and keyboard-re
     await expect(switcher.getByRole('button', { name: 'Create board', exact: true })).toBeFocused();
     await hitTarget(switcher.getByRole('button', { name: 'Create board', exact: true }));
     const links = switcher.getByRole('link');
-    await expect(links).toHaveCount(13);
-    for (let index = 0; index < 13; index += 1) {
+    await expect(links).toHaveCount(expectedCount);
+    for (let index = 0; index < expectedCount; index += 1) {
       await page.keyboard.press('Tab');
       await expect(links.nth(index)).toBeFocused();
       await hitTarget(links.nth(index));

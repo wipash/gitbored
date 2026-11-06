@@ -136,12 +136,21 @@ test('mobile details follow zoom in both directions and pan with an expanded car
   await page.mouse.move(zoomPoint.x, zoomPoint.y);
   await page.keyboard.down('Space');
   await page.mouse.down();
-  await page.mouse.move(zoomPoint.x, zoomPoint.y - 150, { steps: 5 });
-  await page.mouse.up();
-  await page.keyboard.up('Space');
-  await expect.poll(async () => (await selectedBounds(page)).card.y).toBeLessThan(zoomedOut.card.y - 100);
-  await expect.poll(async () => (await selectedBounds(page)).panel.y).toBeLessThan(zoomedOut.panel.y - 30);
-  await expect.poll(async () => { const bounds = await selectedBounds(page); return Math.abs(bounds.panel.y - bounds.card.y); }).toBeLessThan(2);
+  try {
+    await page.mouse.move(zoomPoint.x, zoomPoint.y - 150, { steps: 5 });
+    // Check the anchor during the drag: release starts native inertial panning,
+    // which may carry the card offscreen while the readable panel stays clamped.
+    await expect.poll(async () => (await selectedBounds(page)).card.y).toBeLessThan(zoomedOut.card.y - 100);
+    await expect.poll(async () => (await selectedBounds(page)).panel.y).toBeLessThan(zoomedOut.panel.y - 30);
+    await expect.poll(async () => { const bounds = await selectedBounds(page); return Math.abs(bounds.panel.y - bounds.card.y); }).toBeLessThan(2);
+  } finally {
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+  }
+  await expect.poll(async () => {
+    const { panel } = await selectedBounds(page);
+    return panel.x >= 0 && panel.x + panel.width <= 390 && panel.y >= 60 && panel.y + panel.height <= 740;
+  }).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('mobile-details-zoomed-out.png') });
   const outScale = await panelScale();
   await page.mouse.move(zoomPoint.x, zoomPoint.y);
