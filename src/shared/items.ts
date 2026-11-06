@@ -1,6 +1,8 @@
 import type { ItemContext } from './planning.js';
 import { T } from '@tldraw/validate';
 
+export const MAX_ITEM_BODY_LENGTH = 65_536;
+
 export type ItemKind = 'issue' | 'pull-request';
 
 export const itemReferenceIdValidator = T.string.check((value) => {
@@ -46,6 +48,7 @@ export interface ItemMetadata {
   kind: ItemKind;
   locator: GitHubLocator;
   title: string;
+  body?: string | null | undefined;
   state: 'open' | 'closed' | 'draft' | 'merged' | 'unknown';
   labels: readonly string[];
   assignees: readonly string[];
@@ -58,7 +61,7 @@ export interface ItemMetadata {
 }
 
 export type ItemMetadataState =
-  | { status: 'ready'; item: ItemMetadata }
+  | { status: 'ready'; item: ItemMetadata; refreshing?: boolean }
   | { status: 'unresolved' | 'loading' | 'unavailable' | 'sso-required' | 'error' };
 
 // The owner replaces/clears this map on authorization changes. No card fetches data.

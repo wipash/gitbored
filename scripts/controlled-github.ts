@@ -19,7 +19,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
   const tokens = new Map<string, { id: number; revoked: boolean; expires: number }>();
   const refreshTokens = new Map<string, number>();
   const defaults = (): ProviderSettings => ({ login: 'alice', expiresIn: 28800, refreshExpiresIn: 15897600,
-    fail: false, deny: false, rateLimit: false, sourceMode: 'normal', sourceFailurePage: 0, pullUnavailable: false, sourceDelayMs: 0, sourceDenied: false, sourceSsoRequired: false, sourceSsoPath: '', sourceDenialStatus: 403, sourceThrottlePage: 0, sourceRepositoryRenamed: false });
+    fail: false, deny: false, rateLimit: false, sourceMode: 'normal', sourceFailurePage: 0, sourceDetailFailure: false, pullUnavailable: false, sourceDelayMs: 0, sourceDenied: false, sourceSsoRequired: false, sourceSsoPath: '', sourceDenialStatus: 403, sourceThrottlePage: 0, sourceRepositoryRenamed: false });
   let settings = defaults();
   let refreshCount = 0;
   let exchangeCount = 0;
@@ -42,6 +42,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
     if ('revoke' in value) for (const token of tokens.values()) token.revoked = true;
     if ('revokeRefresh' in value) refreshTokens.clear();
     if ('sourceMode' in value && (value.sourceMode === 'normal' || value.sourceMode === 'empty' || value.sourceMode === 'malformed' || value.sourceMode === 'untrusted-link')) settings.sourceMode = value.sourceMode;
+    if ('sourceDetailFailure' in value && typeof value.sourceDetailFailure === 'boolean') settings.sourceDetailFailure = value.sourceDetailFailure;
     if ('sourceFailurePage' in value && typeof value.sourceFailurePage === 'number') settings.sourceFailurePage = value.sourceFailurePage;
     if ('pullUnavailable' in value && typeof value.pullUnavailable === 'boolean') settings.pullUnavailable = value.pullUnavailable;
     if ('sourceDelayMs' in value && typeof value.sourceDelayMs === 'number' && value.sourceDelayMs >= 0 && value.sourceDelayMs <= 5000) settings.sourceDelayMs = value.sourceDelayMs;
@@ -67,7 +68,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
       return reply.type('text/html').send(`<!doctype html><html lang="en"><title>Controlled GitHub</title><body><h1>Controlled GitHub authorization</h1><p>Test identities only; not real GitHub.</p><a href="${alice.pathname}${alice.search.replaceAll('&', '&amp;')}">Authorize Alice</a> <a href="${bob.pathname}${bob.search.replaceAll('&', '&amp;')}">Authorize Bob</a></body></html>`);
     }
     const redirect = url.searchParams.get('redirect_uri');
-    if (!redirect || !['http://127.0.0.1:3100/api/auth/callback', 'http://127.0.0.1:3001/api/auth/callback', 'http://127.0.0.1:3005/api/auth/callback', 'http://127.0.0.1:3009/api/auth/callback', 'https://127.0.0.1:3010/api/auth/callback'].includes(redirect)) {
+    if (!redirect || !['http://127.0.0.1:3100/api/auth/callback', 'http://127.0.0.1:3118/api/auth/callback', 'http://127.0.0.1:3001/api/auth/callback', 'http://127.0.0.1:3005/api/auth/callback', 'http://127.0.0.1:3009/api/auth/callback', 'https://127.0.0.1:3010/api/auth/callback'].includes(redirect)) {
       return reply.code(400).send({ error: 'Unregistered test callback' });
     }
     const callback = new URL(redirect);

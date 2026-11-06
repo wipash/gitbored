@@ -1,5 +1,5 @@
 import { T } from '@tldraw/validate';
-import { itemReferenceValidator } from './items.js';
+import { itemReferenceValidator, MAX_ITEM_BODY_LENGTH } from './items.js';
 import type { ItemMetadata, ItemReference } from './items.js';
 
 export interface Installation {
@@ -36,6 +36,7 @@ const sourceItemValidator = T.object({
   metadata: T.object({
     kind: T.literalEnum('issue', 'pull-request'),
     locator: T.object({ owner: T.string, repository: T.string, number: T.number }),
+    body: T.string.check((value) => { if (value.length > MAX_ITEM_BODY_LENGTH) throw new Error('Item body exceeds the supported size'); }).nullable().optional(),
     title: T.string, state: T.literalEnum('open', 'closed', 'draft', 'merged', 'unknown'),
     labels: T.arrayOf(T.string), assignees: T.arrayOf(T.string), freshness: T.literalEnum('current', 'stale'),
     sourceState: T.literalEnum('open', 'closed').optional(),
