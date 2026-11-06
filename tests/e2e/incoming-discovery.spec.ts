@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { validateBoard } from '../../src/shared/boards.js';
-import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn, selectTheme, openWorkspaceMenu } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -30,6 +30,7 @@ async function chooseSource(page: Page) {
   await page.getByRole('button', { name: 'Connect repository', exact: true }).click();
 }
 async function addUrl(page: Page) {
+  await openWorkspaceMenu(page);
   await page.getByRole('button', { name: 'Repositories', exact: true }).click();
   await page.getByLabel('Search repositories').fill('https://github.com/alice/project/issues/1');
   await page.getByRole('button', { name: 'Add to Incoming', exact: true }).click();
@@ -80,7 +81,7 @@ for (const theme of ['light', 'dark']) {
     const board = await create(page, `Keyboard Incoming ${theme}`);
     await chooseSource(page);
     await expect(page.locator('.incoming-candidates > li')).toHaveCount(5); await saved(page);
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await page.setViewportSize({ width: 320, height: 800 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

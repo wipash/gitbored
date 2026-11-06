@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { applicationOrigin, controlProvider, currentSession, providerOrigin, restartApplication, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, providerOrigin, restartApplication, signIn, selectTheme } from './auth-support.js';
 import { validateBoard } from '../../src/shared/boards.js';
 import { readRepositoryLocator, readSourcePage } from '../../src/shared/sources.js';
 
@@ -14,7 +14,7 @@ test('find a repository directly, carry it into a board, and reuse it without pa
   await page.getByRole('button', { name: 'Repositories', exact: true }).click();
   await page.getByLabel('Search repositories').fill('alice/project');
   await page.getByRole('button', { name: /alice\/project/ }).first().click();
-  await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+  await selectTheme(page, 'dark');
   await page.getByRole('button', { name: 'Connect repository', exact: true }).click();
   await expect(page.locator('.incoming-candidates > li')).toHaveCount(2);
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
@@ -28,7 +28,7 @@ test('find a repository directly, carry it into a board, and reuse it without pa
   await page.getByRole('button', { name: 'Repositories', exact: true }).click();
   await page.getByRole('button', { name: /alice\/project/ }).first().click();
   await expect(page.getByRole('button', { name: 'Connect repository', exact: true })).toBeDisabled();
-  await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+  await selectTheme(page, 'dark');
   await page.screenshot({ path: info.outputPath('connection-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 320, height: 900 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });

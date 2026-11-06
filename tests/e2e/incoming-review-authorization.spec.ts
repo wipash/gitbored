@@ -4,7 +4,7 @@ import { validateBoard } from '../../src/shared/boards.js';
 import type { Board } from '../../src/shared/boards.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
 import type { SourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn, openSettings, selectTheme } from './auth-support.js';
 
 test.use({ viewport: { width: 1440, height: 1000 } });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires controlled GitHub authorization.');
@@ -122,7 +122,7 @@ test('an initially reauthorization-required GitHub session withholds Incoming re
   await expect(incoming.getByRole('link', { name: /reconnect GitHub/i })).toBeVisible();
   await expect(incoming.locator('.incoming-candidates > li')).toHaveCount(2);
   for (const theme of ['light', 'dark']) {
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await incoming.getByRole('heading', { name: 'Incoming 2', exact: true }).focus();
     await page.screenshot({ path: `test-results/incoming-reauthorize-${theme}-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 320, height: 800 });
@@ -238,6 +238,7 @@ test('a retained repository connector session loss invalidates accepted hydratio
     await expect(browser.getByLabel('Search repositories')).toBeVisible();
     await privateValuesAbsent(page, items);
     await other.goto('/boards');
+    await openSettings(other);
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
     expect(await currentSession(other.request)).toMatchObject({ status: 'signed-out' });
@@ -269,6 +270,7 @@ test('a retained repository connector session loss invalidates accepted hydratio
     await expect.poll(() => checks.length).toBeGreaterThan(0);
     holdSession = false;
     await Promise.all(checks.splice(0).map((route) => route.continue()));
+    await openSettings(page);
     await expect(page.locator('.account-context-status')).toContainText('Your session ended');
     expect(await original.evaluate((element) => element.isConnected)).toBe(true);
     await privateValuesAbsent(page, items);
@@ -323,6 +325,7 @@ test('global source-context loss rejects a previously authorized discovery page 
     await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     await expect(page.getByLabel('Search repositories')).toBeVisible();
     await other.goto('/boards');
+    await openSettings(other);
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
     await page.route('**/api/session', holdReconciliation);

@@ -16,6 +16,7 @@ import type { SaveCoordinator } from './saveCoordinator';
 import './incoming.css';
 import { useWorkspacePanel } from '../workspace/panels';
 import { usePanelClearance } from '../workspace/usePanelClearance';
+import { focusPanelTrigger } from '../workspace/focusPanelTrigger';
 
 interface PlacementHistory { candidate: IncomingCandidate; shapeId: TLShapeId }
 interface WorkspaceModel {
@@ -303,7 +304,7 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
     container.addEventListener('dragover', over, true); container.addEventListener('drop', drop, true);
     return () => { container.removeEventListener('dragover', over, true); container.removeEventListener('drop', drop, true); drag.current = null; };
   }, [editor]);
-  function dismiss() { setOpen(false); trigger.current?.focus(); }
+  function dismiss() { setOpen(false); focusPanelTrigger(trigger.current); }
   async function checkGithubAccess(button: HTMLButtonElement) {
     await model.authority.reconcile();
     if (!button.isConnected && document.activeElement === document.body) heading.current?.focus();
@@ -410,7 +411,7 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
       <button ref={trigger} type="button" className="incoming-trigger" aria-expanded={open} aria-controls="incoming-panel" onClick={() => { setOpen(!open); setBrowsing(false); }}><Icon name="incoming" /> Incoming <span>{model.incoming.queue.length}</span></button>
     </div>
     {model.authority.ready && sourceHost && createPortal(<section hidden={!browsing} className="board-source-panel" aria-label="Board repository connection">
-      <div className="incoming-heading"><h2>Repositories</h2><button type="button" data-native-dismiss onClick={() => { setBrowsing(false); repositoryTrigger.current?.focus(); }} aria-label="Close repositories"><Icon name="close" /></button></div>
+      <div className="incoming-heading"><h2>Repositories</h2><button type="button" data-native-dismiss onClick={() => { setBrowsing(false); focusPanelTrigger(repositoryTrigger.current); }} aria-label="Close repositories"><Icon name="close" /></button></div>
       {model.readReady ? <RepositoryConnector session={model.authority.session} onConnect={selectSource} onAddItem={addCandidate} onAccessLoss={model.accessLost} connected={model.incoming.sources} /> : <p role="status">Check your GitHub account to continue.</p>}
       <ul className="incoming-sources">{model.incoming.sources.map((source) => <li key={source.repositoryNodeId}><span>{source.owner}/{source.repository}</span><button type="button" disabled={busySource !== null} onClick={() => model.commit((state) => ({ ...state, sources: state.sources.filter((entry) => entry.repositoryNodeId !== source.repositoryNodeId) }))}>Disconnect</button></li>)}</ul>
     </section>, sourceHost)}

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { controlProvider, signIn } from './auth-support.js';
+import { expectNativePoint } from './board-gestures.js';
 
 test.use({ viewport: { width: 1440, height: 900 } });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires GitHub fixture.');
@@ -21,7 +22,6 @@ async function expectAnchored(page: Page) {
 test('details follow the selected card while panning and zooming, switch directly, and dismiss to the canvas', async ({ page }, testInfo) => {
   await controlProvider(page.request, { reset: true });
   await signIn(page);
-  await page.getByRole('link', { name: 'Boards', exact: true }).click();
   await page.getByLabel('Board name', { exact: true }).fill('Anchored details');
   await page.getByRole('button', { name: 'Create board', exact: true }).click();
   await page.getByRole('button', { name: 'Repositories', exact: true }).click();
@@ -44,11 +44,15 @@ test('details follow the selected card while panning and zooming, switch directl
   await page.keyboard.up('Space');
   await expectAnchored(page);
   await expect.poll(async () => (await selectedBounds(page)).panel.x).toBeLessThan(initial.panel.x - 40);
-  await page.mouse.move(650, 700);
+  const zoomPoint = { x: 1300, y: 650 };
+  await expectNativePoint(page, zoomPoint);
+  await page.mouse.move(zoomPoint.x, zoomPoint.y);
   await page.keyboard.down('Control');
-  await page.mouse.wheel(0, -140);
-  await page.keyboard.up('Control');
-  await expect.poll(async () => (await selectedBounds(page)).card.width).not.toBe(initial.card.width);
+  try {
+    await page.mouse.wheel(0, -140);
+    // Wheel delivery is asynchronous; retain the modifier until the zoom is rendered.
+    await expect.poll(async () => Math.abs((await selectedBounds(page)).card.width - initial.card.width)).toBeGreaterThan(1);
+  } finally { await page.keyboard.up('Control'); }
   await expectAnchored(page);
   await page.screenshot({ path: testInfo.outputPath('anchored-details-desktop.png') });
   await page.getByRole('button', { name: /^Find/ }).click();

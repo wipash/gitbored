@@ -73,7 +73,9 @@ function WorkspaceStylePanel(props: TLUiStylePanelProps) {
 function WorkspaceBackground() {
   const editor = useEditor();
   const camera = useValue('Canvas dot grid', () => editor.getCamera(), [editor]);
-  return <div className="tl-background" style={{ backgroundImage: 'radial-gradient(var(--color-border-subtle) .8px, transparent .8px)', backgroundSize: `${20 * camera.z}px ${20 * camera.z}px`, backgroundPosition: `${camera.x * camera.z}px ${camera.y * camera.z}px` }} />;
+  const step = 20 * camera.z;
+  const spacing = step * Math.max(1, 2 ** Math.ceil(Math.log2(16 / step)));
+  return <div className="tl-background" style={{ backgroundImage: 'radial-gradient(var(--color-border-subtle) .8px, transparent .8px)', backgroundSize: `${spacing}px ${spacing}px`, backgroundPosition: `${camera.x * camera.z}px ${camera.y * camera.z}px` }} />;
 }
 const components: TLComponents = { Background: WorkspaceBackground, Toolbar: WorkspaceToolbar, StylePanel: WorkspaceStylePanel, MainMenu: null, SharePanel: null };
 const shapeUtils = [ItemCardShapeUtil];

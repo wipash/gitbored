@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
 import { validateBoard } from '../../src/shared/boards.js';
-import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn, openSettings, selectTheme } from './auth-support.js';
 import { expectNativePoint } from './board-gestures.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -56,7 +56,7 @@ function geometry(board: Awaited<ReturnType<typeof read>>) {
 test('retired routes open Boards without legacy navigation in either theme', async ({ page }, testInfo) => {
   await signIn(page);
   for (const theme of ['light', 'dark']) {
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     for (const route of ['/sources', '/account']) {
       await page.goto(route);
       await expect(page).toHaveURL('/boards');
@@ -65,7 +65,10 @@ test('retired routes open Boards without legacy navigation in either theme', asy
       await page.setViewportSize({ width: 320, height: 900 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await openSettings(page);
+      await page.getByRole('button', { name: 'Sign out', exact: true }).focus();
       await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeInViewport();
+      await page.getByLabel('Theme', { exact: true }).focus();
       await expect(page.getByLabel('Theme', { exact: true })).toBeInViewport();
       await page.screenshot({ path: testInfo.outputPath(`boards-${theme}-narrow.png`), fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -92,12 +95,14 @@ test('same-user session rotation retains native lifetime, acknowledged revision,
   await nudge(page, 'ArrowRight');
   expect((await rejected).status()).toBe(403);
   await expect(page.locator('.board-save')).toContainText('saving is paused after an account check');
+  await openSettings(page);
   await expect(page.locator('.application-account')).toHaveText('Account: @alice');
   expect(await original.evaluate((element) => element.isConnected)).toBe(true);
   await nudge(page, 'ArrowDown');
   // Observe beyond two document-save debounce windows: new input must not replay a failed write.
   await page.waitForTimeout(650);
   expect(writes).toBe(1); expect((await read(page, board.id)).revision).toBe(1);
+  await openSettings(page);
   await page.getByRole('link', { name: 'Boards', exact: true }).click();
   await expect(page.getByText('Save this board or save a copy before switching boards.')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/boards/${board.id}$`));
@@ -119,15 +124,17 @@ test('signed-out and transient reconciliation retain a dirty canvas until same-u
   const original = await page.locator('.tl-container').elementHandle();
   if (!original) throw new Error('Missing mounted canvas');
   const other = await context.newPage(); await other.goto('/boards');
+  await openSettings(other);
   await other.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
   let writes = 0;
   page.on('request', (request) => { if (request.method() === 'PUT' && request.url().endsWith(`/api/boards/${board.id}`)) writes += 1; });
   await nudge(page, 'ArrowRight');
+  await openSettings(page);
   await expect(page.locator('.account-context-status')).toContainText('Your session ended');
   await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toHaveAttribute('aria-disabled', 'true');
   expect(await original.evaluate((element) => element.isConnected)).toBe(true);
-  await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+  await selectTheme(page, 'dark');
   await page.setViewportSize({ width: 320, height: 900 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -137,13 +144,17 @@ test('signed-out and transient reconciliation retain a dirty canvas until same-u
   await other.goto('/boards');
   await expect(other.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
   await page.route('**/api/session', async (route) => { await route.abort('connectionfailed'); });
+  await openSettings(page);
   await page.getByRole('button', { name: 'Check account', exact: true }).focus(); await page.keyboard.press('Enter');
+  await openSettings(page);
   await expect(page.locator('.account-context-status')).toContainText('could not be checked');
   await expect(page.getByRole('button', { name: 'Check account', exact: true })).toBeFocused();
   expect(await original.evaluate((element) => element.isConnected)).toBe(true);
   await page.unroute('**/api/session');
   await page.keyboard.press('Enter');
+  await openSettings(page);
   await expect(page.locator('.account-context-status')).toContainText('Your account is confirmed');
+  await openSettings(page);
   await expect(page.locator('.account-context-status')).toBeFocused();
   expect(writes).toBe(1); expect((await read(page, board.id)).revision).toBe(before.revision);
   await page.getByRole('button', { name: 'Retry save', exact: true }).focus(); await page.keyboard.press('Enter');
@@ -162,9 +173,10 @@ test('a confirmed different account unmounts the old dirty canvas before exposin
   const other = await context.newPage(); await authorize(other, 'Bob');
   const bob = await create(other, 'Bob private board');
   await nudge(page, 'ArrowRight');
-  await expect(page.locator('.application-account')).toHaveText('Account: @bob');
-  expect(await original.evaluate((element) => element.isConnected)).toBe(false);
   await expect(page.locator('.tl-container')).toHaveCount(0);
+  expect(await original.evaluate((element) => element.isConnected)).toBe(false);
+  await openSettings(page);
+  await expect(page.locator('.application-account')).toHaveText('Account: @bob');
   await expect(page.getByRole('heading', { name: 'Alice confidential board', exact: true })).toHaveCount(0);
   expect((await page.request.get(`/api/boards/${alice.id}`, { headers: await headers(page) })).status()).toBe(404);
   await page.getByRole('link', { name: 'Return to Boards', exact: true }).click();
@@ -186,6 +198,7 @@ for (const target of ['list', 'load']) {
     });
     await page.goto(target === 'list' ? '/boards' : `/boards/${alice.id}`);
     await expect.poll(() => held.length).toBeGreaterThan(0);
+    await openSettings(page);
     await expect(page.locator('.application-account')).toHaveText('Account: @alice');
     const other = await context.newPage(); await authorize(other, 'Bob');
     const bob = await create(other, `Bob pending ${target}`);
@@ -196,6 +209,7 @@ for (const target of ['list', 'load']) {
     const rejected = await stale;
     expect([401, 409]).toContain(rejected.status());
     expect(await rejected.json()).toHaveProperty('error');
+    await openSettings(page);
     await expect(page.locator('.application-account')).toHaveText('Account: @bob');
     if (target === 'list') await expect(page.getByRole('link', { name: bob.title, exact: true })).toBeVisible();
     else { await expect(page.locator('.board-loading')).toContainText('could not be opened'); await expect(page.locator('.tl-container')).toHaveCount(0); }
@@ -258,6 +272,7 @@ test('dirty Sign out and real Stay retain a truthfully blocked native draft unti
   await expect.poll(() => Boolean(pending)).toBe(true);
   const leaving = page.waitForEvent('dialog');
   const signedOut = page.waitForResponse((response) => response.url().endsWith('/api/auth/logout'));
+  await openSettings(page);
   const click = page.getByRole('button', { name: 'Sign out', exact: true }).click({ noWaitAfter: true });
   const warning = await leaving; expect(warning.type()).toBe('beforeunload'); await warning.dismiss(); await click;
   expect((await signedOut).ok()).toBe(true);
@@ -272,16 +287,17 @@ test('dirty Sign out and real Stay retain a truthfully blocked native draft unti
   await testInfo.attach('retained-logout-state.json', { contentType: 'application/json', body: JSON.stringify(await page.evaluate(() => ({
     identity: document.querySelector('.application-account')?.textContent,
     status: document.querySelector('.account-context-status')?.textContent,
-    signOutLabel: document.querySelector('.application-nav button')?.textContent,
+    signOutLabel: document.querySelector('.account-settings-actions button')?.textContent,
     editorMounted: Boolean(document.querySelector('.tl-container')),
   }))) });
   for (const theme of ['light', 'dark']) {
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await page.screenshot({ path: testInfo.outputPath(`logout-stay-${theme}-desktop.png`), fullPage: true });
     await page.setViewportSize({ width: 320, height: 900 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     for (const control of [page.getByRole('button', { name: 'Check account', exact: true }), page.getByRole('link', { name: 'Renew sign-in in a new tab', exact: true })]) {
+      await control.focus();
       const box = await control.boundingBox(); expect(box && box.x >= 0 && box.x + box.width <= 320).toBe(true);
     }
     await page.screenshot({ path: testInfo.outputPath(`logout-stay-${theme}-narrow.png`), fullPage: true });
@@ -289,6 +305,7 @@ test('dirty Sign out and real Stay retain a truthfully blocked native draft unti
     await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
   }
   const other = await context.newPage(); await authorize(other, 'Alice');
+  await openSettings(page);
   await page.getByRole('button', { name: 'Check account', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Account check', exact: true })).toHaveCount(0);
   await page.clock.runFor(1000); expect(writes).toBe(1);

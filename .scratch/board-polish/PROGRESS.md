@@ -23,3 +23,11 @@ Integrated validation (application code e6b6c98, diagnostic test correction 4b63
 - Remaining gate stage `pnpm test:e2e`: 81 passed, 1 unconfigured-mode test skipped in the configured run (3.4 minutes). Hosted CI separately exercises unconfigured mode and short-session expiry.
 - Independent spec and standards reviews: no outstanding findings. UI coverage and exclusions are in the slice reports.
 - Gitboard PR: https://github.com/wipash/gitbored/pull/4. Hosted CI and image publishing precede the homelab update.
+
+
+Mobile follow-up:
+- PR #4 merged as 62072a2; user then requested compact mobile menus and account/theme inside Settings using their phone screenshot.
+- Follow-up branch `fix/mobile-workspace-menus` adds the compact Menu, non-modal phone panels and shared account settings, retaining auth recovery and editor lifetime.
+- The first main publication was stopped by a flaky popup zoom interaction. Corrected test targets verified canvas and holds Control until zoom renders; three consecutive runs passed. No assertion was removed.
+- Bounded mobile/account reviews found and corrected recovery notice overlap. New touch flow and 10 targeted recovery/session tests pass; final full gate and hosted CI will determine release readiness.
+- Homelab branch `chore/gitbored-board-polish` is prepared locally but not pushed. Its image tag will be replaced with the follow-up merge SHA before opening the release PR.

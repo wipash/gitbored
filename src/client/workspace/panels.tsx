@@ -9,3 +9,11 @@ export function useWorkspacePanel() {
 }
 
 export const BoardSettingsContext = createContext<ReactNode>(null);
+
+interface AccountSettingsValue {
+  content: ReactNode;
+  needsAttention: boolean;
+  workspaceMounted: boolean;
+  registerWorkspace: () => () => void;
+}
+export const AccountSettingsContext = createContext<AccountSettingsValue | null>(null);

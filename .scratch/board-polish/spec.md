@@ -11,3 +11,7 @@ Assumptions to check with Sean in the morning:
 - Details follow the selected card at a readable fixed size, flip sides near an edge, and clamp within a narrow viewport.
 
 Delivery: focused team implementation/review, one integration gate, Gitboard PR(s) merged, published immutable image tag pinned in homelab PR with CI green and merged. Avoid unrelated cleanup and speculative review findings.
+
+## Follow-up: mobile menus
+
+After PR #4, Sean supplied a phone screenshot and asked for improved mobile menu placement/layout, with account and theme controls only in Settings. Implement a compact phone header/Menu trigger and reachable panels above the drawing toolbar; remove the floating bottom account/theme stack. Preserve desktop behavior, auth recovery and canvas lifetime. Ship a follow-up Gitboard PR and use its merged image in the pending homelab update.

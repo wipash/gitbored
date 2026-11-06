@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { controlProvider, currentSession, signIn } from './auth-support.js';
+import { controlProvider, currentSession, signIn, selectTheme, openSettings } from './auth-support.js';
 import { validateBoard } from '../../src/shared/boards.js';
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -30,7 +30,7 @@ test('saved card colours return after temporary status, priority and split-label
   const reference = await card.getAttribute('data-reference-id');
   const original = await card.evaluate((element) => getComputedStyle(element).backgroundImage);
   await page.getByRole('button', { name: 'Close details' }).click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await openSettings(page);
   await page.getByLabel('Colour cards by').selectOption('status');
   await expect(card).toHaveAttribute('data-colour-by', 'status');
   await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).backgroundImage)).not.toBe(original);
@@ -60,11 +60,11 @@ test('saved card colours return after temporary status, priority and split-label
   await expect(page.locator(`.workspace-card[data-reference-id="${reference}"]`)).toHaveAttribute('data-card-colour', 'blue');
   await expect(page.locator('.workspace-card-heading .card-category').filter({ hasText: /^Open$/ }).first()).toHaveCSS('border-inline-start-color', 'rgb(18, 52, 86)');
   for (const theme of ['light', 'dark']) {
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await page.screenshot({ path: testInfo.outputPath(`card-colours-${theme}.png`) });
   }
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await openSettings(page);
   await page.getByLabel('Colour cards by').selectOption('labels');
   await page.getByText('Edit category colours', { exact: true }).click();
   await page.getByLabel('Colour category').selectOption('label');

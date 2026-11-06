@@ -5,7 +5,7 @@ import { validateIncoming } from '../../src/shared/incoming.js';
 import { createEmptyBoardDocument, validateBoard, type Board } from '../../src/shared/boards.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn, openSettings, selectTheme } from './auth-support.js';
 import { expectNativePoint } from './board-gestures.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -132,9 +132,10 @@ test('two independent contexts preserve the latest conflicting mixed pair as a p
     expect(JSON.stringify(draft.value)).not.toContain('Label 1 extended');
     expect(Object.values(draft.value.document.snapshot.store).find((record) => record.id === 'binding:arrow-card')).toEqual(Object.values(board.document.snapshot.store).find((record) => record.id === 'binding:arrow-card'));
     for (const theme of ['light', 'dark']) {
-      await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+      await selectTheme(page, theme);
       await page.screenshot({ path: testInfo.outputPath(`conflict-${theme}-desktop.png`), fullPage: true });
     }
+    await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
     await page.setViewportSize({ width: 320, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -185,7 +186,7 @@ test('failed saves persist the newest pair across real server restart and browse
     await expect(reopened.getByRole('button', { name: 'Review local draft' })).toHaveCount(0);
     expect(await read(reopened, board.id)).toEqual(winner);
     for (const theme of ['light', 'dark']) {
-      await reopened.getByLabel('Theme', { exact: true }).selectOption(theme);
+      await selectTheme(reopened, theme);
       await reopened.screenshot({ path: testInfo.outputPath(`recovery-${theme}-desktop.png`), fullPage: true });
       const pairs = await reopened.locator('.board-recovery').evaluate((element) => {
         const colorOf = (node: Element) => {
@@ -265,6 +266,7 @@ test('same-revision recovery waits for explicit retry and account/logout isolati
   expect(serialized).not.toContain(session.csrfToken);
   expect(Object.keys(original.value).sort()).toEqual(['accountId', 'boardId', 'document', 'expectedRevision', 'incoming', 'updatedAt', 'version', 'writerId']);
   const account = await context.newPage(); await account.goto('/boards');
+  await openSettings(account);
   await account.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(account.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
   page.on('dialog', (dialog) => { void dialog.accept(); });
@@ -487,7 +489,7 @@ for (const paused of ['failed', 'conflict']) {
     await page.waitForTimeout(650);
     expect(writes).toBe(1);
     for (const theme of ['light', 'dark']) {
-      await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+      await selectTheme(page, theme);
       await page.screenshot({ path: testInfo.outputPath(`quota-${paused}-${theme}-desktop.png`), fullPage: true });
     }
     await page.setViewportSize({ width: 320, height: 1000 });
@@ -638,7 +640,7 @@ test('copied recovery receipts follow only the exact retained writer pair and li
     const session = await currentSession(page.request); if (session.status !== 'signed-in') throw new Error('No receipt account');
     expect(JSON.stringify(receipts)).not.toContain(session.csrfToken);
     for (const theme of ['light', 'dark']) {
-      await recovery.getByLabel('Theme', { exact: true }).selectOption(theme);
+      await selectTheme(recovery, theme);
       await recovery.screenshot({ path: testInfo.outputPath(`receipt-${theme}-desktop.png`), fullPage: true });
     }
     await recovery.setViewportSize({ width: 320, height: 1000 });

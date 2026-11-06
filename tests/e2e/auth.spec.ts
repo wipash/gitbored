@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { applicationOrigin, controlProvider, currentSession, providerOrigin, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, providerOrigin, signIn, openSettings, selectTheme } from './auth-support.js';
 
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'This suite exercises configured authentication.');
 
@@ -27,6 +27,7 @@ test('two identities remain distinct and a renamed GitHub login retains the appl
     expect(bob.user.githubId).toBe('202');
     expect(bob.user.id).not.toBe(alice.user.id);
     expect(bob.csrfToken).not.toBe(alice.csrfToken);
+    await openSettings(page);
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
     expect((await currentSession(other.request)).status).toBe('signed-in');
@@ -39,6 +40,7 @@ test('two identities remain distinct and a renamed GitHub login retains the appl
     expect(renamed.user.id).toBe(alice.user.id);
     expect(renamed.user.login).toBe('alice-renamed');
     expect(renamed.csrfToken).not.toBe(alice.csrfToken);
+    await openSettings(page);
     await expect(page.locator('.application-account')).toHaveText('Account: @alice-renamed');
   } finally { await other.close(); }
 });
@@ -121,12 +123,15 @@ test('expired access tokens refresh once across concurrent requests and revocati
   }).toMatchObject({ refreshCount: 1 });
   await controlProvider(page.request, { revoke: true });
   await page.reload();
+  await openSettings(page);
   await expect(page.getByRole('link', { name: 'Reconnect GitHub' })).toBeVisible();
   const revoked = await currentSession(page.request);
   expect(revoked.status === 'signed-in' && revoked.authorization).toBe('reauthorize');
+  await openSettings(page);
   await page.getByRole('link', { name: 'Reconnect GitHub' }).click();
   await page.getByRole('link', { name: 'Authorize Alice' }).click();
   await page.goto('/boards');
+  await openSettings(page);
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
 });
 
@@ -140,7 +145,9 @@ test('refresh rejection and refresh expiry are actionable without substituting a
   const stats = await page.request.get(`${providerOrigin}/__stats`);
   expect(await stats.json()).toMatchObject({ refreshCount: 0 });
   await page.reload();
+  await openSettings(page);
   await expect(page.getByRole('link', { name: 'Reconnect GitHub' })).toBeVisible();
+  await openSettings(page);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
   await controlProvider(page.request, { expiresIn: 1, refreshExpiresIn: 28800 });
@@ -202,14 +209,16 @@ test('sign-in and signed-in flows remain reachable in both themes at 320px and e
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto('/');
   for (const theme of ['light', 'dark']) {
-    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await selectTheme(page, theme);
     await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await signIn(page);
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await openSettings(page);
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await openSettings(page);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
 });

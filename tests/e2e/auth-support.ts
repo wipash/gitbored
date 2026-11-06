@@ -21,7 +21,7 @@ export async function signIn(page: Page, identity: 'Alice' | 'Bob' = 'Alice'): P
   await page.goto('/');
   await page.getByRole('link', { name: 'Sign in with GitHub' }).click();
   await page.getByRole('link', { name: `Authorize ${identity}` }).click();
-  await expect(page.locator('.application-nav')).toBeVisible();
+  await expect(page.locator('.desktop-app')).toBeVisible();
   await page.goto('/boards');
   await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
 }
@@ -32,4 +32,33 @@ export async function currentSession(request: APIRequestContext): Promise<Sessio
   const session: unknown = await response.json();
   if (!isSessionResponse(session)) throw new Error('Invalid session response');
   return session;
+}
+
+/** Open the same settings surface on a canvas, board list or sign-in screen. */
+export async function openSettings(page: Page): Promise<void> {
+  if (await page.getByRole('region', { name: 'Settings', exact: true }).isVisible()) return;
+  const trigger = page.getByRole('button', { name: 'Settings', exact: true });
+  if (!await trigger.isVisible()) await openWorkspaceMenu(page);
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
+  await expect(page.getByRole('region', { name: 'Settings', exact: true })).toBeVisible();
+}
+
+/** Change appearance through the UI and return to an open workspace panel. */
+export async function selectTheme(page: Page, theme: string): Promise<void> {
+  const settingsWereOpen = await page.getByRole('region', { name: 'Settings', exact: true }).isVisible();
+  const incomingWasOpen = await page.locator('#incoming-panel').isVisible();
+  const repositoriesWereOpen = await page.getByRole('region', { name: 'Board repository connection', exact: true }).isVisible();
+  await openSettings(page);
+  await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+  if (!settingsWereOpen) {
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click();
+    if (incomingWasOpen || repositoriesWereOpen) await openWorkspaceMenu(page);
+    if (incomingWasOpen) await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
+    else if (repositoriesWereOpen) await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+  }
+}
+
+export async function openWorkspaceMenu(page: Page): Promise<void> {
+  const menu = page.getByRole('button', { name: 'Menu', exact: true });
+  if (await menu.isVisible() && await menu.getAttribute('aria-expanded') !== 'true') await menu.click();
 }
