@@ -279,7 +279,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
   app.get<{ Params: { id: string } }>('/api/references/:id', async (request) => {
     const ctx = await context(request);
     const row = database.prepare('SELECT owner, repository, number, kind, node_id AS nodeId FROM item_references WHERE id=? AND user_id=?').get(request.params.id, ctx.user.id);
-    if (!row) throw new AuthenticationError(404, 'unavailable', 'This reference is unavailable. Browse your sources or resolve its GitHub URL again.');
+    if (!row) throw new AuthenticationError(404, 'unavailable', 'This reference is unavailable. Open Repositories and connect its repository or paste its GitHub URL again.');
     const previous = cached(ctx, `reference:${request.params.id}`, readSourceItem);
     if (previous) return previous;
     return await resolve(ctx, `https://github.com/${String(row['owner'])}/${String(row['repository'])}/${row['kind'] === 'issue' ? 'issues' : 'pull'}/${String(row['number'])}`, String(row['nodeId']));
