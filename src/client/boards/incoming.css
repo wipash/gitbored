@@ -19,3 +19,8 @@
 .incoming-panel .source-choices, .incoming-panel .source-items { padding: 0; }
 .incoming-announcement { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
 @media (max-width: 400px) { .incoming-panel { padding: 0.75rem; } .incoming-shell { inset-block-start: calc(84px + 1.5rem); inset-inline-start: 0.5rem; max-inline-size: calc(100% - 1rem); } }
+.board-source-host:empty { display: none; }
+.board-source-host { margin-block-end: 1.5rem; min-inline-size: 0; }
+.board-source-panel { padding: clamp(1rem, 3vw, 2rem); border: 1px solid var(--color-border-subtle); border-radius: .75rem; background: var(--color-bg-surface); min-inline-size: 0; }
+.board-source-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
+.board-source-panel .source-browser { margin-block-start: 1rem; padding: 0; border: 0; }

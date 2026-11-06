@@ -30,6 +30,10 @@ export function initializeSources(database: DatabaseSync): void {
       owner TEXT NOT NULL, repository TEXT NOT NULL, number INTEGER NOT NULL,
       UNIQUE(user_id, host, kind, node_id)
     );
+    CREATE TABLE IF NOT EXISTS recent_repositories (
+      user_id TEXT NOT NULL REFERENCES users(id), repository_node_id TEXT NOT NULL,
+      used_at INTEGER NOT NULL, PRIMARY KEY(user_id, repository_node_id)
+    );
   `);
 }
 function badRequest(message: string): never { throw new AuthenticationError(400, 'invalid_request', message); }
@@ -72,6 +76,10 @@ function normalize(value: unknown, repo: RepositorySource, detail?: unknown): No
   return { item: { metadata }, nodeId, issueId, pullId, kind };
 }
 export function registerSources(app: FastifyInstance, database: DatabaseSync, config: AuthConfig | null): void {
+  function rememberRepository(userId: string, repo: RepositorySource): void {
+    database.prepare(`INSERT INTO recent_repositories VALUES (?, ?, ?)
+      ON CONFLICT(user_id, repository_node_id) DO UPDATE SET used_at=excluded.used_at`).run(userId, repo.nodeId, Date.now());
+  }
   function persistRepository(userId: string, repo: RepositorySource, nextPage?: number | null): void {
     database.prepare(`INSERT INTO repository_sources VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, repository_node_id) DO UPDATE SET repository_rest_id=excluded.repository_rest_id,
@@ -101,9 +109,9 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     app.authentication.assertUserContext(request, user);
     return { request, user, token, origin: config.apiOrigin };
   }
-  async function read(ctx: SourceContext, path: string, page?: number) {
+  async function read(ctx: SourceContext, path: string, page?: number, canonicalPaginationPath?: string) {
     try {
-      const result = await providerRead(ctx.origin, ctx.token, path, page);
+      const result = await providerRead(ctx.origin, ctx.token, path, page, canonicalPaginationPath);
       app.authentication.assertUserContext(ctx.request, ctx.user);
       return result;
     }
@@ -120,6 +128,31 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const result = await read(ctx, '/user/installations', page);
     return { items: list(object(result.value)['installations'], 30).map(installation), page, nextPage: result.nextPage };
   });
+  app.get('/api/sources/recent-repositories', (request) => {
+    const user = app.authentication.requireUserContext(request);
+    // These account-owned shortcuts contain locators only. Opening one rechecks GitHub access.
+    const items = database.prepare(`SELECT s.owner, s.name FROM recent_repositories r
+      JOIN repository_sources s ON s.user_id=r.user_id AND s.repository_node_id=r.repository_node_id
+      WHERE r.user_id=? ORDER BY r.used_at DESC, s.owner, s.name LIMIT 8`).all(user.id);
+    return { items, page: 1, nextPage: null };
+  });
+  app.post('/api/sources/repositories/resolve', async (request) => {
+    const ctx = await context(request);
+    const body = request.body;
+    if (typeof body !== 'object' || body === null || !('url' in body) || typeof body.url !== 'string' || body.url.length > 512) {
+      return badRequest('Enter a repository as owner/name or https://github.com/owner/name.');
+    }
+    const input = body.url.trim().replace(/\/$/, '');
+    const base = input.startsWith('https://github.com/') ? input : `https://github.com/${input}`;
+    let locator;
+    try { locator = parseItemUrl(`${base}/issues/1`); }
+    catch { return badRequest('Enter a repository as owner/name or https://github.com/owner/name.'); }
+    const repo = repository((await read(ctx, `/repos/${locator.owner}/${locator.repository}`)).value);
+    app.authentication.assertUserContext(request, ctx.user);
+    persistRepository(ctx.user.id, repo);
+    rememberRepository(ctx.user.id, repo);
+    return repo;
+  });
   app.get<{ Params: { installationId: string } }>('/api/sources/installations/:installationId/repositories', async (request) => {
     const ctx = await context(request); const page = pageInput(request);
     const installationId = request.params.installationId;
@@ -135,7 +168,9 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const locator = parseItemUrl(`https://github.com/${request.params.owner}/${request.params.repository}/issues/1`);
     const path = `/repos/${locator.owner}/${locator.repository}`;
     const repo = repository((await read(ctx, path)).value);
-    const result = await read(ctx, `${path}/issues?state=all&sort=created&direction=asc`, page);
+    // GitHub's Link header uses the canonical numeric repository route.
+    // Derive that one allowed alias from this authorized repository response.
+    const result = await read(ctx, `${path}/issues?state=all&sort=created&direction=asc`, page, `/repositories/${repo.id}/issues`);
     // Validate the whole page before committing progress or references.
     const normalized = list(result.value, 30).map((item) => normalize(item, repo));
     app.authentication.assertUserContext(request, ctx.user);
@@ -143,6 +178,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     try {
       const items = normalized.map((item) => persistItem(ctx.user.id, repo, item));
       persistRepository(ctx.user.id, repo, result.nextPage);
+      rememberRepository(ctx.user.id, repo);
       database.exec('COMMIT');
       return { items, repository: repo, page, nextPage: result.nextPage };
     } catch (error) { database.exec('ROLLBACK'); throw error; }

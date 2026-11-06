@@ -4,7 +4,7 @@ import { validateBoard } from '../../src/shared/boards.js';
 import type { Board } from '../../src/shared/boards.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
 import type { SourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn, openSourceTools } from './auth-support.js';
 
 test.use({ viewport: { width: 1440, height: 1000 } });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires controlled GitHub authorization.');
@@ -230,8 +230,8 @@ test('a retained SourceBrowser session loss invalidates accepted hydration repli
     const original = await page.locator('.tl-container').elementHandle();
     if (!original) throw new Error('Missing retained native editor');
     await page.getByRole('button', { name: 'Incoming 2', exact: true }).click();
-    await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
-    const browser = page.getByRole('region', { name: 'Browse GitHub sources', exact: true });
+    await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
+    const browser = page.getByRole('region', { name: 'Connect a repository', exact: true });
     await expect(browser.getByRole('button', { name: /alice · Personal/ })).toBeVisible();
     await privateValuesAbsent(page, items);
     await other.goto('/account');
@@ -317,7 +317,7 @@ test('global source-context loss rejects a previously authorized discovery page 
     await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
     const loading = await read(page, board.id);
     expect(loading.incoming.sources[0]).toMatchObject({ status: 'loading', loadedPage: 1, nextPage: 2 });
-    await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+    await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
     await expect(page.getByRole('button', { name: /alice · Personal/ })).toBeVisible();
     await other.goto('/account');
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();

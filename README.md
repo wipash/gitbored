@@ -173,17 +173,18 @@ never copy just the live main SQLite file or replace an active data directory.
 
 ## Incoming discovery and placement
 
-Open a board and select **Incoming**. **Choose sources or add a URL** reuses the
-authorized source browser: browse an installation/repository and select **Use
-repository for Incoming**, or resolve a supported GitHub URL and select **Send to
-Incoming**. These actions never create canvas shapes. Sources are selected per
-owner and board, using the provider's immutable repository node ID; mutable owner
-and repository names are request locators, not identity. After a repository rename
-or transfer, browse its currently authorized location and choose **Use repository
-for Incoming** again: trusted locators update without resetting discovery progress.
+Open a board and select **Incoming → Connect a repository**. Find a repository
+by full name or URL, or open a recent choice, then **Connect to this board**.
+The first issue/PR page loads into Incoming automatically. For one item, open
+**Add an individual issue or pull request URL**, resolve its URL and select
+**Send to Incoming**. These actions never create canvas shapes. Sources are
+selected per owner and board using the immutable repository node ID; mutable
+names are request locators. After a rename or transfer, find its current location
+and connect it again: trusted locators update without resetting discovery progress.
 
-**Discover first page** and **Discover next page** each read one bounded mixed
-issue/PR page. PR-only pages still advance the cursor. The tray distinguishes
+**Discover next page** reads one additional bounded mixed issue/PR page;
+**Discover first page** starts a newly reset source pass.
+PR-only pages still advance the cursor. The tray distinguishes
 loading, partial, complete and failed progress, including an interrupted pass
 after reopen. **Retry discovery** repeats only the retained failed page.
 **Reconcile source again** explicitly starts another bounded pass after completion;
@@ -280,11 +281,24 @@ type-check alone does not establish correct keyboard behavior.
 
 ## Authorized source browsing
 
-After sign-in, open **Sources**. **Browse GitHub sources** lists authorized personal/organization
-installations and their repositories. Sign-in, installation selection and
-organization approval are separate. **Manage GitHub installations** opens GitHub's
-settings; organization owners may need to approve the app and select repositories.
-An empty picker does not prove that public URLs are unavailable.
+After sign-in, open **Sources** and enter a full repository name such as
+`HolmesGroup/email-filer`, or paste its GitHub repository URL. **Find repository**
+checks access directly; paging through installations is unnecessary. Recently
+used repositories are account-specific shortcuts shared across boards and retained
+on the server. Opening a shortcut rechecks access.
+
+**Choose a board** carries the repository name into the board picker, including a
+newly created board. On a board, open **Incoming → Connect a repository**. The
+connection form opens in a normal page section above the canvas, with the editor
+kept mounted. Find the repository or open a recent choice, then **Connect to this
+board**. Connection starts the first issue/PR page in Incoming; adding cards to
+the canvas remains deliberate. Additional pages remain explicit and bounded.
+
+**Browse installed repositories** is a secondary path with a filter for loaded
+repository names. **Add an individual issue or pull request URL** provides the
+single-item path. Sign-in, installation selection and organization approval remain
+separate; organization owners may need to approve the app and select repositories.
+An empty installation list does not prove that public URLs are unavailable.
 
 Repository browsing loads mixed issue/PR pages, including PR-only and empty pages.
 **Load next page** advances explicitly; a transient failure retains loaded results
@@ -349,7 +363,9 @@ registry/progress writes. A late result cannot survive its superseded session.
 client distinction; an ordinary revision-conflict 409 is not session-context loss.
 
 Pages contain at most 30 rows; page inputs are 1–10,000 and only validated next
-page numbers are used, never provider-supplied Link URLs. Provider responses are
+page numbers are used, never provider-supplied Link URLs. Issue pagination accepts
+GitHub's canonical numeric repository path only for the repository just authorized.
+Provider responses are
 bounded to 4 MB; over-limit or malformed pages fail without advancing progress.
 Titles are bounded to 65,536 characters, label/assignee lists to 1,000 values,
 label names to 1,024 and assignee values to 256 characters. Values are rejected,
@@ -402,6 +418,17 @@ explicit loopback operation. Partial or invalid credential configuration fails
 startup; missing configuration renders an actionable unconfigured screen.
 
 ### Troubleshooting GitHub sign-in
+
+If sign-in succeeds but selecting an installation fails to list repositories,
+the server emits `github_repository_access_failed` with a bounded category,
+upstream status and available GitHub request ID, rate-limit count and recognized
+permission hints. Categories distinguish SSO, IP restrictions, managed-user
+restrictions, suspended installations, integration/user denials and rate limits;
+`unknown` means the response did not match a known reason. These are diagnostic
+signals, not proof of a particular configuration fix. Raw GitHub messages, SSO
+URLs, tokens and repository payloads are not logged. Retry the affected selection
+once and share that event when troubleshooting; callback diagnostics below cover
+the separate sign-in flow.
 
 When a callback cannot exchange its authorization code or confirm the GitHub
 identity, the browser keeps its existing sign-in failure message. The server

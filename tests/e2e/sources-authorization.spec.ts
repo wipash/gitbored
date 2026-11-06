@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext, Page } from '@playwright/test';
-import { applicationOrigin, controlProvider, currentSession, providerOrigin, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, providerOrigin, signIn, openSourceTools } from './auth-support.js';
 
 async function gate(request: APIRequestContext, action: 'arm' | 'release' | 'reset', target?: string): Promise<void> {
   expect((await request.post(`${providerOrigin}/__source-gate`, { data: { action, target } })).ok()).toBe(true);
@@ -25,7 +25,7 @@ async function authorizeBob(page: Page): Promise<void> {
   await page.goto('/api/auth/github');
   await page.getByRole('link', { name: 'Authorize Bob', exact: true }).click();
   await expect(page.getByText('@bob', { exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await expect(page.getByRole('button', { name: /bob · Personal/ })).toBeVisible();
 }
 
@@ -37,12 +37,12 @@ test.beforeEach(async ({ request }) => {
 
 test('same-context account changes reject stale repository continuation and URL submission before provider reads', async ({ page, context }) => {
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   const aliceHeaders = await headersFor(page.request);
   await page.getByRole('button', { name: /alice · Personal/ }).click();
   await expect(page.getByRole('button', { name: 'Browse alice/project · Private', exact: true })).toBeVisible();
   const staleUrl = await context.newPage();
-  await staleUrl.goto('/sources');
+  await staleUrl.goto('/sources'); await openSourceTools(staleUrl);
   await staleUrl.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
   await staleUrl.getByRole('button', { name: 'Resolve URL', exact: true }).click();
   await expect(staleUrl.locator('.source-item')).toHaveCount(1);
@@ -55,7 +55,7 @@ test('same-context account changes reject stale repository continuation and URL 
   expect(getResponse.status()).toBe(409);
   expect(await getResponse.json()).toMatchObject({ error: 'session_changed' });
   await expect(page.getByRole('link', { name: 'Reload current account', exact: true })).toBeVisible();
-  const source = page.getByRole('region', { name: 'Browse GitHub sources', exact: true });
+  const source = page.getByRole('region', { name: 'Find and connect repositories', exact: true });
   await expect(source).not.toContainText('alice/project');
   await expect(source).not.toContainText('bob/other');
   const stalePost = staleUrl.waitForResponse((response) => response.url().endsWith('/api/sources/resolve'));
@@ -69,13 +69,13 @@ test('same-context account changes reject stale repository continuation and URL 
   expect((await context.request.get('/api/sources/installations', { headers: aliceHeaders })).status()).toBe(409);
   await page.getByRole('link', { name: 'Reload current account', exact: true }).click();
   await expect(page.getByText('@bob', { exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await expect(page.getByRole('button', { name: /bob · Personal/ })).toBeVisible();
 });
 
 test('an original session invalidated during a held read cannot deliver its late representation', async ({ page, context }) => {
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await page.getByRole('button', { name: /alice · Personal/ }).click();
   await expect(page.getByRole('button', { name: 'Browse alice/project · Private', exact: true })).toBeVisible();
   await gate(page.request, 'arm', 'repositories-page-2');
@@ -87,13 +87,13 @@ test('an original session invalidated during a held read cannot deliver its late
     await gate(page.request, 'release');
     expect((await late).status()).toBe(401);
     await expect(page.getByRole('link', { name: 'Reload current account', exact: true })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Browse GitHub sources', exact: true })).not.toContainText('alice/project');
+    await expect(page.getByRole('region', { name: 'Find and connect repositories', exact: true })).not.toContainText('alice/project');
   } finally { await gate(page.request, 'release'); }
 });
 
 for (const status of [403, 404]) {
   test(`same-repository URL ${status} clears expanded private values and aborts held pagination without revoking unrelated repositories`, async ({ page }) => {
-    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await browseProject(page);
+    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page); await browseProject(page);
     await page.getByText('View full available details', { exact: true }).first().click();
     await expect(page.getByRole('heading', { level: 4 })).toBeVisible();
     await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/missing/project/issues/1');
@@ -132,7 +132,7 @@ for (const status of [403, 404]) {
 }
 
 test('secondary throttling with Retry-After retains the loaded cursor and current authorization', async ({ page }) => {
-  await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await browseProject(page);
+  await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page); await browseProject(page);
   const headers = await headersFor(page.request);
   await controlProvider(page.request, { sourceThrottlePage: 2 });
   const limited = page.waitForResponse((response) => response.url().includes('/items?page=2'));
@@ -152,7 +152,7 @@ test('secondary throttling with Retry-After retains the loaded cursor and curren
 test('a late rejected token cannot invalidate a newer refreshed credential', async ({ page }) => {
   await controlProvider(page.request, { expiresIn: 2 });
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   const headers = await headersFor(page.request);
   await gate(page.request, 'arm', 'old-token-401');
   try {
@@ -175,7 +175,7 @@ test('a late rejected token cannot invalidate a newer refreshed credential', asy
 for (const width of [1280, 320]) {
   test(`keyboard pagination, retry and URL submission retain focus without stealing it at ${width}px`, async ({ page }) => {
     await signIn(page);
-    await page.getByRole('link', { name: 'Sources', exact: true }).click();
+    await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
     await page.setViewportSize({ width, height: 900 });
     if (width === 320) await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     await page.getByRole('button', { name: 'Load next page', exact: true }).focus();
@@ -187,6 +187,8 @@ for (const width of [1280, 320]) {
       const load = page.getByRole('button', { name: 'Load next page', exact: true });
       await load.focus(); await page.keyboard.press('Enter'); await gateEntered(page.request);
       await expect(load).toBeFocused(); await page.keyboard.press('Enter');
+      await page.keyboard.press('Tab');
+      await expect(page.locator('details.source-url > summary')).toBeFocused();
       await page.keyboard.press('Tab');
       await expect(page.getByLabel('GitHub item URL', { exact: true })).toBeFocused();
       await gate(page.request, 'release');

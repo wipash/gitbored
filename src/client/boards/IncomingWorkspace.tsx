@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createShapeId, useEditor, type Editor, type TLShapeId } from 'tldraw';
 import type { Board } from '../../shared/boards';
 import { MAX_INCOMING_REFERENCES, type IncomingCandidate, type IncomingSource, type IncomingState } from '../../shared/incoming';
@@ -35,6 +36,7 @@ function placedReferences(document: NativeDocument): Set<string> {
 }
 /** One native editor/coordinator lifetime; metadata and Incoming never enter SDK history. */
 export function IncomingWorkspace({ board, authority, coordinator, theme }: { board: Board; authority: BoardAuthority; coordinator: SaveCoordinator; theme: 'light' | 'dark' }) {
+  const [sourceHost, setSourceHost] = useState<HTMLDivElement | null>(null);
   const [incoming, setIncoming] = useState(board.incoming);
   const current = useRef(board.incoming);
   const editorRef = useRef<Editor | null>(null);
@@ -187,14 +189,15 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     if (!canRead(authority)) return;
     deniedScopes.current.clear(); publishMetadata(new Map(), authority); setMetadataAttempt((attempt) => attempt + 1);
   } };
-  return <NativeWorkspace initialDocument={board.document} metadata={model.metadata} theme={theme} onDocumentChange={onDocumentChange} onNativeHistory={onNativeHistory} onMount={mount}><IncomingTray model={model} /></NativeWorkspace>;
+  return <><div ref={setSourceHost} className="board-source-host" data-native-ui="sources" />
+    <div className="board-canvas"><NativeWorkspace initialDocument={board.document} metadata={model.metadata} theme={theme} onDocumentChange={onDocumentChange} onNativeHistory={onNativeHistory} onMount={mount}><IncomingTray model={model} sourceHost={sourceHost} /></NativeWorkspace></div></>;
 }
 
 const dragType = 'application/x-gitbored-incoming';
-function IncomingTray({ model }: { model: WorkspaceModel }) {
+function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost: HTMLDivElement | null }) {
   const editor = useEditor();
-  const [open, setOpen] = useState(false);
-  const [browsing, setBrowsing] = useState(false);
+  const [open, setOpen] = useState(() => new URLSearchParams(window.location.search).has('source'));
+  const [browsing, setBrowsing] = useState(() => new URLSearchParams(window.location.search).has('source'));
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busySource, setBusySource] = useState<string | null>(null);
@@ -203,8 +206,18 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
   const panel = useRef<HTMLElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const drag = useRef<{ token: string; candidate: IncomingCandidate } | null>(null);
+  const returnToCanvas = useRef(false);
   const current = useRef(model);
   useLayoutEffect(() => { current.current = model; }, [model]);
+  useLayoutEffect(() => {
+    if (!returnToCanvas.current) return;
+    returnToCanvas.current = false;
+    // Closing the normal-flow source section moves the editor in the document.
+    // Reveal/focus after that layout change, only for an explicit Add action.
+    editor.getContainer().scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    editor.getContainer().focus({ preventScroll: true });
+    editor.focus();
+  }, [editor, browsing, open]);
   const request = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController(); request.current = controller;
@@ -215,10 +228,14 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
   }, [model.authority]);
   useEffect(() => { if (open) heading.current?.focus(); }, [open]);
   useEffect(() => {
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !shell.current?.contains(event.target)) setOpen(false); };
+    if (browsing && model.authority.ready) sourceHost?.querySelector<HTMLInputElement>('input')?.focus();
+    else heading.current?.focus();
+  }, [browsing, sourceHost, model.authority.ready]);
+  useEffect(() => {
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !shell.current?.contains(event.target) && !sourceHost?.contains(event.target)) setOpen(false); };
     document.addEventListener('pointerdown', outside, true);
     return () => document.removeEventListener('pointerdown', outside, true);
-  }, []);
+  }, [sourceHost]);
   useEffect(() => {
     const container = editor.getContainer();
     const valid = (event: DragEvent) => drag.current !== null && event.dataTransfer?.types.includes(dragType)
@@ -236,6 +253,7 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
     return () => { container.removeEventListener('dragover', over, true); container.removeEventListener('drop', drop, true); drag.current = null; };
   }, [editor]);
   function dismiss() { setOpen(false); trigger.current?.focus(); }
+  function finishPlacement() { returnToCanvas.current = true; setBrowsing(false); setOpen(false); }
   async function checkGithubAccess(button: HTMLButtonElement) {
     await model.authority.reconcile();
     if (!button.isConnected && document.activeElement === document.body) heading.current?.focus();
@@ -249,14 +267,19 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
       };
       return { ...state, sources: [...state.sources, { repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, nextPage: 1, loadedPage: 0, status: 'idle' }] };
     });
-    setBrowsing(false); setMessage('Source selected. Discovery resumes from its saved progress.'); heading.current?.focus();
+    const existing = model.incoming.sources.find((source) => source.repositoryNodeId === repository.nodeId);
+    const location = new URL(window.location.href);
+    location.searchParams.delete('source');
+    window.history.replaceState(null, '', `${location.pathname}${location.search}${location.hash}`);
+    setBrowsing(false); setOpen(true); setMessage(`${repository.owner}/${repository.name} connected to this board.`); heading.current?.focus();
+    if (!existing) void discover({ repositoryNodeId: repository.nodeId, owner: repository.owner, repository: repository.name, nextPage: 1, loadedPage: 0, status: 'idle' });
   }
   function addCandidate(item: SourceItem) {
     if (!model.canRead()) return;
     model.remember(item);
     const candidate = { referenceId: item.reference.id, kind: item.reference.kind };
     const existing = editor.getCurrentPageShapes().some((shape) => shape.type === ITEM_CARD_TYPE && shape.props.referenceId === candidate.referenceId);
-    if (existing) { model.place(candidate); setOpen(false); return; }
+    if (existing) { if (model.place(candidate)) finishPlacement(); return; }
     model.commit((state) => state.queue.some((entry) => entry.referenceId === candidate.referenceId) ? state : { ...state, queue: [...state.queue, candidate], seen: state.seen.includes(candidate.referenceId) ? state.seen : [...state.seen, candidate.referenceId] });
     setMessage('Reference added to Incoming. No canvas placement was created.');
   }
@@ -297,6 +320,12 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
   }
   const missingMetadata = [...model.metadata.values()].some((value) => value.status === 'error' || value.status === 'unavailable');
   return <div ref={shell} className="incoming-shell" data-native-ui="incoming">
+    {browsing && model.authority.ready && sourceHost && createPortal(<section className="board-source-panel" aria-label="Board repository connection">
+      <div className="board-source-toolbar"><p className="eyebrow">Sources for this board</p><button type="button" onClick={() => { setBrowsing(false); setOpen(true); }}>Back to Incoming</button></div>
+      <p>{message}</p>
+      {model.readReady ? <SourceBrowser session={model.authority.session} boardActions={{ selectSource, addCandidate, accessLost: model.accessLost, selectedSources: model.incoming.sources }} />
+        : <p role="status">Check your GitHub account above to continue connecting a repository.</p>}
+    </section>, sourceHost)}
     <button ref={trigger} type="button" className="incoming-trigger" aria-expanded={open} aria-controls="incoming-panel" onClick={() => setOpen((value) => !value)}>Incoming <span>{model.incoming.queue.length}</span></button>
     <p className="incoming-announcement" role="status">{message}</p>
     {open && <section ref={panel} className="incoming-panel" id="incoming-panel" aria-labelledby="incoming-heading">
@@ -306,8 +335,7 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
       <p role="status">{!model.authority.ready ? 'Incoming reads are paused until your account is checked. Your local queue and canvas remain here.' : busySource ? 'Loading discovery page…' : `${model.incoming.queue.length} references in Incoming.`}</p>
       {!model.authority.ready ? null : <>
         {model.authority.session.authorization === 'reauthorize' && <div className="board-error" role="alert"><p>GitHub authorization ended. Reconnect to resume source and reference reads. Local canvas editing and saving remain available.</p><a href="/api/auth/github" target="_blank" rel="noopener">Reconnect GitHub</a> <button type="button" onClick={(event) => { void checkGithubAccess(event.currentTarget); }}>Check GitHub access</button></div>}
-        <button type="button" disabled={!model.readReady} aria-expanded={browsing} onClick={() => setBrowsing((value) => !value)}>{browsing ? 'Close source browser' : 'Choose sources or add a URL'}</button>
-        {browsing && model.readReady && <SourceBrowser session={model.authority.session} boardActions={{ selectSource, addCandidate, accessLost: model.accessLost }} />}
+        {!browsing && <button type="button" disabled={!model.readReady} onClick={() => { setMessage(''); setBrowsing(true); }}>Connect a repository</button>}
         <ul className="incoming-sources">{model.incoming.sources.map((source) => <li key={source.repositoryNodeId}>
           <p><bdi>{source.owner}/{source.repository}</bdi></p><p>{source.status === 'loading' && busySource !== source.repositoryNodeId ? 'Discovery interrupted. Continue from the saved cursor.' : source.status === 'complete' ? `Complete through page ${source.loadedPage}.` : source.status === 'error' ? `Discovery failed after page ${source.loadedPage}.` : `Loaded through page ${source.loadedPage}. More pages remain.`}</p>
           {source.nextPage !== null && <button type="button" aria-disabled={busySource !== null || !model.readReady} onClick={() => { void discover(source); }}>{source.status === 'error' ? 'Retry discovery' : source.loadedPage ? 'Discover next page' : 'Discover first page'}</button>}
@@ -324,7 +352,7 @@ function IncomingTray({ model }: { model: WorkspaceModel }) {
             <div className="incoming-actions"><span className="incoming-drag-handle" draggable={state.status === 'ready'} onDragStart={(event) => {
               if (state.status !== 'ready') { event.preventDefault(); return; }
               const token = crypto.randomUUID(); drag.current = { token, candidate }; event.dataTransfer.setData(dragType, token); event.dataTransfer.effectAllowed = 'copy';
-            }} onDragEnd={() => { drag.current = null; }}>Drag to canvas</span><button type="button" aria-describedby="incoming-receiving-area" onClick={() => { if (model.place(candidate)) { setMessage('Card added in the receiving row and selected.'); setOpen(false); } }}>Add to board</button></div>
+            }} onDragEnd={() => { drag.current = null; }}>Drag to canvas</span><button type="button" aria-describedby="incoming-receiving-area" onClick={() => { if (model.place(candidate)) { setMessage('Card added in the receiving row and selected.'); finishPlacement(); } }}>Add to board</button></div>
           </li>;
         })}</ul>
       </>}

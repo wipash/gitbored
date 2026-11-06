@@ -5,6 +5,8 @@ import { isSessionContextFailure } from '../shared/session';
 import type { Installation, RepositorySource, SourceItem } from '../shared/sources';
 import { readInstallation, readRepository, readSourceItem, readSourcePage } from '../shared/sources';
 import { githubItemUrl } from '../shared/items';
+import { SourceReadError, requestJson } from './sourceRequest';
+import { RepositoryFinder } from './RepositoryFinder';
 import './sources.css';
 
 type SignedInSession = Extract<SessionResponse, { status: 'signed-in' }>;
@@ -12,25 +14,10 @@ export interface SourceBrowserBoardActions {
   selectSource: (repository: RepositorySource) => void;
   addCandidate: (item: SourceItem) => void;
   accessLost?: (scope?: string) => void;
+  selectedSources?: readonly { repositoryNodeId: string; owner: string; repository: string }[];
 }
 interface BoardActionProps { boardActions?: SourceBrowserBoardActions | undefined }
-class SourceReadError extends Error {
-  constructor(public readonly status: number, public readonly code: string, message: string) { super(message); }
-}
 interface SourceSessionProps { session: SignedInSession; onAccessLoss: (failure: SourceReadError, scope?: string) => void }
-async function requestJson<T>(path: string, signal: AbortSignal, session: SignedInSession, decode: (value: unknown) => T, url?: string): Promise<T> {
-  const response = await fetch(path, { signal, cache: 'no-store', headers: {
-    'X-CSRF-Token': session.csrfToken, ...(url === undefined ? {} : { 'Content-Type': 'application/json' }),
-  }, ...(url === undefined ? {} : { method: 'POST', body: JSON.stringify({ url }) }) });
-  const value: unknown = await response.json();
-  if (!response.ok) {
-    const message = typeof value === 'object' && value !== null && 'message' in value && typeof value.message === 'string'
-      ? value.message : 'This read could not be completed. Check your connection and retry.';
-    const code = typeof value === 'object' && value !== null && 'error' in value && typeof value.error === 'string' ? value.error : '';
-    throw new SourceReadError(response.status, code, message);
-  }
-  return decode(value);
-}
 const itemIdentity = (item: SourceItem) => item.reference.id;
 const repositoryIdentity = (item: RepositorySource) => item.nodeId;
 const installationIdentity = (item: Installation) => item.id;
@@ -119,11 +106,18 @@ function RepositoryItems({ repository, session, onAccessLoss, boardActions }: So
   const pages = usePages(`/api/sources/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/items`, session, itemIdentity, readSourceItem, onAccessLoss, repositoryScope(repository.owner, repository.name));
   const [query, setQuery] = useState(''); const [kind, setKind] = useState('all');
   const queryInput = useRef<HTMLInputElement>(null);
+  const connected = boardActions?.selectedSources?.some((source) => source.repositoryNodeId === repository.nodeId
+    && source.owner === repository.owner && source.repository === repository.name) === true;
   const matches = pages.items.filter((item) => (kind === 'all' || item.metadata.kind === kind)
     && `${item.metadata.title} ${item.metadata.locator.number}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return <section aria-labelledby="source-items-heading" data-source-scope={repositoryScope(repository.owner, repository.name)}><h2 id="source-items-heading"><bdi>{repository.owner}/{repository.name}</bdi></h2>
-    <p>Browse mixed issues and pull requests. Discovery does not add anything to a board.</p>
-    {boardActions && <button type="button" onClick={() => boardActions.selectSource(repository)}>Use repository for Incoming</button>}
+    <div className="repository-selection">
+      <div><p className="eyebrow">{repository.private ? 'Private repository' : 'Public repository'}</p>
+        <p>{boardActions ? 'Connect this repository to discover work in Incoming.' : 'Browse issues here, or choose a board to connect this repository.'}</p></div>
+      {boardActions ? <button type="button" className="source-primary" disabled={connected}
+        onClick={() => boardActions.selectSource(repository)}>{connected ? 'Connected to this board' : 'Connect to this board'}</button>
+        : <a className="source-primary" href={`/boards?source=${encodeURIComponent(`${repository.owner}/${repository.name}`)}`}>Choose a board</a>}
+    </div>
     <div className="source-filters"><label>Filter loaded titles or numbers<input ref={queryInput} type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
       <label>Kind in loaded results<select value={kind} onChange={(event) => setKind(event.currentTarget.value)}><option value="all">Issues and pull requests</option><option value="issue">Issues</option><option value="pull-request">Pull requests</option></select></label></div>
     <p className="source-subset" role="status">Showing {matches.length} of {pages.items.length} loaded items. This filters the loaded subset only, not the whole repository.</p>
@@ -139,10 +133,14 @@ function RepositoryItems({ repository, session, onAccessLoss, boardActions }: So
 }
 function Repositories({ installation, session, onSelect, onAccessLoss }: SourceSessionProps & { installation: Installation; onSelect: (repository: RepositorySource) => void }) {
   const pages = usePages(`/api/sources/installations/${installation.id}/repositories`, session, repositoryIdentity, readRepository, onAccessLoss);
+  const [filter, setFilter] = useState('');
+  const matches = pages.items.filter((repo) => `${repo.owner}/${repo.name}`.toLowerCase().includes(filter.toLowerCase()));
   return <section aria-labelledby="repositories-heading"><h2 id="repositories-heading">Repositories for <bdi>{installation.owner}</bdi></h2>
     <p>Only repositories available to both your GitHub account and this app are listed.</p>
     {!pages.busy && !pages.items.length && !pages.error && <p>No authorized repositories here. Ask the owner to select repositories for the app and, for organizations, approve the installation. Then reload installations.</p>}
-    <ul className="source-choices">{pages.items.map((repo) => <li key={repo.nodeId}><button type="button" onClick={() => onSelect(repo)}>Browse <bdi>{repo.owner}/{repo.name}</bdi> · {repo.private ? 'Private' : 'Public'}</button></li>)}</ul><PageProgress {...pages} />
+    <label>Filter loaded repositories<input type="search" value={filter} onChange={(event) => setFilter(event.currentTarget.value)} /></label>
+    <p className="source-subset">{matches.length} of {pages.items.length} loaded repositories. Use Find a repository above to jump directly to any full name.</p>
+    <ul className="source-choices">{matches.map((repo) => <li key={repo.nodeId}><button type="button" onClick={() => onSelect(repo)}>Browse <bdi>{repo.owner}/{repo.name}</bdi> · {repo.private ? 'Private' : 'Public'}</button></li>)}</ul><PageProgress {...pages} />
   </section>;
 }
 function Installations({ session, onSelect, onAccessLoss }: SourceSessionProps & { onSelect: (installation: Installation) => void }) {
@@ -232,16 +230,21 @@ export function SourceBrowser({ session, boardActions }: { session: SignedInSess
   else if (installation) browsing = <Repositories key={`${session.user.id}:${installation.id}`} installation={installation} session={session} onAccessLoss={loseAccess} onSelect={(repo) => navigate(() => setRepository(repo))} />;
   else browsing = <Installations key={`${session.user.id}:${generation}`} session={session} onAccessLoss={loseAccess} onSelect={(item) => navigate(() => setInstallation(item))} />;
   return <section className="source-browser runtime-panel" aria-labelledby="sources-heading" ref={panel}>
-    <h2 id="sources-heading" ref={heading} tabIndex={-1}>Browse GitHub sources</h2>
-    <p>Sign-in identifies you; it does not install the app or approve organization access. A repository owner must install the app and select private repositories. An organization may also need to approve it.</p>
-    <p>Public issue and pull request URLs can be available even when their repository is not an installed source. URL access does not imply installation or webhook coverage.</p>
-    {!authorizationLost && <div className="source-navigation">
+    <div className="source-browser-heading"><div><p className="eyebrow">GitHub repositories</p><h2 id="sources-heading" ref={heading} tabIndex={-1}>{boardActions ? 'Connect a repository' : 'Find and connect repositories'}</h2></div>
+      <p className="source-subset">{boardActions ? 'Choose a source for this board. You decide which items go onto the canvas.' : 'Find a repository once. Reuse it on any of your boards.'}</p></div>
+    {!authorizationLost && (repository ? <button type="button" className="source-change" onClick={() => navigate(() => setRepository(null))}>Change repository</button>
+            : <RepositoryFinder session={session} onSelect={(repo) => navigate(() => {
+        setRepositoryDenials((previous) => { const next = new Map(previous); next.delete(repositoryScope(repo.owner, repo.name)); return next; });
+        setRepository(repo);
+      })} onAccessLoss={loseAccess} />)}
+    {!authorizationLost && <details className="repository-browse"><summary>Browse installed repositories</summary><div className="source-navigation">
       {(installation || repository) && <button type="button" onClick={() => navigate(() => { if (repository) setRepository(null); else setInstallation(null); })}>{repository ? 'Back to repositories' : 'Back to installations'}</button>}
       <button type="button" onClick={() => navigate(() => { setRepository(null); setInstallation(null); setGeneration((value) => value + 1); })}>Reload installations</button>
       <a href="https://github.com/settings/installations" target="_blank" rel="noreferrer">Manage GitHub installations (new tab)</a>
-    </div>}
-    {browsing}
-    {!authorizationLost && <section className="source-url" aria-labelledby="resolve-heading"><h2 id="resolve-heading">Resolve an issue or pull request URL</h2>
+    </div>
+    {!repository && browsing}</details>}
+    {(repository || authorizationLost) && browsing}
+    {!authorizationLost && <details className="source-url"><summary id="resolve-heading">Add an individual issue or pull request URL</summary><section aria-labelledby="resolve-heading">
       <form onSubmit={(event) => { event.preventDefault(); void resolve(); }}>
         <label htmlFor="source-url">GitHub item URL</label><p id="source-url-hint">Use https://github.com/owner/repository/issues/123 or /pull/123, without a query or fragment. Public and authorized private items are supported.</p>
         <input id="source-url" name="url" type="url" required value={url} aria-describedby={`source-url-hint${error ? ' source-url-error' : ''}`} aria-invalid={error ? true : undefined} onChange={(event) => setUrl(event.currentTarget.value)} placeholder="https://github.com/octo/project/issues/123" />
@@ -250,6 +253,6 @@ export function SourceBrowser({ session, boardActions }: { session: SignedInSess
       <p role="status">{busy ? 'Resolving GitHub URL…' : resolved ? 'Item resolved. No canvas placement was created.' : ''}</p>
       {error && <p id="source-url-error" className="auth-error" role="alert" tabIndex={-1}>{error} <a href="/api/auth/github">Reconnect GitHub</a> if needed, then retry.</p>}
       {resolved && <ul className="source-items" data-source-scope={repositoryScope(resolved.metadata.locator.owner, resolved.metadata.locator.repository)}><ItemRow item={resolved} boardActions={boardActions} /></ul>}
-    </section>}
+    </section></details>}
   </section>;
 }

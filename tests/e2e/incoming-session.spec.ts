@@ -6,7 +6,7 @@ import { validateIncoming } from '../../src/shared/incoming.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
 import type { SourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn, openSourceTools } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -128,7 +128,7 @@ test('current-session queue and placed hydration stay ephemeral, and resource de
   expect(lookups.every((lookup) => lookup.csrf === csrf)).toBe(true);
   const original = await page.locator('.tl-container').elementHandle();
   if (!original) throw new Error('Missing native editor');
-  await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
   const url = page.getByLabel('GitHub item URL', { exact: true });
   await url.fill('https://github.com/alice/project/issues/1');
   await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();

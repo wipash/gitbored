@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readSourceItem, readSourcePage } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, providerOrigin, restartApplication, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, providerOrigin, restartApplication, signIn, openSourceTools } from './auth-support.js';
 
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Configured source authorization is required.');
 test.beforeEach(async ({ request }) => {
@@ -11,7 +11,7 @@ test.beforeEach(async ({ request }) => {
 
 test('mixed pages retain PR-only progress, partial retry and loaded-subset filters', async ({ page }) => {
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await page.getByRole('button', { name: 'Load next page', exact: true }).click();
   await expect(page.getByRole('button', { name: /example-org · Organization/ })).toBeVisible();
   await page.getByRole('button', { name: /alice · Personal/ }).click();
@@ -45,7 +45,7 @@ test('mixed pages retain PR-only progress, partial retry and loaded-subset filte
 
 test('lossless identities, current-user reference access and authorized URL reads survive restart', async ({ page, browser }) => {
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   const session = await currentSession(page.request); if (session.status !== 'signed-in') throw new Error('Expected session');
   const headers = { origin: applicationOrigin, 'x-csrf-token': session.csrfToken };
   const first = await page.request.get('/api/sources/repositories/alice/project/items?page=1', { headers });
@@ -77,7 +77,7 @@ test('lossless identities, current-user reference access and authorized URL read
   const bobContext = await browser.newContext({ baseURL: applicationOrigin });
   try {
     const bob = await bobContext.newPage(); await signIn(bob, 'Bob');
-    await bob.getByRole('link', { name: 'Sources', exact: true }).click();
+    await bob.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(bob);
     const bobSession = await currentSession(bob.request); if (bobSession.status !== 'signed-in') throw new Error('Expected Bob');
     const bobHeaders = { 'x-csrf-token': bobSession.csrfToken };
     expect((await bob.request.get(`/api/references/${referenceId ?? ''}`, { headers: bobHeaders })).status()).toBe(404);
@@ -94,7 +94,7 @@ test('lossless identities, current-user reference access and authorized URL read
 test('invalid URLs, cursors, payloads and pagination links never become arbitrary provider requests', async ({ page, request }) => {
   expect((await request.get('/api/sources/installations')).status()).toBe(401);
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   const session = await currentSession(page.request); if (session.status !== 'signed-in') throw new Error('Expected session');
   const headers = { origin: applicationOrigin, 'x-csrf-token': session.csrfToken };
   expect((await page.request.post('/api/sources/resolve', { data: { url: 'https://github.com/alice/project/issues/1' } })).status()).toBe(403);
@@ -118,7 +118,7 @@ test('invalid URLs, cursors, payloads and pagination links never become arbitrar
 
 test('source controls and complete values remain reachable in both themes, keyboard and narrow enlarged text', async ({ page }) => {
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await page.getByRole('button', { name: /alice · Personal/ }).click();
   await page.getByRole('button', { name: 'Browse alice/project · Private', exact: true }).click();
   for (const theme of ['light', 'dark']) {
@@ -137,7 +137,7 @@ test('source controls and complete values remain reachable in both themes, keybo
   await page.keyboard.press('Enter');
   await expect(page.getByText('Item resolved. No canvas placement was created.')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const panel = await page.getByRole('region', { name: 'Browse GitHub sources', exact: true }).boundingBox();
+  const panel = await page.getByRole('region', { name: 'Find and connect repositories', exact: true }).boundingBox();
   if (!panel) throw new Error('Expected a visible source panel');
   for (const control of [page.getByLabel('GitHub item URL', { exact: true }), page.getByRole('button', { name: 'Resolve URL', exact: true })]) {
     const bounds = await control.boundingBox();
@@ -150,7 +150,7 @@ test('source controls and complete values remain reachable in both themes, keybo
 
 test('loading, empty and malformed pages recover; detected access loss clears loaded private values', async ({ page }) => {
   await signIn(page);
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await expect(page.getByRole('button', { name: /alice · Personal/ })).toBeVisible();
   for (const theme of ['light', 'dark']) {
     await page.getByLabel('Theme', { exact: true }).selectOption(theme);
@@ -192,6 +192,6 @@ test('loading, empty and malformed pages recover; detected access loss clears lo
   await expect(page.locator('.source-item')).toHaveCount(0);
   await page.getByRole('link', { name: 'Reconnect GitHub', exact: true }).click();
   await page.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
-  await page.getByRole('link', { name: 'Sources', exact: true }).click();
+  await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page);
   await expect(page.getByRole('button', { name: /alice · Personal/ })).toBeVisible();
 });

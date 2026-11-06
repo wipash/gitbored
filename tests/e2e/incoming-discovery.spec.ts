@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { validateBoard } from '../../src/shared/boards.js';
-import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, restartApplication, signIn, openSourceTools } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -23,10 +23,10 @@ async function create(page: Page, title: string) {
   return board;
 }
 async function chooseSource(page: Page) {
-  await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
   await page.getByRole('button', { name: /alice · Personal/ }).click();
   await page.getByRole('button', { name: 'Browse alice/project · Private', exact: true }).click();
-  await page.getByRole('button', { name: 'Use repository for Incoming', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect to this board', exact: true }).click();
   await expect(page.locator('.incoming-sources li')).toHaveCount(1);
 }
 async function saved(page: Page) { await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved'); }
@@ -34,8 +34,6 @@ async function saved(page: Page) { await expect(page.locator('.board-save')).toH
 test('bounded mixed discovery retains partial errors, deduplicates a fresh pass, remembers deletion and allows explicit URL re-add across restart', async ({ page }) => {
   const board = await create(page, 'Durable mixed Incoming');
   await chooseSource(page); await saved(page);
-  expect((await read(page, board.id)).incoming.sources[0]).toMatchObject({ nextPage: 1, loadedPage: 0, status: 'idle' });
-  await page.getByRole('button', { name: 'Discover first page', exact: true }).click();
   await expect(page.locator('.incoming-candidates > li')).toHaveCount(2); await saved(page);
   let state = await read(page, board.id);
   expect(Object.values(state.document.snapshot.store).filter((record) => record.typeName === 'shape')).toEqual([]);
@@ -68,7 +66,7 @@ test('bounded mixed discovery retains partial errors, deduplicates a fresh pass,
   state = await read(page, board.id);
   expect(state.incoming.queue).toEqual(complete.incoming.queue.slice(1));
   expect(state.incoming.seen).toEqual(complete.incoming.seen);
-  await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
   await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
   await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
   await page.getByRole('button', { name: 'Send to Incoming', exact: true }).click(); await saved(page);
@@ -85,7 +83,6 @@ for (const theme of ['light', 'dark']) {
   test(`keyboard Add remains contained, visible and focused in ${theme} desktop and 320px enlarged text`, async ({ page }) => {
     const board = await create(page, `Keyboard Incoming ${theme}`);
     await chooseSource(page);
-    await page.getByRole('button', { name: 'Discover first page', exact: true }).click();
     await expect(page.locator('.incoming-candidates > li')).toHaveCount(2); await saved(page);
     await page.getByRole('button', { name: 'Close Incoming', exact: true }).click();
     await page.getByLabel('Theme', { exact: true }).selectOption(theme);
@@ -132,7 +129,7 @@ for (const theme of ['light', 'dark']) {
     const nextShape = Object.values(receiving.document.snapshot.store).find((record) => record.typeName === 'shape' && record.id !== shape.id);
     expect(nextShape).toMatchObject({ x: 0, y: 304 });
     await page.getByRole('button', { name: /^Incoming \d+$/ }).focus(); await page.keyboard.press('Enter');
-    await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+    await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
     await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
     await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
     await page.getByRole('button', { name: 'Send to Incoming', exact: true }).click();

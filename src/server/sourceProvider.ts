@@ -2,6 +2,57 @@ import type { ItemKind } from '../shared/items.js';
 import type { Installation, RepositorySource } from '../shared/sources.js';
 import { AuthenticationError } from './auth.js';
 
+export class RepositoryAccessError extends AuthenticationError {
+  constructor(status: number, code: string, message: string, readonly diagnostic: Record<string, string | number | boolean>) {
+    super(status, code, message);
+  }
+}
+
+/** Classify provider errors without logging arbitrary messages or SSO URLs. */
+async function repositoryDenial(response: Response, rate: boolean): Promise<Record<string, string | number | boolean>> {
+  let message = '';
+  const reader = response.body?.getReader();
+  if (reader) {
+    try {
+      const decoder = new TextDecoder();
+      let raw = ''; let size = 0;
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        size += part.value.byteLength;
+        if (size > 8192) { raw = ''; break; }
+        raw += decoder.decode(part.value, { stream: true });
+      }
+      raw += decoder.decode();
+      const value: unknown = JSON.parse(raw);
+      if (isObject(value) && typeof value['message'] === 'string') message = value['message'].toLowerCase();
+    } catch { /* Diagnostics must not replace the original provider denial. */ }
+    finally { await reader.cancel().catch(() => undefined); }
+  }
+  const ssoRequired = response.headers.get('x-github-sso')?.startsWith('required') === true;
+  const category = rate || message.includes('rate limit') ? 'rate_limited'
+    : ssoRequired || /saml|single sign.on|sso/.test(message) ? 'sso_required'
+    : /ip (allow|address)|allow list|allowlist/.test(message) ? 'ip_restricted'
+    : /managed user/.test(message) ? 'managed_user_restricted'
+    : /suspend/.test(message) ? 'installation_suspended'
+    : message.includes('resource not accessible by integration') ? 'integration_denied'
+    : message.includes('resource not accessible by user') ? 'user_denied'
+    : 'unknown';
+  const diagnostic: Record<string, string | number | boolean> = {
+    event: 'github_repository_access_failed', operation: 'list_installation_repositories',
+    httpStatus: response.status, category, ssoRequired,
+  };
+  const requestId = response.headers.get('x-github-request-id');
+  if (requestId && /^[A-Fa-f0-9:-]{1,128}$/.test(requestId)) diagnostic['githubRequestId'] = requestId;
+  const remaining = response.headers.get('x-ratelimit-remaining');
+  if (remaining && /^[0-9]{1,10}$/.test(remaining)) diagnostic['rateLimitRemaining'] = Number(remaining);
+  const permissions = response.headers.get('x-accepted-github-permissions');
+  if (permissions && /^(?:(?:metadata|issues|pull_requests|contents|members|administration)=(?:read|write)(?:[,;] ?|$))+$/.test(permissions)) {
+    diagnostic['acceptedPermissions'] = permissions;
+  }
+  return diagnostic;
+}
+
 export function invalidProvider(): never {
   throw new AuthenticationError(502, 'invalid_provider', 'GitHub returned incomplete or invalid data. Retry this page shortly.');
 }
@@ -75,7 +126,7 @@ function decode(raw: string): unknown {
     return context.source;
   });
 }
-export async function providerRead(origin: string, token: string, path: string, page?: number): Promise<{ value: unknown; nextPage: number | null }> {
+export async function providerRead(origin: string, token: string, path: string, page?: number, canonicalPaginationPath?: string): Promise<{ value: unknown; nextPage: number | null }> {
   const url = new URL(path, origin);
   if (page !== undefined) { url.searchParams.set('per_page', '30'); url.searchParams.set('page', String(page)); }
   let response: Response;
@@ -84,10 +135,16 @@ export async function providerRead(origin: string, token: string, path: string, 
       redirect: 'error', signal: AbortSignal.timeout(15000) });
   } catch { throw new AuthenticationError(502, 'provider_unavailable', 'GitHub could not be reached. Retry this page shortly.'); }
   if (!response.ok) {
+    const rate = response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after');
+    if ((response.status === 403 || response.status === 429) && /^\/user\/installations\/[1-9][0-9]*\/repositories$/.test(path)) {
+      throw new RepositoryAccessError(rate ? 429 : 403, rate ? 'rate_limit' : 'missing_access', rate
+        ? 'GitHub is limiting requests. Wait before retrying this page.'
+        : 'GitHub denied this read. Check the app installation, selected repositories and organization approval, then retry.',
+      await repositoryDenial(response, rate));
+    }
     await response.body?.cancel();
     if (response.status === 401) throw new AuthenticationError(401, 'reauthorize', 'GitHub authorization ended. Reconnect GitHub to continue.');
     if (response.status === 403 || response.status === 429) {
-      const rate = response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after');
       throw new AuthenticationError(rate ? 429 : 403, rate ? 'rate_limit' : 'missing_access', rate
         ? 'GitHub is limiting requests. Wait before retrying this page.'
         : 'GitHub denied this read. Check the app installation, selected repositories and organization approval, then retry.');
@@ -116,7 +173,7 @@ export async function providerRead(origin: string, token: string, path: string, 
       const match = /^\s*<([^>]+)>/.exec(segment); if (!match?.[1]) return invalidProvider();
       let next: URL; try { next = new URL(match[1]); } catch { return invalidProvider(); }
       const nextValue = next.searchParams.get('page');
-      if (next.origin !== url.origin || next.pathname !== url.pathname || next.username || next.password || next.hash
+      if (next.origin !== url.origin || (next.pathname !== url.pathname && next.pathname !== canonicalPaginationPath) || next.username || next.password || next.hash
         || next.searchParams.get('per_page') !== '30' || !nextValue || !/^[1-9][0-9]*$/.test(nextValue)
         || Number(nextValue) !== page + 1 || Number(nextValue) > 10000) return invalidProvider();
       // Only the validated page number is used. Never follow a provider-supplied URL.

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext, Page } from '@playwright/test';
-import { controlProvider, providerOrigin, signIn } from './auth-support.js';
+import { controlProvider, providerOrigin, signIn, openSourceTools } from './auth-support.js';
 
 async function gate(request: APIRequestContext, action: 'arm' | 'release' | 'reset', target?: string): Promise<void> {
   expect((await request.post(`${providerOrigin}/__source-gate`, { data: { action, target } })).ok()).toBe(true);
@@ -38,7 +38,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 test('remembered repository denials accumulate across navigation and retry clears only its selected repository', async ({ page }) => {
-  await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await picker(page); await choose(page, 'project');
+  await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page); await picker(page); await choose(page, 'project');
   await expect(page.locator('.source-item')).toHaveCount(2); await deny(page, 'project');
   await page.getByRole('button', { name: 'Back to repositories', exact: true }).click();
   await choose(page, 'other'); await expect(page.locator('.source-item')).toHaveCount(2); await deny(page, 'other');
@@ -71,7 +71,7 @@ test('remembered repository denials accumulate across navigation and retry clear
 
 for (const width of [1280, 320]) {
   test(`focus inside revoked details moves to the current access notice at ${width}px`, async ({ page }) => {
-    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await picker(page); await choose(page, 'project');
+    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page); await picker(page); await choose(page, 'project');
     await expect(page.locator('.source-item')).toHaveCount(2);
     await page.setViewportSize({ width, height: 900 });
     if (width === 320) {
@@ -85,7 +85,7 @@ for (const width of [1280, 320]) {
       const response = page.waitForResponse((value) => value.url().endsWith('/api/sources/resolve'));
       await submit(page, 'project'); await waitGate(page.request, 'repository-denial');
       await controlProvider(page.request, { sourceDenied: false });
-      for (let step = 0; step < 4; step += 1) await page.keyboard.press('Shift+Tab');
+      for (let step = 0; step < 5; step += 1) await page.keyboard.press('Shift+Tab');
       await expect(page.getByRole('link', { name: 'Open alice/project #1 on GitHub (new tab)', exact: true })).toBeFocused();
       await gate(page.request, 'release', 'repository-denial');
       expect((await response).status()).toBe(403);
@@ -99,7 +99,7 @@ for (const width of [1280, 320]) {
 
 for (const status of [403, 404]) {
   test(`held URL ${status} from the picker invalidates a subsequently selected repository and its held page`, async ({ page }) => {
-    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await picker(page);
+    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page); await picker(page);
     await gate(page.request, 'arm', 'repository-denial');
     try {
       await controlProvider(page.request, { sourceDenied: true, sourceDenialStatus: status });
@@ -113,6 +113,8 @@ for (const status of [403, 404]) {
       await page.getByRole('button', { name: 'Load next page', exact: true }).focus(); await page.keyboard.press('Enter');
       await waitGate(page.request, 'items-page-2');
       if (status === 403) {
+        await page.keyboard.press('Tab');
+        await expect(page.locator('details.source-url > summary')).toBeFocused();
         await page.keyboard.press('Tab');
         await expect(page.getByLabel('GitHub item URL', { exact: true })).toBeFocused();
       } else {
@@ -140,7 +142,7 @@ for (const status of [403, 404]) {
 }
 
 test('a held denial for A preserves the selected B, its focus and pagination, and remains remembered when returning to A', async ({ page }) => {
-  await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await picker(page); await gate(page.request, 'arm', 'repository-denial');
+  await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page); await picker(page); await gate(page.request, 'arm', 'repository-denial');
   try {
     await controlProvider(page.request, { sourceDenied: true });
     const denied = page.waitForResponse((response) => response.url().endsWith('/api/sources/resolve'));
@@ -168,7 +170,7 @@ test('a held denial for A preserves the selected B, its focus and pagination, an
 
 for (const releaseTiming of ['before retry', 'after new retry']) {
   test(`a held URL success cannot resurrect a denied scope ${releaseTiming} or overwrite its newer URL operation`, async ({ page }) => {
-    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await picker(page); await choose(page, 'project'); await expect(page.locator('.source-item')).toHaveCount(2);
+    await signIn(page); await page.getByRole('link', { name: 'Sources', exact: true }).click(); await openSourceTools(page); await picker(page); await choose(page, 'project'); await expect(page.locator('.source-item')).toHaveCount(2);
     await gate(page.request, 'arm', 'issue-detail');
     try {
       const aborted = page.waitForEvent('requestfailed', { predicate: (request) => request.url().endsWith('/api/sources/resolve') });

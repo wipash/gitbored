@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { startControlledGitHub } from '../scripts/controlled-github.js';
 import { isSessionResponse } from '../src/shared/session.js';
+import { readSourceItem, readSourcePage } from '../src/shared/sources.js';
 
 interface FailureScenario {
   operation: 'token_exchange' | 'identity_lookup';
@@ -71,6 +72,9 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
   let application: ChildProcess | undefined;
   let provider: FastifyInstance | undefined;
   let active: FailureScenario | undefined;
+  let repositoryFault: { message: string; sso?: boolean; throttle?: boolean } | undefined;
+  let issuePagination: 'canonical' | 'foreign-repository' | 'foreign-origin' | 'skip-page' | undefined;
+  const issueRequests: string[] = [];
   let tokenCalls = 0;
   const acceptedManagedLogins: string[] = [];
   let identityCalls = 0;
@@ -130,6 +134,15 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
     provider = await startControlledGitHub(3019, (app) => {
       app.addHook('preHandler', async (request, reply) => {
         const route = request.routeOptions.url;
+        if (route === '/repos/:owner/:name/issues' && issuePagination) issueRequests.push(request.url);
+        if (route === '/user/installations/:id/repositories' && repositoryFault) {
+          reply.header('x-github-request-id', 'ABCD:1234:5678:90EF');
+          reply.header('x-ratelimit-remaining', '4999');
+          reply.header('x-accepted-github-permissions', 'metadata=read');
+          if (repositoryFault.sso) reply.header('x-github-sso', `required; url=https://github.com/private-sso/${privatePayload}`);
+          if (repositoryFault.throttle) reply.header('retry-after', '60');
+          return reply.code(403).send({ message: repositoryFault.message, private: privatePayload });
+        }
         if (route !== '/login/oauth/access_token' && route !== '/user') return;
         const operation = route === '/user' ? 'identity_lookup' : 'token_exchange';
         if (operation === 'token_exchange') tokenCalls += 1;
@@ -158,6 +171,14 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
         }
       });
       app.addHook('onSend', async (request, _reply, payload) => {
+        if (request.routeOptions.url === '/repos/:owner/:name/issues' && issuePagination) {
+          const next = new URL(`/repositories/${issuePagination === 'foreign-repository' ? '999' : '9007199254740993'}/issues`,
+            issuePagination === 'foreign-origin' ? 'https://example.invalid' : providerOrigin);
+          next.searchParams.set('per_page', '30');
+          next.searchParams.set('page', issuePagination === 'skip-page' ? '3' : '2');
+          next.searchParams.set('after', 'opaque-cursor');
+          if (!request.url.includes('page=2')) _reply.header('link', `<${next.href}>; rel="next"`);
+        }
         if (request.routeOptions.url === '/login/oauth/access_token' && typeof payload === 'string' && payload.startsWith('{')) {
           const value: unknown = JSON.parse(payload);
           if (typeof value === 'object' && value !== null) {
@@ -234,6 +255,59 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
       assert.equal(diagnostics().length, 0, 'Valid managed identities must not emit failure diagnostics.');
       acceptedManagedLogins.push(login);
     }
+
+    const repositoryContext = await signedInSession(session);
+    for (const fault of [
+      { message: 'Resource not accessible by integration', category: 'integration_denied' },
+      { message: 'Resource not accessible by user', category: 'user_denied' },
+      { message: 'IP address is not permitted by the IP allow list', category: 'ip_restricted' },
+      { message: 'Installation suspended', category: 'installation_suspended' },
+      { message: privatePayload, sso: true, category: 'sso_required' },
+      { message: privatePayload, throttle: true, category: 'rate_limited' },
+      { message: privatePayload, category: 'unknown' },
+      { message: privatePayload.repeat(1000), category: 'unknown' },
+    ]) {
+      repositoryFault = fault;
+      const response: Response = await fetch(`${applicationOrigin}/api/sources/installations/9007199254740993/repositories`, {
+        headers: { cookie: session, 'x-csrf-token': repositoryContext.csrfToken },
+      });
+      assert.equal(response.status, fault.throttle ? 429 : 403);
+      const body: unknown = await response.json();
+      assert.ok(typeof body === 'object' && body !== null && 'error' in body);
+      assert.equal(body.error, fault.throttle ? 'rate_limit' : 'missing_access');
+      const lines = stderr.split('\n').filter((line) => line.startsWith('{"event":"github_repository_access_failed",'));
+      const event: unknown = JSON.parse(lines.at(-1) ?? 'null');
+      assert.deepEqual(event, { event: 'github_repository_access_failed', operation: 'list_installation_repositories',
+        httpStatus: 403, category: fault.category, ssoRequired: fault.sso === true,
+        githubRequestId: 'ABCD:1234:5678:90EF', rateLimitRemaining: 4999, acceptedPermissions: 'metadata=read' });
+      assertRedacted();
+    }
+    repositoryFault = undefined;
+    const recovered: Response = await fetch(`${applicationOrigin}/api/sources/installations/9007199254740993/repositories`, {
+      headers: { cookie: session, 'x-csrf-token': repositoryContext.csrfToken },
+    });
+    assert.equal(recovered.status, 200, 'A source denial must not revoke the application session.');
+
+    issuePagination = 'canonical';
+    const sourceHeaders = { cookie: session, 'x-csrf-token': repositoryContext.csrfToken };
+    const firstPage = await fetch(`${applicationOrigin}/api/sources/repositories/alice/project/items?page=1`, { headers: sourceHeaders });
+    assert.equal(firstPage.status, 200, 'GitHub canonical numeric repository pagination links must be accepted.');
+    const firstItems = readSourcePage(await firstPage.json(), readSourceItem);
+    assert.equal(firstItems.nextPage, 2);
+    assert.equal(firstItems.items[0]?.reference.repositoryRestId, '9007199254740993');
+    const secondPage = await fetch(`${applicationOrigin}/api/sources/repositories/alice/project/items?page=2`, { headers: sourceHeaders });
+    assert.equal(secondPage.status, 200);
+    assert.equal(readSourcePage(await secondPage.json(), readSourceItem).page, 2);
+    assert.deepEqual(issueRequests, [
+      '/repos/alice/project/issues?state=all&sort=created&direction=asc&per_page=30&page=1',
+      '/repos/alice/project/issues?state=all&sort=created&direction=asc&per_page=30&page=2',
+    ], 'Only the validated page number is used; never follow provider URLs or cursors.');
+    for (const invalid of ['foreign-repository', 'foreign-origin', 'skip-page'] as const) {
+      issuePagination = invalid;
+      const response = await fetch(`${applicationOrigin}/api/sources/repositories/alice/project/items?page=1`, { headers: sourceHeaders });
+      assert.equal(response.status, 502, `Reject ${invalid} pagination.`);
+    }
+    issuePagination = undefined;
 
     for (const scenario of scenarios) {
       active = scenario;

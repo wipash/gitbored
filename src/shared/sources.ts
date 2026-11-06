@@ -43,6 +43,9 @@ const sourceItemValidator = T.object({
 });
 export function readInstallation(value: unknown): Installation { return installationValidator.validate(value); }
 export function readRepository(value: unknown): RepositorySource { return repositoryValidator.validate(value); }
+export function readRepositoryLocator(value: unknown): { owner: string; name: string } {
+  return T.object({ owner: T.string, name: T.string }).validate(value);
+}
 export function readSourceItem(value: unknown): SourceItem { return sourceItemValidator.validate(value); }
 export function readSourcePage<T>(value: unknown, readItem: (item: unknown) => T): SourcePage<T> {
   if (typeof value !== 'object' || value === null || !('items' in value) || !Array.isArray(value.items)

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { validateBoard } from '../../src/shared/boards.js';
 import { readRepository, readSourceItem, readSourcePage } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn, openSourceTools } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -21,7 +21,7 @@ async function saved(page: Page) {
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
 }
 async function browse(page: Page, repository: string) {
-  await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
   await page.getByRole('button', { name: /alice · Personal/ }).click();
   const loaded = page.waitForResponse((response) => {
     const url = new URL(response.url());
@@ -44,9 +44,8 @@ test('trusted repository rename repairs the locator without resetting Incoming i
   await page.goto(`/boards/${board.id}`);
   await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
   const original = await browse(page, 'project');
-  await page.getByRole('button', { name: 'Use repository for Incoming', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect to this board', exact: true }).click();
   await expect(page.locator('.incoming-sources li')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Discover first page', exact: true }).click();
   await expect(page.locator('.incoming-candidates > li')).toHaveCount(2);
   await saved(page);
   const first = await readBoard(page, board.id);
@@ -65,7 +64,7 @@ test('trusted repository rename repairs the locator without resetting Incoming i
   expect(renamed.repository).toEqual({ ...original.repository, name: 'renamed-project' });
   expect(renamed.page.items.map(({ reference }) => reference)).toEqual(original.page.items.map(({ reference }) => reference));
   expect(renamed.page.items.map(({ reference }) => reference.id)).toEqual(failed.incoming.queue.map((candidate) => candidate.referenceId));
-  await page.getByRole('button', { name: 'Use repository for Incoming', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect to this board', exact: true }).click();
   await saved(page);
   const repaired = await readBoard(page, board.id);
   expect(repaired.incoming).toEqual({ ...failed.incoming, sources: failed.incoming.sources.map((source) => ({ ...source, owner: 'alice', repository: 'renamed-project' })) });

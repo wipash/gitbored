@@ -5,7 +5,7 @@ import type { Board, BoardSave } from '../../src/shared/boards.js';
 import { validateIncoming } from '../../src/shared/incoming.js';
 import { validateNativeDocument } from '../../src/shared/nativeDocument.js';
 import { readSourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, signIn, openSourceTools } from './auth-support.js';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -34,7 +34,7 @@ async function queuedBoard(page: Page, title: string) {
   await expect(page.locator('.tl-container')).toBeVisible();
   await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
   await expect(page.getByRole('heading', { name: /^Incoming \d+$/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
   await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
   const resolved = page.waitForResponse((result) => new URL(result.url()).pathname === '/api/sources/resolve' && result.request().method() === 'POST');
   await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();
@@ -119,7 +119,7 @@ for (const reopened of [false, true]) {
     const deleted = await durable(page, board.id, candidate.referenceId, 0, false, placed.revision);
     await page.getByRole('button', { name: /^Incoming \d+$/ }).click();
     if (!(await page.getByLabel('GitHub item URL', { exact: true }).isVisible())) {
-      await page.getByRole('button', { name: 'Choose sources or add a URL', exact: true }).click();
+      await page.getByRole('button', { name: 'Connect a repository', exact: true }).click(); await openSourceTools(page);
     }
     await page.getByLabel('GitHub item URL', { exact: true }).fill('https://github.com/alice/project/issues/1');
     await page.getByRole('button', { name: 'Resolve URL', exact: true }).click();

@@ -9,6 +9,7 @@ import { checkStorage } from './storage.js';
 import { AuthenticationError, registerAuthentication } from './auth.js';
 import { registerSources } from './sources.js';
 import { registerBoards } from './boards.js';
+import { RepositoryAccessError } from './sourceProvider.js';
 
 function isClientNavigation(request: FastifyRequest): boolean {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -39,6 +40,7 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
 
   app.setErrorHandler((error: unknown, _request, reply) => {
     if (error instanceof AuthenticationError) {
+      if (error instanceof RepositoryAccessError) console.warn(JSON.stringify(error.diagnostic));
       return reply.code(error.statusCode).send({ error: error.code, message: error.message });
     }
     const status = error instanceof Error && 'statusCode' in error

@@ -19,6 +19,8 @@ export function Boards({ session, ready, reconcileAccount, theme }: { session: S
   return boardId ? <LoadBoard key={`${authority.session.user.id}:${boardId}`} id={boardId} authority={authority} theme={theme} /> : <BoardList authority={authority} />;
 }
 function BoardList({ authority }: { authority: BoardAuthority }) {
+  const requestedSource = new URLSearchParams(window.location.search).get('source');
+  const sourceQuery = requestedSource ? `?source=${encodeURIComponent(requestedSource.slice(0, 512))}` : '';
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -51,12 +53,13 @@ function BoardList({ authority }: { authority: BoardAuthority }) {
       if (!response.ok) throw new Error('Cannot create board');
       const board = validateBoard(await response.json());
       if (signal?.aborted) return;
-      window.location.assign(`/boards/${encodeURIComponent(board.id)}`);
+      window.location.assign(`/boards/${encodeURIComponent(board.id)}${sourceQuery}`);
     } catch { if (!signal?.aborted) { setError('The board could not be created. Check your connection and board name, then Create board again. If your session ended, use Check account above.'); setBusy(false); } }
   }
   return <section className="boards-list" aria-labelledby="boards-heading">
     <h1 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h1>
     <p>Private spaces for your GitHub work, notes and drawings.</p>
+    {requestedSource && <p className="board-source-intent">Choose a board for <strong><bdi>{requestedSource}</bdi></strong>, or create one below.</p>}
     <form className="board-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <label htmlFor="new-board-title">Board name <span className="connection-detail">(1–160 characters)</span></label>
       <div className="board-form-row"><input id="new-board-title" name="title" required maxLength={160} value={title} onChange={(event) => setTitle(event.currentTarget.value)} /><button className="board-primary" aria-disabled={busy || !authority.ready} aria-busy={busy} type="submit">{busy ? 'Creating board…' : 'Create board'}</button></div>
@@ -64,7 +67,7 @@ function BoardList({ authority }: { authority: BoardAuthority }) {
     {!authority.ready && <p role="status">Boards are paused until your account is checked. Your entered board name remains here.</p>}
     {authority.ready && <><p role="status">{boards === null && !error ? 'Loading boards…' : boards?.length === 0 ? 'No boards yet. Name your first board above to start drawing and arranging work.' : ''}</p>
     {error && <div className="board-error"><p role="alert">{error}</p><button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); heading.current?.focus(); }}>Retry loading</button></div>}
-    {boards && <ul className="board-entries">{boards.map((board) => <li key={board.id}><a href={`/boards/${encodeURIComponent(board.id)}`}>{board.title}</a><span>Updated {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(board.updatedAt)}</span></li>)}</ul>}</>}
+    {boards && <ul className="board-entries">{boards.map((board) => <li key={board.id}><a href={`/boards/${encodeURIComponent(board.id)}${sourceQuery}`}>{board.title}</a><span>Updated {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(board.updatedAt)}</span></li>)}</ul>}</>}
   </section>;
 }
 function LoadBoard({ id, authority, theme }: { id: string; authority: BoardAuthority; theme: 'light' | 'dark' }) {
@@ -284,7 +287,7 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
     {copy && <p role="status">A private copy was saved, but you made newer changes while it was saving. Those changes remain in this tab.{copy.receiptUnavailable ? ' Browser storage could not remember the saved copy’s link on the original recovery draft.' : ''} <a href={`/boards/${encodeURIComponent(copy.id)}`} target="_blank" rel="noopener">Open saved copy (new tab)</a></p>}
     <details className="board-settings"><summary>Board settings</summary><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name (1–160 characters)</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></details>
     {error && <p className="board-error" role="alert">{error}</p>}
-    <div className="board-canvas"><IncomingWorkspace board={board} authority={authority} coordinator={coordinator} theme={theme} /></div>
+    <IncomingWorkspace board={board} authority={authority} coordinator={coordinator} theme={theme} />
     <dialog ref={dialog} className="board-dialog" aria-labelledby="delete-board-heading" onClose={() => {
       if (confirmation.current) { confirmation.current.value = ''; confirmation.current.setCustomValidity(''); }
     }}><h2 id="delete-board-heading">Delete “{title}”?</h2><p>This permanently deletes the board and all its notes, drawings and placements. It cannot be undone.</p><form aria-busy={busy} onSubmit={(event) => {
