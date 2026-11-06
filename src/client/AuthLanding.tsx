@@ -154,7 +154,7 @@ export function AuthLanding() {
         </section>}
   </div>;
 
-  const needsAttention = view.status === 'signed-in' && (accountCheck.status !== 'ready' || view.authorization === 'reauthorize' || !!actionError);
+  const needsAttention = view.status === 'signed-in' && (accountCheck.status === 'blocked' || view.authorization === 'reauthorize' || !!actionError);
   const accountSettings = <div className="account-settings">
     {accountFeedback}
     <label className="theme-control" htmlFor="theme">Theme
