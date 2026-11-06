@@ -6,6 +6,9 @@ import { Boards } from './boards/Boards';
 import './auth.css';
 import { navigate, usePathname } from './navigation';
 import './desktop.css';
+import './mobile.css';
+import { AccountSettingsContext } from './workspace/panels';
+import { StandaloneSettings } from './StandaloneSettings';
 
 type View = { status: 'loading' } | { status: 'error' } | SessionResponse;
 type AccountCheck = { status: 'ready' | 'checking' | 'blocked'; message: string };
@@ -23,6 +26,11 @@ export function AuthLanding() {
   const [view, setView] = useState<View>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [workspaceSettingsMounted, setWorkspaceSettingsMounted] = useState(false);
+  const registerWorkspaceSettings = useCallback(() => {
+    setWorkspaceSettingsMounted(true);
+    return () => setWorkspaceSettingsMounted(false);
+  }, []);
   const [actionError, setActionError] = useState('');
   const [accountCheck, setAccountCheck] = useState<AccountCheck>({ status: 'ready', message: '' });
   const currentView = useRef(view);
@@ -134,22 +142,6 @@ export function AuthLanding() {
 
   if (view.status === 'loading') return <main className="app-loading" aria-label="GitBored" aria-busy="true"><p role="status">Loading…</p></main>;
 
-  const themeControls = <header className="runtime-header account-controls">
-        <div className="identity"><span className="identity-mark" aria-hidden="true">G</span><span className="brand">GitBored</span></div>
-        <div className="theme-control">
-          <label htmlFor="theme">Theme</label>
-          <select id="theme" value={theme.preference} aria-describedby={!theme.persistenceAvailable ? 'theme-storage-note' : undefined}
-            onChange={(event) => { if (isThemePreference(event.currentTarget.value)) theme.selectTheme(event.currentTarget.value); }}>
-            <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
-          </select>
-        </div>
-      </header>;
-  const accountNavigation = view.status === 'signed-in' && <nav className="application-nav" aria-label="Workspace">
-          <a href="/boards">Boards</a>
-          <span className="application-account">{accountCheck.status === 'ready' ? 'Account' : 'Last checked'}: @{view.user.login}</span>
-          <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>
-        </nav>;
-
   const accountFeedback = <div className="account-feedback">
         {view.status === 'signed-in' && view.authorization === 'reauthorize' && <p className="auth-error" role="alert">Your GitHub authorization ended. <a href="/api/auth/github">Reconnect GitHub</a> to resume GitHub access.</p>}
         {busy && <p role="status">Signing out…</p>}
@@ -162,7 +154,26 @@ export function AuthLanding() {
         </section>}
   </div>;
 
+  const needsAttention = view.status === 'signed-in' && (accountCheck.status !== 'ready' || view.authorization === 'reauthorize' || !!actionError);
+  const accountSettings = <div className="account-settings">
+    {accountFeedback}
+    <label className="theme-control" htmlFor="theme">Theme
+      <select id="theme" value={theme.preference} aria-describedby={!theme.persistenceAvailable ? 'theme-storage-note' : undefined}
+        onChange={(event) => { if (isThemePreference(event.currentTarget.value)) theme.selectTheme(event.currentTarget.value); }}>
+        <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
+      </select>
+    </label>
+    {!theme.persistenceAvailable && <p id="theme-storage-note" className="storage-note" role="status">Theme changes apply for this visit. Allow site storage to keep your preference after reloading.</p>}
+    {view.status === 'signed-in' && <>
+      <p className="application-account">{accountCheck.status === 'ready' ? 'Account' : 'Last checked'}: @{view.user.login}</p>
+      <div className="account-settings-actions"><a href="/boards">Boards</a>
+        <button type="button" disabled={busy || accountCheck.status !== 'ready'} onClick={() => { void logout(); }}>Sign out</button>
+      </div>
+    </>}
+  </div>;
+
   return (
+    <AccountSettingsContext value={{ content: accountSettings, needsAttention, workspaceMounted: workspaceSettingsMounted, registerWorkspace: registerWorkspaceSettings }}>
     <div className="runtime-shell auth-shell desktop-app" onClick={(event) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = event.target instanceof Element ? event.target.closest('a') : null;
@@ -194,10 +205,10 @@ export function AuthLanding() {
         </section>
         </section>}
         {view.status === 'signed-in' && <Boards key={view.user.id} session={view} ready={accountCheck.status === 'ready'} reconcileAccount={reconcileAccount} theme={theme.resolved} />}
-        {!theme.persistenceAvailable && <p id="theme-storage-note" className="storage-note" role="status">Theme changes apply for this visit. Allow site storage to keep your preference after reloading.</p>}
       </main>
-      <div className="workspace-account">{accountFeedback}<div className="workspace-preferences">{accountNavigation}{themeControls}</div></div>
+      {!workspaceSettingsMounted && <StandaloneSettings />}
       <footer><span>GitBored</span><a href="/runtime">Runtime diagnostics</a></footer>
     </div>
+    </AccountSettingsContext>
   );
 }
