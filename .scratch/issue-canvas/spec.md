@@ -135,6 +135,11 @@ Boards persist on the local/self-hosted application server and reopen across the
 - Planned module responsibilities are the board workspace/editor, revisioned board persistence, and GitHub access. The workspace composes Incoming, contextual controls, and view preferences. GitHub access owns authorized retrieval, normalization, and refresh coordination. These are internal responsibilities, not separately deployed services.
 - The important boundary is canvas document versus authorized GitHub metadata. Prefer the selected SDK's native APIs rather than a second layout, grouping, selection, or undo model.
 
+### Repository connection UX (Sean's redesign request, 2026-11-06)
+
+- Finding a known repository must accept owner/name or a GitHub repository URL directly, without paging through installations. Recent account-owned shortcuts carry across Sources and boards; opening them rechecks access.
+- Sources distinguishes browsing issues from connecting a repository to a chosen board. Preserve the chosen repository through board selection/creation. Board connection uses a normal page section above the mounted canvas rather than nesting a source browser inside the Incoming tray. Connecting a new source loads the first bounded issue/PR page into Incoming; canvas placement stays deliberate. Installation browsing and individual issue URLs remain secondary paths.
+
 ### Authentication and private ownership
 
 - Anyone who successfully authorizes through the GitHub App may sign in. Upsert the application identity using GitHub's immutable user ID; mutable login and email are display attributes. Do not retain the superseded single-owner allowlist.

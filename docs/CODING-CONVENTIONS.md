@@ -2,7 +2,7 @@
 
 Apply these rules when implementing or reviewing GitBored. This is a small local-first tool, not a general application framework. Prefer platform capabilities, the selected libraries, and a complete vertical slice over speculative abstractions.
 
-**Enforcement:** `pnpm lint` includes configured oxlint rules and the import-seam check; `pnpm type-check` applies the TypeScript configs. Those files are the exact automated rule set. Rules labelled **Review** below require evidence in code review, not a claim that a tool already enforces them. `pnpm gate` combines the executable checks and production application tests. Run the applicable checks before code handoff and the full gate before integration; tracking-only commits do not require rebuilding the app.
+**Enforcement:** `pnpm lint` includes configured oxlint rules and the import-seam check; `pnpm type-check` applies the TypeScript configs. Those files are the exact automated rule set. Rules labelled **Review** below require evidence in code review, not a claim that a tool already enforces them. `pnpm gate` combines the executable checks and production application tests. Follow [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) for check cadence and integration: focused checks during development and one full gate on the final integrated candidate; documentation-only changes do not require application checks.
 
 ## TypeScript and modules
 
