@@ -41,13 +41,16 @@ export function useCardDetailPosition(detailId: TLShapeId | null) {
     const viewport = editor.getViewportScreenBounds();
     const point = editor.pageToViewport(bounds);
     const gap = 12;
-    const scale = viewport.w <= 600 ? 1 : Math.min(1.25, Math.max(1, editor.getZoomLevel()));
-    const width = Math.min(350 * scale, Math.max(0, viewport.w - gap * 2));
+    const scale = Math.min(1.25, Math.max(.85, editor.getZoomLevel()));
+    const availableWidth = Math.max(0, viewport.w - gap * 2);
+    const width = Math.min(Math.min(350, availableWidth) * scale, availableWidth);
     const right = point.x + bounds.w * editor.getZoomLevel() + gap;
     const left = point.x - width - gap;
     // Prefer the card's right edge; flip when its left side has room.
     const x = right + width <= viewport.w - gap ? right : left >= gap ? left : right;
-    const maxHeight = Math.max(80, viewport.h - clearance.top - clearance.bottom);
+    const availableHeight = Math.max(80, viewport.h - clearance.top - clearance.bottom);
+    // Leave canvas exposed on a phone, and room for the anchor to move with the card.
+    const maxHeight = viewport.w <= 600 ? availableHeight * .7 : availableHeight;
     return {
       left: Math.max(gap, Math.min(x, viewport.w - width - gap)),
       top: Math.max(clearance.top, Math.min(point.y, viewport.h - clearance.bottom - Math.min(height * scale, maxHeight))),
