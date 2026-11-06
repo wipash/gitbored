@@ -99,7 +99,7 @@ async function seedMixed(page: Page, board: Board) {
   const records = [
     { ...base, id: 'shape:frame', type: 'frame', parentId: 'page:page', index: 'a1', x: 40, y: 40, props: { w: 450, h: 450, name: 'Recovery frame', color: 'black' } },
     { ...base, id: 'shape:group', type: 'group', parentId: 'shape:frame', index: 'a1', x: 10, y: 10, props: {} },
-    { ...base, id: 'shape:card', type: 'item-card', parentId: 'shape:group', index: 'a1', x: 20, y: 30, props: { version: 1, referenceId: first.reference.id, kind: first.reference.kind, w: 320, h: 240 } },
+    { ...base, id: 'shape:card', type: 'item-card', parentId: 'shape:group', index: 'a1', x: 20, y: 30, props: { version: 1, color: 'black', referenceId: first.reference.id, kind: first.reference.kind, w: 320, h: 240 } },
     { ...base, id: 'shape:text', type: 'text', parentId: 'shape:group', index: 'a2', x: 20, y: 300, props: { color: 'black', size: 'm', font: 'draw', textAlign: 'start', w: 300, autoSize: true, scale: 1, richText: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Authored recovery note' }] }] } } },
     { ...base, id: 'shape:arrow', type: 'arrow', parentId: 'shape:frame', index: 'a2', x: 100, y: 330, props: { kind: 'arc', labelColor: 'black', color: 'black', fill: 'none', dash: 'draw', size: 'm', arrowheadStart: 'none', arrowheadEnd: 'arrow', font: 'draw', start: { x: 0, y: 0 }, end: { x: 250, y: 40 }, bend: 0, richText: { type: 'doc', content: [{ type: 'paragraph' }] }, labelPosition: 0.5, scale: 1, elbowMidPoint: 0.5 } },
     { id: 'binding:arrow-card', typeName: 'binding', type: 'arrow', fromId: 'shape:arrow', toId: 'shape:card', meta: {}, props: { terminal: 'start', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: true, snap: 'none' } },
@@ -264,23 +264,23 @@ test('same-revision recovery waits for explicit retry and account/logout isolati
   const serialized = JSON.stringify(original.value);
   expect(serialized).not.toContain(session.csrfToken);
   expect(Object.keys(original.value).sort()).toEqual(['accountId', 'boardId', 'document', 'expectedRevision', 'incoming', 'updatedAt', 'version', 'writerId']);
-  const account = await context.newPage(); await account.goto('/account');
+  const account = await context.newPage(); await account.goto('/boards');
   await account.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(account.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
   page.on('dialog', (dialog) => { void dialog.accept(); });
   await page.reload(); await expect(page.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Sign in with GitHub', exact: true }).click();
   await page.getByRole('link', { name: 'Authorize Bob', exact: true }).click();
-  await page.goto('/account');
-  await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
+  await page.goto('/boards');
+  await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
   await page.goto(`/boards/${board.id}`);
   await expect(page.getByRole('button', { name: 'Retry opening' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Recover local work' })).toHaveCount(0);
   await expect(page.locator('.tl-container')).toHaveCount(0);
   expect(await stored(page)).toEqual([original]);
   await page.goto('/api/auth/github'); await page.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
-  await page.goto('/account');
-  await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
+  await page.goto('/boards');
+  await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
   await page.unroute(`**/api/boards/${board.id}`);
   await page.goto(`/boards/${board.id}`);
   await page.getByRole('button', { name: 'Review local draft', exact: true }).click();

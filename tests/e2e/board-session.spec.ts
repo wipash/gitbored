@@ -26,8 +26,8 @@ async function read(page: Page, id: string) {
 async function authorize(page: Page, identity: 'Alice' | 'Bob') {
   await page.goto('/api/auth/github');
   await page.getByRole('link', { name: `Authorize ${identity}`, exact: true }).click();
-  await page.goto('/account');
-  await expect(page.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
+  await page.goto('/boards');
+  await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
 }
 async function draw(page: Page) {
   const canvas = page.locator('.tl-container');
@@ -53,27 +53,21 @@ function geometry(board: Awaited<ReturnType<typeof read>>) {
   return { x: shape.x, y: shape.y };
 }
 
-test('Account, Boards and Sources have one primary view, keyboard route focus and narrow themed navigation', async ({ page }, testInfo) => {
+test('retired routes open Boards without legacy navigation in either theme', async ({ page }, testInfo) => {
   await signIn(page);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: 'Your GitBored account', exact: true })).toBeFocused();
-  await expect(page.locator('.boards-list, .source-browser')).toHaveCount(0);
   for (const theme of ['light', 'dark']) {
     await page.getByLabel('Theme', { exact: true }).selectOption(theme);
-    for (const route of ['Sources', 'Account']) {
-      await page.getByRole('link', { name: route, exact: true }).focus();
-      await page.keyboard.press('Enter');
-      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-      await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
-      await expect(page.getByRole('link', { name: route, exact: true })).toHaveAttribute('aria-current', 'page');
+    for (const route of ['/sources', '/account']) {
+      await page.goto(route);
+      await expect(page).toHaveURL('/boards');
+      await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeFocused();
+      await expect(page.getByRole('link', { name: /^(Sources|Account)$/ })).toHaveCount(0);
       await page.setViewportSize({ width: 320, height: 900 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      for (const name of ['Boards', 'Sources', 'Account']) {
-        const bounds = await page.getByRole('link', { name, exact: true }).boundingBox();
-        expect(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 320).toBe(true);
-      }
-      await page.screenshot({ path: testInfo.outputPath(`${route.toLowerCase()}-${theme}-narrow.png`), fullPage: true });
+      await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeInViewport();
+      await expect(page.getByLabel('Theme', { exact: true })).toBeInViewport();
+      await page.screenshot({ path: testInfo.outputPath(`boards-${theme}-narrow.png`), fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
     }
   }
@@ -104,7 +98,7 @@ test('same-user session rotation retains native lifetime, acknowledged revision,
   // Observe beyond two document-save debounce windows: new input must not replay a failed write.
   await page.waitForTimeout(650);
   expect(writes).toBe(1); expect((await read(page, board.id)).revision).toBe(1);
-  await page.getByRole('link', { name: 'Account', exact: true }).click();
+  await page.getByRole('link', { name: 'Boards', exact: true }).click();
   await expect(page.getByText('Save this board or save a copy before switching boards.')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/boards/${board.id}$`));
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
@@ -124,7 +118,7 @@ test('signed-out and transient reconciliation retain a dirty canvas until same-u
   const before = await read(page, board.id);
   const original = await page.locator('.tl-container').elementHandle();
   if (!original) throw new Error('Missing mounted canvas');
-  const other = await context.newPage(); await other.goto('/account');
+  const other = await context.newPage(); await other.goto('/boards');
   await other.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
   let writes = 0;
@@ -140,8 +134,8 @@ test('signed-out and transient reconciliation retain a dirty canvas until same-u
   await page.screenshot({ path: testInfo.outputPath('signed-out-draft-dark-narrow.png'), fullPage: true });
   await other.getByRole('link', { name: 'Sign in with GitHub', exact: true }).click();
   await other.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
-  await other.goto('/account');
-  await expect(other.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
+  await other.goto('/boards');
+  await expect(other.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
   await page.route('**/api/session', async (route) => { await route.abort('connectionfailed'); });
   await page.getByRole('button', { name: 'Check account', exact: true }).focus(); await page.keyboard.press('Enter');
   await expect(page.locator('.account-context-status')).toContainText('could not be checked');

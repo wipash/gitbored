@@ -183,8 +183,8 @@ test('an initially reauthorization-required GitHub session withholds Incoming re
   const reconnect = await authorization;
   try {
     await reconnect.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
-    await reconnect.goto('/account');
-    await expect(reconnect.getByRole('heading', { name: 'Connected account', exact: true })).toBeVisible();
+    await reconnect.goto('/boards');
+    await expect(reconnect.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
     await page.bringToFront();
     const check = incoming.getByRole('button', { name: 'Check GitHub access', exact: true });
     await check.focus();
@@ -200,7 +200,7 @@ test('an initially reauthorization-required GitHub session withholds Incoming re
   } finally { await reconnect.close(); }
 });
 
-test('a retained SourceBrowser session loss invalidates accepted hydration replies before they can restore private Incoming metadata', async ({ page, context }) => {
+test('a retained repository connector session loss invalidates accepted hydration replies before they can restore private Incoming metadata', async ({ page, context }) => {
   const { board, items } = await seed(page, 'Incoming global access-loss metadata boundary');
   const accepted: HeldReference[] = [];
   const terminal = new Set<Request>();
@@ -237,7 +237,7 @@ test('a retained SourceBrowser session loss invalidates accepted hydration repli
     const browser = page.getByRole('region', { name: 'Board repository connection', exact: true });
     await expect(browser.getByLabel('Search repositories')).toBeVisible();
     await privateValuesAbsent(page, items);
-    await other.goto('/account');
+    await other.goto('/boards');
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
     expect(await currentSession(other.request)).toMatchObject({ status: 'signed-out' });
@@ -322,7 +322,7 @@ test('global source-context loss rejects a previously authorized discovery page 
     expect(loading.incoming.sources[0]).toMatchObject({ status: 'loading', loadedPage: 1, nextPage: 2 });
     await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     await expect(page.getByLabel('Search repositories')).toBeVisible();
-    await other.goto('/account');
+    await other.goto('/boards');
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(other.getByRole('link', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
     await page.route('**/api/session', holdReconciliation);

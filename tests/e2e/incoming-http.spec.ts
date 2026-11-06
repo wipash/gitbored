@@ -41,7 +41,7 @@ function placed(candidate: IncomingCandidate, x: number) {
   const document = createEmptyBoardDocument();
   const card = { id: 'shape:http-card', typeName: 'shape', type: 'item-card', parentId: 'page:page', index: 'a1',
     x, y: 80, rotation: 0, opacity: 1, isLocked: false, meta: {},
-    props: { version: 1, referenceId: candidate.referenceId, kind: candidate.kind, w: 320, h: 240 } };
+    props: { version: 1, color: 'black', referenceId: candidate.referenceId, kind: candidate.kind, w: 320, h: 240 } };
   return validateNativeDocument({ ...document, snapshot: { ...document.snapshot, store: { ...document.snapshot.store, [card.id]: card } } });
 }
 async function save(page: Page, board: Board, incoming: IncomingState, document = board.document) {

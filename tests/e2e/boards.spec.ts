@@ -27,7 +27,7 @@ async function read(page: Page, id: string): Promise<Board> {
 function mixedDocument() {
   const document = createEmptyBoardDocument();
   const base = { typeName: 'shape', rotation: 0, opacity: 1, isLocked: false, meta: {} };
-  const card = { ...base, id: 'shape:card', type: 'item-card', parentId: 'shape:group', index: 'a1', x: 20, y: 30, props: { version: 1, referenceId: 'ref-durable-fixture', kind: 'issue', w: 320, h: 240 } };
+  const card = { ...base, id: 'shape:card', type: 'item-card', parentId: 'shape:group', index: 'a1', x: 20, y: 30, props: { version: 1, color: 'black', referenceId: 'ref-durable-fixture', kind: 'issue', w: 320, h: 240 } };
   const records = [
     { ...base, id: 'shape:frame', type: 'frame', parentId: 'page:page', index: 'a1', x: 40, y: 40, props: { w: 900, h: 620, name: 'Planning frame', color: 'black' } },
     { ...base, id: 'shape:group', type: 'group', parentId: 'shape:frame', index: 'a1', x: 30, y: 40, props: {} }, card,
@@ -117,7 +117,7 @@ test('authenticated board controls and mixed native geometry survive reload and 
   const styles = await page.getByRole('button', { name: 'Styles', exact: true }).boundingBox();
   expect(styles).not.toBeNull();
   expect(styles && styles.x >= 0 && styles.x + styles.width <= 320).toBe(true);
-  await page.getByRole('button', { name: 'Board settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByLabel('Board name', { exact: true }).fill('Renamed board');
   await page.getByRole('button', { name: 'Rename board', exact: true }).focus();
   await page.keyboard.press('Enter');

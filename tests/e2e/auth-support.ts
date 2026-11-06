@@ -22,8 +22,8 @@ export async function signIn(page: Page, identity: 'Alice' | 'Bob' = 'Alice'): P
   await page.getByRole('link', { name: 'Sign in with GitHub' }).click();
   await page.getByRole('link', { name: `Authorize ${identity}` }).click();
   await expect(page.locator('.application-nav')).toBeVisible();
-  await page.goto('/account');
-  await expect(page.getByRole('heading', { name: 'Connected account' })).toBeVisible();
+  await page.goto('/boards');
+  await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
 }
 
 export async function currentSession(request: APIRequestContext): Promise<SessionResponse> {
@@ -32,13 +32,4 @@ export async function currentSession(request: APIRequestContext): Promise<Sessio
   const session: unknown = await response.json();
   if (!isSessionResponse(session)) throw new Error('Invalid session response');
   return session;
-}
-
-/** The installed-repository and individual-item paths are secondary disclosures. */
-export async function openSourceTools(page: Page): Promise<void> {
-  for (const selector of ['.repository-browse', '.source-url']) {
-    const disclosure = page.locator(`details${selector}`);
-    await expect(disclosure).toBeVisible();
-    if (await disclosure.getAttribute('open') === null) await disclosure.locator(':scope > summary').click();
-  }
 }

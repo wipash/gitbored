@@ -22,7 +22,6 @@
 .board-error { display: grid; gap: 0.75rem; margin-block: 0.75rem; overflow-wrap: anywhere; }
 .board-error button, .board-loading button { justify-self: start; max-inline-size: 100%; }
 .board-settings { margin-block: 0.75rem; }
-.board-settings summary { cursor: pointer; inline-size: fit-content; min-block-size: 2rem; }
 .board-settings form { max-inline-size: 44rem; margin-block: 0.75rem 1.25rem; }
 .board-danger { color: var(--color-text-error); border-color: var(--color-text-error); }
 .board-canvas { block-size: max(32rem, 70dvh); min-inline-size: 0; border: 1px solid var(--color-border-control); border-radius: 0.5rem; overflow: hidden; }
