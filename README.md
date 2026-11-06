@@ -711,8 +711,7 @@ recording a recovery drill.
 
 ### Explicit HTTPS exposure
 
-Loopback HTTP is the default; `HOST` remains limited to loopback even for remote
-access. Terminate HTTPS in an explicitly configured reverse proxy on the same
+Loopback HTTP is the default. Terminate HTTPS in an explicitly configured reverse proxy on the same
 host, using a certificate trusted by clients. Set `APP_ORIGIN=https://board.example.com`,
 omit `ALLOW_LOOPBACK_HTTP`, retain `HOST=127.0.0.1`, and register
 `https://board.example.com/api/auth/callback` with the GitHub App. Only expose the
@@ -736,6 +735,76 @@ token; protected contextual GETs also require that token. Verify HTTPS sign-in,
 cookie flags, successful same-origin writes, and rejection of missing/wrong
 Origin or stale/missing CSRF through real requests before exposing the service.
 An HTTP origin on a non-loopback host is rejected, not silently upgraded.
+
+## Continuous integration and container images
+
+The `CI` workflow runs on pull requests and pushes to `main`. Each authentication
+mode gets an isolated runner using a pinned Playwright Ubuntu image with its
+browser, fonts and system dependencies preinstalled. Keep that image's version
+and digest aligned with `@playwright/test` when upgrading. The full `pnpm gate` uses a 900-second controlled
+session, while separate browser runs exercise short-session expiry and missing
+GitHub configuration. All builds use Node from `.node-version`, pnpm from
+`package.json`, the frozen lockfile and the committed tldraw patches. Failed
+browser runs retain traces/screenshots for seven days. No real GitHub App secrets
+are needed for tests. The locked test runner accepts Playwright filters:
+
+```sh
+CONTROLLED_SESSION_SECONDS=900 pnpm gate
+CONTROLLED_SESSION_SECONDS=10 pnpm test:e2e tests/e2e/auth.spec.ts --grep 'an expired server session'
+E2E_AUTH_MODE=unconfigured pnpm test:e2e tests/e2e/auth-unconfigured.spec.ts
+```
+
+After all checks pass, CI builds a Linux amd64 image and smoke-tests HTTP access,
+built assets, signed-out access denial, its non-root user, persisted SQLite data
+across restart and a consistent backup. On `main` only, a separate job publishes
+that exact tested image to `ghcr.io/wipash/gitbored:sha-<full-commit-sha>` and
+`:latest`. Pull requests never publish. The publisher uses the workflow's
+`GITHUB_TOKEN` with `packages: write`; no personal registry token is required.
+Actions/package policies must permit that job. Package visibility is managed in
+GitHub; publishing does not make a package public automatically. A manual run on
+`main` also tests and publishes. Pin a commit tag or digest for deployment.
+
+Build and exercise the same image locally:
+
+```sh
+docker build -t gitbored:local .
+bash scripts/smoke-container.sh gitbored:local
+```
+
+For Podman, set `CONTAINER_ENGINE=podman` for the smoke test. The Dockerfile pins
+the Node base image by version and digest; update it together with `.node-version`
+and the package's supported runtime when upgrading. The build context allowlist
+excludes local data, credentials, Git metadata and test artifacts. The final image
+contains production dependencies, compiled application files and the data CLI.
+
+Run one container with persistent storage, behind the HTTPS proxy described above:
+
+```sh
+docker run -d --name gitbored --restart unless-stopped \
+  -p 127.0.0.1:3001:3001 \
+  --mount type=volume,source=gitbored-data,target=/data \
+  --env-file /protected/gitbored.env \
+  ghcr.io/wipash/gitbored:sha-<full-commit-sha>
+```
+
+The protected environment file supplies `APP_ORIGIN=https://board.example.com`,
+`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and the stable `TOKEN_ENCRYPTION_KEY`
+(or a mounted `TOKEN_ENCRYPTION_KEY_FILE` owned by UID 1000 with mode 600/400).
+Do not set `ALLOW_LOOPBACK_HTTP` for this HTTPS deployment. The image explicitly
+sets `HOST=0.0.0.0` inside its container so port publishing works; ordinary local
+starts still default to loopback. Only publish the container port on host
+loopback, or connect it to a private proxy network. The application runs as UID
+1000; bind-mounted data directories must be writable by that user. Never share
+the live SQLite directory between application instances.
+
+The image includes the same backup/key tooling as the checkout, compiled for Node:
+`docker exec gitbored node dist/tools/scripts/data.js backup /data /backups/<new-name>`.
+Mount a separately protected backup directory at `/backups` when creating the
+container; its parent must exist and be writable by UID 1000. Follow the consistent
+backup and separate key recovery procedure above. The smoke test's temporary
+backup lives in its disposable test volume; production backups belong off-host.
+TLS, App registration, secrets, backup scheduling and a tldraw production license
+remain deployment configuration, not part of image publication.
 
 ## Verify
 

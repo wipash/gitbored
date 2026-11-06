@@ -1,4 +1,5 @@
 .auth-shell a { color: var(--color-accent-fill); text-underline-offset: 0.2em; }
+.auth-shell h1 { overflow-wrap: anywhere; }
 .auth-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
 .auth-panel button { overflow-wrap: anywhere; }
 .auth-panel .connection-detail { margin-block-start: 0; }

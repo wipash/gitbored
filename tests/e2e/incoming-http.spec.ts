@@ -48,7 +48,7 @@ async function save(page: Page, board: Board, incoming: IncomingState, document 
   return page.request.put(`/api/boards/${board.id}`, { headers: await headers(page), data: { expectedRevision: board.revision, document, incoming } });
 }
 
-test('authorized Incoming cursor, queue and seen survive reopen and real restart without creating shapes', async ({ page }) => {
+test('an unfinished Incoming import survives a real server restart without changing its cursor, queue or document', async ({ page }) => {
   await controlProvider(page.request, { reset: true });
   await signIn(page);
   const board = await create(page);
@@ -60,11 +60,8 @@ test('authorized Incoming cursor, queue and seen survive reopen and real restart
   expect(saved.incoming).toEqual(incoming);
   expect(saved.document).toEqual(board.document);
   expect(Object.values(saved.document.snapshot.store).filter((record) => record.typeName === 'shape')).toHaveLength(0);
-  await page.goto(`/boards/${board.id}`);
-  await page.reload();
-  expect((await read(page, board.id)).incoming).toEqual(incoming);
+  // Opening the editor resumes discovery and changes the cursor; isolate storage durability here.
   await restartApplication(page.request, 'original');
-  await page.reload();
   const reopened = await read(page, board.id);
   expect(reopened.incoming).toEqual(incoming);
   expect(reopened.document).toEqual(board.document);

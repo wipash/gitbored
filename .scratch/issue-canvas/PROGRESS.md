@@ -20,7 +20,7 @@ Sean’s app remains on ports 3001/3002 with `.data/github-debug` and ignored `.
 
 ## Retrospective follow-ups
 
-Queued tooling: [runtime preflight](../desktop-redesign/issues/01-runtime-preflight.md), [isolated test runs and auth modes](../desktop-redesign/issues/02-isolated-test-runs.md), then [CI enforcement](../desktop-redesign/issues/03-ci-gate.md). Early live-path and stable visual milestones are recorded in the project guide; editor-lifetime review is in coding conventions.
+CI enforcement and verified GHCR images are in review in [PR #2](https://github.com/wipash/gitbored/pull/2); see [CI evidence](../desktop-redesign/issues/03-ci-gate.md). CI pins the runtime and isolates authentication modes. Local-runner follow-ups remain queued: [runtime preflight](../desktop-redesign/issues/01-runtime-preflight.md) and [isolated test runs and auth modes](../desktop-redesign/issues/02-isolated-test-runs.md). Safe server failure logging was merged in [PR #1](https://github.com/wipash/gitbored/pull/1). Early live-path and stable visual milestones are recorded in the project guide; editor-lifetime review is in coding conventions.
 
 Remaining UI edge case: [constrained account-error layout](../desktop-redesign/issues/04-constrained-account-error-layout.md). Recovery controls remain reachable, but simultaneous notices can still crowd Incoming at very small/enlarged viewports.
 

@@ -6,7 +6,7 @@ if (mode !== 'build' && mode !== 'e2e') throw new Error('Expected build or e2e')
 if (!process.getuid) throw new Error('The build lock requires a POSIX host');
 // Deliberately independent of checkout and TMPDIR: every worktree shares one lock.
 const lock = join('/tmp', `gitbored-build-${process.getuid()}.lock`);
-const child = spawn('flock', ['--exclusive', '--close', lock, 'pnpm', 'exec', 'tsx', 'scripts/build-and-test.ts', mode], {
+const child = spawn('flock', ['--exclusive', '--close', lock, 'pnpm', 'exec', 'tsx', 'scripts/build-and-test.ts', mode, ...process.argv.slice(3)], {
   stdio: 'inherit', detached: true,
 });
 function stop(signal: NodeJS.Signals): void {

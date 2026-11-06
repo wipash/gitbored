@@ -1,0 +1,15 @@
+# Allow only the inputs required to build. Never send local data or credentials.
+**
+!Dockerfile
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!patches/
+!patches/**
+!src/
+!src/**
+!scripts/
+!scripts/**
+!tsconfig*.json
+!vite.config.ts
+!index.html
