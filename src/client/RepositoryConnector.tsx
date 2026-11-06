@@ -11,7 +11,7 @@ const ssoRecoveryMessage = 'GitHub SSO is required. Open the SSO recovery notice
 interface Props {
   session: Extract<SessionResponse, { status: 'signed-in' }>;
   onConnect: (repository: RepositorySource, filter: SourceFilter) => void;
-  onAccessLoss: (scope?: string) => void;
+  onAccessLoss: (scope?: string, ssoRequired?: boolean) => void;
   onSsoRequired?: (owner?: string, key?: string) => void;
   onSsoRecovered?: (key?: string) => void;
   retryAttempt?: number;
@@ -90,6 +90,11 @@ export function RepositoryConnector({ session, onConnect, onAccessLoss, onSsoReq
       }).catch((failure: unknown) => {
         if (controller.signal.aborted) return;
         if (failure instanceof SourceReadError && failure.code === 'sso_required') {
+          const scope = value.toLowerCase();
+          access.current(scope, true);
+          setRepos((previous) => previous.filter((repo) => `${repo.owner}/${repo.name}`.toLowerCase() !== scope));
+          setSelected((previous) => previous && `${previous.owner}/${previous.name}`.toLowerCase() === scope ? null : previous);
+          setItem((previous) => previous && `${previous.metadata.locator.owner}/${previous.metadata.locator.repository}`.toLowerCase() === scope ? null : previous);
           ssoRequired.current?.(value.split('/')[0], 'lookup');
           setError(ssoRecoveryMessage);
           return;
@@ -111,7 +116,12 @@ export function RepositoryConnector({ session, onConnect, onAccessLoss, onSsoReq
       }).catch((failure: unknown) => {
         if (controller.signal.aborted) return;
         if (failure instanceof SourceReadError && failure.code === 'sso_required') {
-          ssoRequired.current?.(new URL(query.trim()).pathname.split('/')[1], 'item');
+          const parts = new URL(query.trim()).pathname.split('/');
+          const scope = `${parts[1]}/${parts[2]}`.toLowerCase();
+          access.current(scope, true);
+          setRepos((previous) => previous.filter((repo) => `${repo.owner}/${repo.name}`.toLowerCase() !== scope));
+          setSelected((previous) => previous && `${previous.owner}/${previous.name}`.toLowerCase() === scope ? null : previous);
+          ssoRequired.current?.(parts[1], 'item');
           setItem(null);
           setError(ssoRecoveryMessage);
           return;

@@ -21,7 +21,7 @@ The notice follows [GitHub's SAML and GitHub Apps recovery guidance](https://doc
 - Type-check passed before parallel integration edits; root subsequently confirmed integrated lint/type-check passed.
 - Inspected `sso-expanded-desktop.png`, `sso-collapsed-dark-320-200.png`, `sso-expanded-top-light-320-200.png` and `sso-expanded-dark-320-200.png` under `/tmp/gitbored-sso-results-3/sso-recovery-one-SSO-notic-7f7bb-old-cards-without-reloading-chromium/`.
 - Declared token contrast against notice surface: light body 14.94:1, secondary 6.35:1, links/focus 8.03:1, border 3.67:1; dark body 13.77:1, secondary 8.20:1, links/focus 8.80:1, border 4.44:1. Calculated using sRGB relative luminance, not estimated from screenshots.
-- Connector aborts do not report stale responses. SSO does not invoke session-loss callbacks. Separate catalogue/lookup/item keys prevent one successful path clearing another failed path. Changing to a nonmatching query clears inactive keys; successful direct reads clear stale local errors.
+- Connector aborts do not report stale responses. Direct repository/item SSO invalidates the affected repository scope and cached connector values, without reporting unscoped session loss. Separate catalogue/lookup/item keys prevent one successful path clearing another failed path. Changing to a nonmatching query clears inactive keys; successful direct reads clear stale local errors.
 - Behavioral SSO browser tests are owned by the integration test agent. No duplicate full gate run here.
 
 ## Verdict
