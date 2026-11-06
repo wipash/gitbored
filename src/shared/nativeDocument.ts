@@ -1,6 +1,6 @@
 import {
   createShapePropsMigrationIds, createShapePropsMigrationSequence, createTLSchema,
-  defaultShapeSchemas, type TLShape, type TLStoreSnapshot,
+  defaultShapeSchemas, DefaultColorStyle, type TLDefaultColorStyle, type TLShape, type TLStoreSnapshot,
 } from '@tldraw/tlschema';
 import { T } from '@tldraw/validate';
 import { itemKindValidator, itemReferenceIdValidator } from './items.js';
@@ -13,6 +13,7 @@ export interface ItemCardProps {
   kind: 'issue' | 'pull-request';
   w: number;
   h: number;
+  color: TLDefaultColorStyle;
 }
 declare module '@tldraw/tlschema' {
   interface TLGlobalShapePropsMap { 'item-card': ItemCardProps }
@@ -23,13 +24,16 @@ const dimension = T.number.check((value) => {
 });
 export const itemCardProps = {
   version: T.literal(1), referenceId: itemReferenceIdValidator,
-  kind: itemKindValidator, w: dimension, h: dimension,
+  kind: itemKindValidator, w: dimension, h: dimension, color: DefaultColorStyle,
 };
-const versions = createShapePropsMigrationIds(ITEM_CARD_TYPE, { AddVersion: 1 });
+const versions = createShapePropsMigrationIds(ITEM_CARD_TYPE, { AddVersion: 1, AddColor: 2 });
 export const itemCardMigrations = createShapePropsMigrationSequence({
   sequence: [{ id: versions.AddVersion, up: (props: unknown) => {
     const previous = T.object({}).allowUnknownProperties().validate(props);
     return { ...previous, version: 1 };
+  }, down: 'retired' }, { id: versions.AddColor, up: (props: unknown) => {
+    const previous = T.object({}).allowUnknownProperties().validate(props);
+    return { ...previous, color: 'black' };
   }, down: 'retired' }],
 });
 export const nativeShapeSchemas = {

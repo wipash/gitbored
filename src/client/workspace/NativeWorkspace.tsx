@@ -19,6 +19,7 @@ import './workspace.css';
 import type { PlanningSelection } from '../../shared/planning';
 import { PlanningContext } from './planning';
 import { WorkspacePanels } from './WorkspacePanels';
+import { CardColourProvider } from './cardColours';
 
 export interface NativeWorkspaceProps {
   planning?: PlanningSelection | undefined;
@@ -65,7 +66,7 @@ function WorkspaceOpacity() {
 }
 function WorkspaceStylePanel(props: TLUiStylePanelProps) {
   const editor = useEditor();
-  const visible = useValue('Drawing styles visible', () => editor.getCurrentToolId() !== 'select' || editor.getSelectedShapes().some((shape) => shape.type !== ITEM_CARD_TYPE), [editor]);
+  const visible = useValue('Drawing styles visible', () => editor.getCurrentToolId() !== 'select' || editor.getSelectedShapes().length > 0, [editor]);
   if (!visible) return null;
   return <DefaultStylePanel {...props}><StylePanelColorPicker /><WorkspaceOpacity /><StylePanelFillPicker /><StylePanelDashPicker /><StylePanelSizePicker /><StylePanelFontPicker /><StylePanelTextAlignPicker /><StylePanelLabelAlignPicker /><StylePanelGeoShapePicker /><StylePanelArrowKindPicker /><StylePanelArrowheadPicker /><StylePanelSplinePicker /></DefaultStylePanel>;
 }
@@ -149,11 +150,11 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
     return () => { stop(); unmount?.(); editorRef.current = null; };
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
-    <MetadataContext value={props.metadata}><PlanningContext value={props.planning}>
+    <MetadataContext value={props.metadata}><PlanningContext value={props.planning}><CardColourProvider preferenceKey={props.preferenceKey}>
       <Tldraw {...(licenseKey ? { licenseKey } : {})} getShapeVisibility={getShapeVisibility} store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
         <WorkspacePanels hideClosed={hideClosed} onHideClosedChange={setHideClosed} metadata={props.metadata} planning={props.planning} onPlanningChange={props.onPlanningChange} preferenceKey={props.preferenceKey}>{props.children}</WorkspacePanels>
         <div className="workspace-status" role="status">{pasteError}</div>
       </Tldraw>
-    </PlanningContext></MetadataContext>
+    </CardColourProvider></PlanningContext></MetadataContext>
   </section>;
 }

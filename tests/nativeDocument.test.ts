@@ -11,7 +11,7 @@ function documentInput() {
     store: {
       'document:document': { id: 'document:document', typeName: 'document', name: '', meta: {}, gridSize: 10 },
       'page:page': { id: 'page:page', typeName: 'page', name: 'Page 1', index: 'a1', meta: {} },
-      'shape:card': { id: 'shape:card', typeName: 'shape', type: 'item-card', parentId: 'page:page', index: 'a1', x: 120, y: 80, rotation: 0, opacity: 1, isLocked: false, meta: {}, props: { version: 1, referenceId: 'ref-1', kind: 'pull-request', w: 320, h: 240 } },
+      'shape:card': { id: 'shape:card', typeName: 'shape', type: 'item-card', parentId: 'page:page', index: 'a1', x: 120, y: 80, rotation: 0, opacity: 1, isLocked: false, meta: {}, props: { version: 1, color: 'black', referenceId: 'ref-1', kind: 'pull-request', w: 320, h: 240 } },
     },
   } };
 }
@@ -41,11 +41,12 @@ await test('import rejects private caches, unexpected properties and unsupported
 });
 await test('supported older custom card schema migrates to explicit version one', () => {
   const input = documentInput();
-  const { version: _version, ...props } = input.snapshot.store['shape:card'].props;
+  const { version: _version, color: _color, ...props } = input.snapshot.store['shape:card'].props;
   input.snapshot.schema.sequences['com.tldraw.shape.item-card'] = 0;
   const document = validateNativeDocument({ ...input, snapshot: { ...input.snapshot, store: { ...input.snapshot.store, 'shape:card': { ...input.snapshot.store['shape:card'], props } } } });
   const shape = Object.values(document.snapshot.store).find((record) => record.id === 'shape:card');
   assert.equal(shape?.typeName === 'shape' && shape.type === 'item-card' && shape.props.version, 1);
+  assert.equal(shape?.typeName === 'shape' && shape.type === 'item-card' && shape.props.color, 'black');
 });
 await test('provider IDs remain lossless strings instead of rounded JavaScript numbers', () => {
   const reference = { id: 'ref-1', host: 'github.com', kind: 'pull-request', repositoryNodeId: 'R_opaque', repositoryRestId: '9999999999999999999999', nodeId: 'PR_opaque', issueRestId: '9999999999999999999998', pullRequestRestId: '9999999999999999999997' };
@@ -219,4 +220,22 @@ await test('legacy note attribution migrates before canonical document and clipb
   assert.deepEqual(Object.values(document.snapshot.store).find((record) => record.id === note.id), expected);
   assert.deepEqual(content.shapes[0], expected);
   assert.equal(JSON.stringify(legacy), before);
+});
+
+await test('card colours survive document and clipboard round trips and old neutral cards migrate', () => {
+  const input = documentInput();
+  input.snapshot.store['shape:card'].props.color = 'blue';
+  const document = validateNativeDocument(input);
+  assert.deepEqual(validateNativeDocument(document), document);
+  const clip = clipboardInput();
+  const card = clip.shapes[0];
+  assert.ok(card);
+  card.props.color = 'red';
+  const pasted = validateNativeClipboard(clip, new Set(['ref-1'])).shapes[0];
+  assert.equal(pasted?.type === 'item-card' && pasted.props.color, 'red');
+  const { color: _color, ...props } = input.snapshot.store['shape:card'].props;
+  input.snapshot.schema.sequences['com.tldraw.shape.item-card'] = 1;
+  const migrated = validateNativeDocument({ ...input, snapshot: { ...input.snapshot, store: { ...input.snapshot.store, 'shape:card': { ...input.snapshot.store['shape:card'], props } } } });
+  const shape = Object.values(migrated.snapshot.store).find((record) => record.id === 'shape:card');
+  assert.equal(shape?.typeName === 'shape' && shape.type === 'item-card' && shape.props.color, 'black');
 });
