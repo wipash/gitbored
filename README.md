@@ -341,7 +341,19 @@ bounded to 4 MB; over-limit or malformed pages fail without advancing progress.
 Titles are bounded to 65,536 characters, label/assignee lists to 1,000 values,
 label names to 1,024 and assignee values to 256 characters. Values are rejected,
 not silently truncated, at the provider boundary. The registry stores identity
-and locators, not private titles or a browser-persisted metadata cache.
+and locators. A separate account-scoped SQLite cache stores private card metadata,
+repository item pages and project context for 15 minutes. Browser reloads and
+server restarts reuse that cache; **Refresh** bypasses it. Entries are tied to the
+current credential, and detected access loss evicts them. Permission changes may
+therefore take up to 15 minutes to appear without Refresh. Proxy/browser HTTP
+responses remain `no-store`; private metadata never enters the canvas document.
+
+Select a card to set its saved colour with the drawing palette. **Settings → Card
+colours** can temporarily colour cards by status, priority, labels or type, and
+provides editable category defaults. Multiple labels split the card's top edge.
+Choosing **Off — original colours** restores each card's saved colour. Category
+colours and colour-by preferences stay per account and board in this browser;
+manual colours use the board's normal persistence and undo history.
 
 ## GitHub App setup
 
