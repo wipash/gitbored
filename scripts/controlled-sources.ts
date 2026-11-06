@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 export interface ControlledSourceSettings {
+  sourceCardLayout: boolean;
   sourceMode: 'normal' | 'empty' | 'malformed' | 'untrusted-link';
   sourceFailurePage: number;
   sourceDetailFailure: boolean;
@@ -67,12 +68,12 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
   const repo = (owner: string, name: string) => ({ id: `raw:${(name === 'outside' ? 9007199254740997n : owner === 'alice' ? 9007199254740993n : owner === 'bob' ? 9007199254741101n : 9007199254741201n) + (name === 'other' ? 2n : 0n)}`,
     node_id: `R_${owner}_${canonicalName(owner, name)}`, name, owner: { login: owner }, private: name !== 'outside' });
   const issue = (owner: string, name: string, number: number, pull = false) => ({ id: `raw:${9007199254741001n + BigInt(number) + (name === 'other' ? 2000n : 0n) + (owner === 'alice' ? 0n : owner === 'bob' ? 10000n : 20000n)}`,
-    node_id: `${pull ? 'PR' : 'I'}_${owner}_${canonicalName(owner, name)}_${number}`, number, title: number === 1
+    node_id: `${pull ? 'PR' : 'I'}_${owner}_${canonicalName(owner, name)}_${number}`, number, title: settings().sourceCardLayout && number === 2 ? 'Tighten card spacing' : settings().sourceCardLayout && number === 5 ? 'Keep board titles readable with project fields and labels visible' : number === 1
       ? `${owner} ${name === 'outside' ? 'public' : 'private'} issue — ${'Long complete title, with accessible full details. '.repeat(8)}` : `${pull ? 'Pull request' : 'Issue'} ${number}`,
     body: `## ${pull ? 'Pull request summary' : 'Issue description'}\n\nInvestigate the board loading behaviour.\n\n- [ ] Preserve cached content\n- [x] Keep the canvas usable\n\n<script>window.fixtureBodyExecuted = true</script>\n<img src=x onerror="window.fixtureBodyExecuted = true">`,
     state: pull ? 'closed' : 'open', state_reason: pull ? null : 'reopened',
     ...(pull ? { pull_request: { url: `http://127.0.0.1:${port}/repos/${owner}/${name}/pulls/${number}` } } : {}),
-    labels: Array.from({ length: 8 }, (_, index) => ({ name: `Label ${index + 1} ${'extended '.repeat(4)}` })),
+    labels: Array.from({ length: 8 }, (_, index) => ({ name: settings().sourceCardLayout && index === 0 && (number === 1 || number === 5) ? number === 1 ? 'bug' : 'enhancement' : `Label ${index + 1} ${'extended '.repeat(4)}` })),
     assignees: [{ login: owner }, { login: 'another-contributor' }], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', closed_at: pull ? '2026-11-01T00:00:00Z' : null });
   const raw = (reply: FastifyReply, value: unknown) => reply.type('application/json').send(JSON.stringify(value).replace(/"raw:([0-9]+)"/g, '$1'));
   function authorize(request: FastifyRequest, reply: FastifyReply, checkDenial = true): number | null {
