@@ -216,8 +216,21 @@ export function IncomingWorkspace({ board, authority, coordinator, theme, notice
     void hydrateContext();
     return () => controller.abort();
   }, [authority, placedIds, metadataAttempt, metadata, canRead, publishMetadata, reportSso]);
+  useEffect(() => {
+    const liveReferences = new Set(references.split(','));
+    const livePlacements = new Set(placedIds.split(','));
+    const liveSources = new Set(incoming.sources.map((source) => source.repositoryNodeId));
+    for (const key of ssoFailures.keys()) {
+      const removed = key.startsWith('reference:') ? !liveReferences.has(key.slice('reference:'.length))
+        : key.startsWith('context:') ? !livePlacements.has(key.slice('context:'.length))
+          : key.startsWith('source:') && !liveSources.has(key.slice('source:'.length));
+      // Removed canvas references no longer have a read that could clear this notice.
+      // oxlint-disable-next-line react/set-state-in-effect
+      if (removed) reportSso(key, null);
+    }
+  }, [references, placedIds, incoming.sources, ssoFailures, reportSso]);
   function retrySso() {
-    if (!canRead(authority)) return;
+    if (!canRead(authority) || !ssoFailures.size) return;
     restoreSsoFocus.current = !!noticeHost?.contains(document.activeElement);
     const next = new Map(metadataRef.current);
     for (const key of ssoFailures.keys()) {
