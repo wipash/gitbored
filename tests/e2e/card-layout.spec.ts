@@ -137,12 +137,6 @@ test('compact card controls and complete titles remain available on narrow canva
     await expectWholeTitle(card, textSize === '200%' ? 2 : 3);
     expect(await card.locator('.workspace-card-title').evaluate((element) => getComputedStyle(element).fontSize)).toBe(textSize === '200%' ? '28px' : '14px');
     await page.screenshot({ path: testInfo.outputPath(`cards-${width}-${theme}-before-hit.png`) });
-    await testInfo.attach(`card-controls-${width}`, { contentType: 'application/json', body: JSON.stringify(await card.locator('button, a').evaluateAll((elements) => elements.map((element) => {
-      const rect = element.getBoundingClientRect();
-      const card = element.closest('.workspace-card')?.getBoundingClientRect();
-      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
-      return { name: element.getAttribute('aria-label'), rect: rect.toJSON(), card: card?.toJSON(), hit: hit?.outerHTML.slice(0, 250) };
-    }))) });
     await expectCardControls(card);
     await page.screenshot({ path: testInfo.outputPath(`cards-${width}-${theme}.png`) });
     await card.getByRole('button', { name: 'Card details', exact: true }).click();
