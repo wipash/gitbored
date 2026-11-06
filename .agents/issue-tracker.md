@@ -9,7 +9,7 @@ Issues and specs for this repo live as Markdown files in `.scratch/`.
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`, never a single combined tickets file.
 - Triage state is recorded as a `Status:` line near the top of each issue file. See `.agents/triage-labels.md` for the role strings.
 - Implementation tickets record execution separately as `Work state: queued|in-progress|in-review|blocked|done`, plus `Blocked by:` ticket numbers. Keep `Status:` for canonical triage roles.
-- The execution board and handover live in `.scratch/<feature-slug>/PROGRESS.md`; the spec remains the sole product scope document. See `docs/PROJECT_MANAGEMENT.md` when coordinating implementation.
+- The execution board and handover live in `.scratch/<feature-slug>/PROGRESS.md`; the spec remains the sole product scope document.
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading.
 
 ## When a skill says "publish to the issue tracker"
