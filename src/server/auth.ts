@@ -6,7 +6,7 @@ import { isSessionUser } from '../shared/session.js';
 import type { AuthConfig } from './config.js';
 
 export class AuthenticationError extends Error {
-  constructor(public readonly statusCode: number, public readonly code: string, message: string) {
+  constructor(public readonly statusCode: number, public readonly code: string, message: string, public readonly ssoOrganization?: string) {
     super(message);
   }
 }

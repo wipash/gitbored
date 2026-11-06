@@ -55,7 +55,8 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
     }
     if (error instanceof AuthenticationError) {
       if (error instanceof RepositoryAccessError) console.warn(JSON.stringify(error.diagnostic));
-      return reply.code(error.statusCode).send({ error: error.code, message: error.message });
+      return reply.code(error.statusCode).send({ error: error.code, message: error.message,
+        ...(error.code === 'sso_required' && error.ssoOrganization ? { ssoOrganization: error.ssoOrganization } : {}) });
     }
     return reply.code(status).send({ error: status === 500 ? 'Internal server error' : 'Invalid request' });
   });

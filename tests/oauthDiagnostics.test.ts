@@ -263,6 +263,7 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
       { message: 'IP address is not permitted by the IP allow list', category: 'ip_restricted' },
       { message: 'Installation suspended', category: 'installation_suspended' },
       { message: privatePayload, sso: true, category: 'sso_required' },
+      { message: 'Resource protected by organization SAML enforcement.', category: 'sso_required' },
       { message: privatePayload, throttle: true, category: 'rate_limited' },
       { message: privatePayload, category: 'unknown' },
       { message: privatePayload.repeat(1000), category: 'unknown' },
@@ -274,7 +275,7 @@ await test('actual OAuth callbacks emit one bounded diagnostic without leaking r
       assert.equal(response.status, fault.throttle ? 429 : 403);
       const body: unknown = await response.json();
       assert.ok(typeof body === 'object' && body !== null && 'error' in body);
-      assert.equal(body.error, fault.throttle ? 'rate_limit' : 'missing_access');
+      assert.equal(body.error, fault.throttle ? 'rate_limit' : fault.category === 'sso_required' ? 'sso_required' : 'missing_access');
       const lines = stderr.split('\n').filter((line) => line.startsWith('{"event":"github_repository_access_failed",'));
       const event: unknown = JSON.parse(lines.at(-1) ?? 'null');
       assert.deepEqual(event, { event: 'github_repository_access_failed', operation: 'list_installation_repositories',
