@@ -1,5 +1,5 @@
 /* The canvas owns the viewport; app controls float above it. */
-.desktop-app { font-size: 0.8125rem; line-height: 1.45; }
+.desktop-app { display: flow-root; min-height: 100dvh; font-size: 0.8125rem; line-height: 1.45; background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px); background-size: 20px 20px; }
 .desktop-app.auth-shell { max-inline-size: none; padding: 0; }
 .desktop-app main { max-inline-size: none; margin: 0; padding: 0; }
 .desktop-app button, .desktop-app select, .desktop-app input { min-block-size: 30px; border-radius: 3px; padding: 4px 8px; font: inherit; }
@@ -23,8 +23,13 @@
 .desktop-app .board-settings[open] { width: min(350px, calc(100vw - 24px)); padding: 8px; }
 .desktop-app .board-editor > .board-error { position: fixed; z-index: 700; top: 130px; left: 12px; max-width: min(460px, calc(100vw - 24px)); padding: 12px; background: var(--color-bg-surface); border: 1px solid var(--color-border-control); }
 .desktop-app .account-context-status:empty { display: none; }
-.desktop-app .boards-list, .desktop-app .board-loading, .desktop-app .board-recovery, .desktop-app .sources-route { position: relative; z-index: 500; width: min(440px, calc(100vw - 24px)); margin: 70px auto; padding: 20px; max-height: calc(100dvh - 150px); overflow: auto; overscroll-behavior: contain; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 4px; }
-.desktop-app:has(.boards-list) { min-height: 100dvh; background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px); background-size: 20px 20px; }
+.desktop-app .entry-panel, .desktop-app .boards-list, .desktop-app .board-loading, .desktop-app .board-recovery, .desktop-app .sources-route { position: relative; z-index: 500; width: min(440px, calc(100vw - 24px)); margin: 70px auto; padding: 20px; max-height: calc(100dvh - 150px); overflow: auto; overscroll-behavior: contain; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 4px; }
+.desktop-app .entry-panel { display: grid; gap: 1.25rem; }
+.desktop-app .entry-panel h1 { margin: 0; font-size: 1.125rem; }
+.desktop-app .entry-panel .intro { font-size: inherit; }
+.desktop-app .entry-panel .auth-panel { margin: 0; padding: 0; border: 0; }
+.desktop-app .entry-panel h2 { font-size: 0.875rem; }
+.desktop-app .entry-panel .auth-primary { min-block-size: 30px; padding: 6px 10px; border-radius: 3px; }
 .desktop-app .boards-list h1 { font-size: 1.125rem; }
 .desktop-app .board-entries li { padding: 8px; border-radius: 3px; gap: 2px; }
 .desktop-app .board-entries a { font-size: 0.8125rem; }
@@ -70,6 +75,8 @@
 .app-loading { max-inline-size: none; margin: 0; padding: 0; min-height: 100dvh; display: grid; place-items: center; background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px); background-size: 20px 20px; }
 .app-loading p { color: var(--color-text-secondary); font-size: 0.8125rem; }
 .desktop-app .workspace-account { position: fixed; bottom: 48px; right: 12px; z-index: 700; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: calc(100vw - 24px); }
+.desktop-app .workspace-preferences { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; max-width: 100%; }
+.desktop-app:not(:has(.board-editor)) .workspace-account { bottom: 12px; }
 @media (max-width: 700px) { .desktop-app .workspace-account { right: 6px; } }
 @media (max-width: 400px) { .desktop-app .workspace-account { bottom: 120px; } }
 

@@ -93,6 +93,7 @@ const workspaceOptions = {
 };
 
 export function NativeWorkspace(props: NativeWorkspaceProps) {
+  const licenseKey = window.gitboredConfig?.tldrawKey;
   const [hiddenReferences] = useState(() => atom<ReadonlySet<string>>('Filtered board references', new Set()));
   const getShapeVisibility = useCallback((shape: TLShape) => shape.type === ITEM_CARD_TYPE && hiddenReferences.get().has(shape.props.referenceId) ? 'hidden' as const : 'inherit' as const, [hiddenReferences]);
   const [hideClosed, setHideClosed] = useState(false);
@@ -149,7 +150,7 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
     <MetadataContext value={props.metadata}><PlanningContext value={props.planning}>
-      <Tldraw getShapeVisibility={getShapeVisibility} store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
+      <Tldraw {...(licenseKey ? { licenseKey } : {})} getShapeVisibility={getShapeVisibility} store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
         <WorkspacePanels hideClosed={hideClosed} onHideClosedChange={setHideClosed} metadata={props.metadata} planning={props.planning} onPlanningChange={props.onPlanningChange} preferenceKey={props.preferenceKey}>{props.children}</WorkspacePanels>
         <div className="workspace-status" role="status">{pasteError}</div>
       </Tldraw>

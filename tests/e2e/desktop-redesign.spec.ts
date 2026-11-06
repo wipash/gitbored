@@ -126,12 +126,48 @@ test('session restoration does not render the signed-out landing screen', async 
     try {
       await page.goto(path, { waitUntil: 'domcontentloaded' });
       await expect.poll(() => requested).toBe(true);
-      await expect(page.getByRole('heading', { name: 'A little space for the big picture.' })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Connect with GitHub' })).toHaveCount(0);
     } finally { release(); }
     await expect(page.locator('.tl-container')).toBeVisible();
     await page.unrouteAll({ behavior: 'wait' });
   }
+});
+
+test('sign-in and empty Boards share a compact viewport-filling workspace with adjacent account and theme controls', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
+  const signInPanel = await page.locator('.auth-panel').boundingBox();
+  if (!signInPanel) throw new Error('Missing sign-in panel');
+  expect.soft(signInPanel.width, 'Sign-in uses a compact workspace panel').toBeLessThanOrEqual(480);
+  for (const route of ['sign-in', 'boards']) {
+    if (route === 'boards') {
+      await signIn(page);
+      await page.getByRole('link', { name: 'Boards', exact: true }).click();
+      await expect(page.getByLabel('Board name', { exact: true })).toBeVisible();
+    }
+    for (const theme of ['light', 'dark']) {
+      await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+      const shell = await page.locator('.auth-shell').evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height,
+          background: getComputedStyle(element).backgroundImage, viewport: innerWidth,
+          viewportHeight: innerHeight, scrollHeight: document.documentElement.scrollHeight };
+      });
+      expect.soft(shell.top, `${route} background reaches top`).toBe(0);
+      expect.soft(shell.left, `${route} background reaches left edge`).toBe(0);
+      expect.soft(shell.width).toBe(shell.viewport);
+      expect.soft(shell.height).toBeGreaterThanOrEqual(shell.viewportHeight);
+      expect.soft(shell.background).toContain('radial-gradient');
+      expect.soft(shell.scrollHeight, `${route} fits desktop viewport`).toBe(shell.viewportHeight);
+      await page.screenshot({ path: testInfo.outputPath(`${route}-${theme}-desktop.png`), fullPage: true });
+    }
+  }
+  const theme = await page.locator('.account-controls').boundingBox();
+  const account = await page.locator('.application-nav').boundingBox();
+  if (!theme || !account) throw new Error('Missing workspace controls');
+  expect.soft(Math.abs(theme.y - account.y), 'Account and Theme share a row').toBeLessThanOrEqual(2);
+  expect.soft(account.x + account.width).toBeLessThanOrEqual(theme.x);
 });
 
 test('account and theme controls have separate hit areas at normal and enlarged text sizes', async ({ page }) => {
@@ -146,7 +182,8 @@ test('account and theme controls have separate hit areas at normal and enlarged 
       const theme = await page.locator('.account-controls').boundingBox();
       const account = await page.locator('.application-nav').boundingBox();
       if (!theme || !account) throw new Error('Missing account controls');
-      expect.soft(theme.y - (account.y + account.height), `${width}px ${fontSize} gap`).toBeGreaterThanOrEqual(6);
+      const gap = Math.max(theme.x - (account.x + account.width), theme.y - (account.y + account.height));
+      expect.soft(gap, `${width}px ${fontSize} gap`).toBeGreaterThanOrEqual(6);
       await expect.poll(async () => await page.locator('.incoming-body').evaluate((body) => body.clientHeight), { message: `${width}px ${fontSize} list space` }).toBeGreaterThan(0);
       const panel = await page.locator('#incoming-panel').boundingBox();
       const stack = await page.locator('.workspace-account').boundingBox();
@@ -187,7 +224,7 @@ test('account recovery messages leave account actions and theme reachable', asyn
     const theme = await page.locator('.account-controls').boundingBox();
     if (!status || !check || !account || !theme) throw new Error('Missing account recovery controls');
     expect(status.y + status.height).toBeLessThanOrEqual(check.y);
-    expect(account.y + account.height).toBeLessThanOrEqual(theme.y);
+    expect(account.x + account.width <= theme.x || account.y + account.height <= theme.y).toBe(true);
     for (const control of [page.getByRole('link', { name: 'Account', exact: true }), page.getByLabel('Theme'), page.getByRole('button', { name: 'Check account', exact: true })]) {
       await control.scrollIntoViewIfNeeded();
       expect(await control.evaluate((element) => {

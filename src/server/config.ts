@@ -19,6 +19,7 @@ export interface RuntimeConfig {
   clientDirectory: string;
   serveClient: boolean;
   auth: AuthConfig | null;
+  tldrawKey: string | null;
 }
 
 
@@ -96,5 +97,6 @@ export function readConfig(environment: NodeJS.ProcessEnv, directory: string): R
     clientDirectory: resolve(directory, 'dist/client'),
     serveClient,
     auth: readAuth(environment, directory),
+    tldrawKey: environment['TLDRAW_KEY']?.trim() || null,
   };
 }
