@@ -33,6 +33,7 @@ interface WorkspaceModel {
   retrySource: (scope: string) => void;
   retryMetadata: () => void;
   refresh: () => void;
+  refreshRequested: boolean;
 }
 function placedReferences(document: NativeDocument): Set<string> {
   const result = new Set<string>();
@@ -148,7 +149,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
         const id = ids[cursor.index++];
         if (!id) continue;
         try {
-          const response = await requestBoard(`/api/references/${encodeURIComponent(id)}`, authority, 'GET', undefined, controller.signal);
+          const response = await requestBoard(`/api/references/${encodeURIComponent(id)}${metadataAttempt > 0 ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
           if (controller.signal.aborted || !canRead(authority)) return;
           if (!response.ok) {
             const updated = new Map(metadataRef.current);
@@ -178,7 +179,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
         const previous = metadataRef.current.get(id);
         if (previous?.status !== 'ready' || previous.item.context) continue;
         try {
-          const response = await requestBoard(`/api/references/${encodeURIComponent(id)}/context`, authority, 'GET', undefined, controller.signal);
+          const response = await requestBoard(`/api/references/${encodeURIComponent(id)}/context${metadataAttempt > 0 ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
           if (controller.signal.aborted || !canRead(authority)) return;
           const context = response.ok ? readItemContext(await response.json()) : { status: 'unavailable' as const, projects: [], related: [] };
           const latest = metadataRef.current.get(id);
@@ -234,6 +235,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
   }
   const readReady = authority.ready && authority.session.authorization === 'ready' && metadata.authority === authority;
   const model: WorkspaceModel = { undo: () => { const editor = editorRef.current; if (editor) { editor.undo(); onNativeHistory(editor, 'undo'); } }, incoming, metadata: readReady ? metadata.values : new Map(), authority, readReady, canRead: () => canRead(authority), commit, remember, place, placeMany, accessLost,
+    refreshRequested: metadataAttempt > 0,
     retrySource: (scope) => { deniedScopes.current.delete(scope); },
     refresh: () => { if (!canRead(authority)) return; deniedScopes.current.clear(); commit((state) => ({ ...state, sources: state.sources.map((source) => ({ ...source, nextPage: 1, loadedPage: 0, status: 'idle' })) })); publishMetadata(new Map(), authority); setMetadataAttempt((attempt) => attempt + 1); },
     retryMetadata: () => {
@@ -346,7 +348,7 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
     setBusySource(source.repositoryNodeId); setError('');
     model.commit((state) => ({ ...state, sources: state.sources.map((item) => item.repositoryNodeId === source.repositoryNodeId ? { ...item, status: 'loading' } : item) }));
     try {
-      const response = await requestBoard(`/api/sources/repositories/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/items?page=${page}`, model.authority, 'GET', undefined, signal);
+      const response = await requestBoard(`/api/sources/repositories/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/items?page=${page}${model.refreshRequested ? '&refresh=1' : ''}`, model.authority, 'GET', undefined, signal);
       if (signal?.aborted || !model.canRead()) return;
       if (!response.ok) {
         if (response.status === 403 || response.status === 404) model.accessLost(`${source.owner}/${source.repository}`.toLowerCase());
