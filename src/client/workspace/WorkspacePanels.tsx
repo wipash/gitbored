@@ -54,6 +54,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   const cards = useValue(useMemo(() => computed('Board cards', () => editor.getCurrentPageShapes().filter((shape): shape is ItemCardShape => shape.type === ITEM_CARD_TYPE && !editor.isShapeHidden(shape)), {
     isEqual: (a: ItemCardShape[], b: ItemCardShape[]) => a.length === b.length && a.every((shape, index) => shape.id === b[index]?.id && shape.props === b[index]?.props),
   }), [editor]));
+  const matchingCards = cards.filter((shape) => describeItem(shape.props.kind, metadata.get(shape.props.referenceId) ?? { status: 'loading' }).toLowerCase().includes(query.toLowerCase()));
   const selected = useValue(useMemo(() => computed('Inspected card', () => {
     const shape = detailId ? editor.getShape(detailId) : undefined;
     return shape?.type === ITEM_CARD_TYPE && !editor.isShapeHidden(shape) ? shape : null;
@@ -80,23 +81,27 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
     }}>
       <div className="mobile-menu-control" data-native-ui="mobile-menu" onPointerDown={(event) => event.stopPropagation()}>
         <button ref={mobileMenuTrigger} className="mobile-workspace-menu" type="button" aria-expanded={mobileMenuOpen} data-mobile-dismiss aria-label="Menu" onClick={() => { setMobileMenuOpen(!mobileMenuOpen); setActive(null); }}><Icon name="menu" /><span>Menu</span></button>
-        {mobileMenuOpen && <button className="mobile-menu-dismiss" type="button" data-native-dismiss aria-label="Close menu" onClick={() => { setMobileMenuOpen(false); mobileMenuTrigger.current?.focus(); }}><Icon name="close" /></button>}
+        {mobileMenuOpen && <div className="mobile-menu-heading"><h2>Board tools</h2><button className="mobile-menu-dismiss" type="button" data-native-dismiss aria-label="Close menu" onClick={() => { setMobileMenuOpen(false); mobileMenuTrigger.current?.focus(); }}><Icon name="close" /></button></div>}
       </div>
       <div className="workspace-view" data-native-ui="settings" onPointerDown={(event) => event.stopPropagation()}>
-      <button ref={viewTrigger} type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>Settings</button>
+      <button ref={viewTrigger} type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}><Icon name="settings" /> Settings</button>
       {settingsOpen && <section ref={settingsPanel} className="workspace-floating-panel workspace-settings-panel" aria-label="Settings"><div className="incoming-heading"><h2>Settings</h2><button type="button" data-native-dismiss aria-label="Close Settings" onClick={() => { setSettingsOpen(false); focusPanelTrigger(viewTrigger.current); }}><Icon name="close" /></button></div><div className="workspace-panel-body view-settings">
-        {accountSettings?.workspaceMounted && accountSettings.content}
-        {boardSettings}
+        {accountSettings?.workspaceMounted && <fieldset className="settings-group"><legend>Account & appearance</legend>{accountSettings.content}</fieldset>}
+        {boardSettings && <fieldset className="settings-group"><legend>Board</legend>{boardSettings}</fieldset>}
+        <fieldset className="settings-group"><legend>View</legend>
         <label>Hide closed<input type="checkbox" checked={hideClosed} onChange={(event) => { onHideClosedChange(event.currentTarget.checked); editor.selectNone(); }} /></label>
         <label>Connections<select aria-label="Connections" value={mode} onChange={(event) => { const value = event.currentTarget.value; if (value !== 'off' && value !== 'selected' && value !== 'all') return; setMode(value); try { localStorage.setItem(`gitbored.connections.${preferenceKey}`, value); } catch { /* Session preference still applies. */ } }}><option value="off">Off</option><option value="selected">Selected</option><option value="all">All</option></select></label>
+        </fieldset>
+        <CardColourSettings />
+        <fieldset className="settings-group"><legend>Project fields</legend>
         <label>Project<select aria-label="Project" value={planning?.projectId ?? ''} onChange={(event) => {
           const selected = projects.find((entry) => entry.id === event.currentTarget.value);
           const field = (pattern: RegExp) => selected?.fields.find((entry) => pattern.test(entry.name))?.id ?? '';
           onPlanningChange?.({ projectId: selected?.id ?? '', status: field(/^status$/i), weight: field(/^(weight|estimate|points)$/i), priority: field(/^priority$/i), sprint: field(/^(sprint|iteration)$/i) });
         }}><option value="">None</option>{projects.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}</select></label>
         {planning?.projectId && planningRoles.map((role) => <label key={role}>{role}<select aria-label={`${role} field`} value={planning[role]} onChange={(event) => onPlanningChange?.({ ...planning, [role]: event.currentTarget.value })}><option value="">None</option>{project?.fields.map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>)}
-        <CardColourSettings />
         {!projects.length && <p>{[...metadata.values()].some((value) => value.status === 'ready' && value.item.context?.status === 'unavailable') ? 'Project data unavailable. Check GitHub access and refresh.' : 'No projects on these cards.'}</p>}
+        </fieldset>
       </div></section>}
     </div>
     <div className="workspace-find" data-native-ui="cards" onPointerDown={(event) => event.stopPropagation()}>
@@ -104,7 +109,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
       {open && <section className="workspace-floating-panel" aria-label="Find cards">
         <div className="incoming-heading"><h2>Find cards</h2><button data-native-dismiss type="button" aria-label="Close Find" onClick={() => { setOpen(false); focusPanelTrigger(trigger.current); }}><Icon name="close" /></button></div>
         <div className="workspace-panel-body"><input ref={search} type="search" aria-label="Find cards" placeholder="Title, number, repository…" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
-        <ul className="workspace-find-results">{cards.filter((shape) => describeItem(shape.props.kind, metadata.get(shape.props.referenceId) ?? { status: 'loading' }).toLowerCase().includes(query.toLowerCase())).map((shape) => {
+        <ul className="workspace-find-results">{matchingCards.map((shape) => {
           const value = metadata.get(shape.props.referenceId);
           return <li key={shape.id}><button type="button" onClick={() => {
             editor.complete(); editor.setCurrentTool('select'); editor.select(shape.id);
@@ -112,8 +117,8 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
             if (bounds) editor.centerOnPoint(bounds.center, { animation: { duration: 0 } });
             setDetailId(null); setOpen(false);
             editor.getContainer().focus({ preventScroll: true }); editor.focus();
-          }}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} /><span>{value?.status === 'ready' ? <><small>{value.item.locator.repository} #{value.item.locator.number} · {itemStateLabel(value.item)}</small>{value.item.title}</> : 'Unavailable card'}</span></button></li>;
-        })}</ul>{!cards.length && <p>No cards on this board.</p>}</div>
+          }}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} /><span>{value?.status === 'ready' ? <><small>{value.item.locator.repository} #{value.item.locator.number} · {itemStateLabel(value.item)}</small><span className="find-result-title">{value.item.title}</span></> : 'Unavailable card'}</span></button></li>;
+        })}</ul>{!cards.length ? <p className="panel-empty">No cards on this board. Connect a repository, then add cards from Incoming.</p> : !matchingCards.length && <div className="panel-empty"><p>No cards match “{query}”.</p><button type="button" onClick={() => { setQuery(''); search.current?.focus(); }}>Clear search</button></div>}</div>
       </section>}
     </div>
     {children}</div>

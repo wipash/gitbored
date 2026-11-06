@@ -17,7 +17,7 @@ export function StandaloneSettings() {
   return <div className="standalone-settings" onKeyDown={(event) => {
     if (event.key === 'Escape' && open) { event.stopPropagation(); close(); }
   }}>
-    <button ref={trigger} type="button" aria-expanded={open} onClick={() => setOpen(!open)}>Settings</button>
+    <button ref={trigger} type="button" aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="settings" /> Settings</button>
     {open && <section className="workspace-floating-panel workspace-settings-panel" aria-label="Settings">
       <div className="incoming-heading"><h2>Settings</h2><button type="button" aria-label="Close Settings" onClick={close}><Icon name="close" /></button></div>
       <div className="workspace-panel-body">{settings?.content}</div>

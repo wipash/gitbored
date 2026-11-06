@@ -1,4 +1,5 @@
 const paths = {
+  settings: 'M4 7h16M4 17h16M8 4v6M16 14v6',
   details: 'M8 7h8M8 12h8M8 17h5M4 3h16v18H4z',
   refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',
   menu: 'M4 6h16M4 12h16M4 18h16',
