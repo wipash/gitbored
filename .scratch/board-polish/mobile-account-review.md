@@ -22,3 +22,9 @@ Validation at commit: lint passed; application type-check passed. Root and the t
 | UI | Non-modal settings, no motion added, stable editor ownership | Clear in source; runtime verification pending integration |
 
 No new screen-reader, iOS or RTL claims are made.
+
+## Rendered review
+
+Inspected root's browser captures under `/tmp/gitbored-mobile-layout-results/mobile-layout-phone-menus--5d3e7--and-theme-only-in-Settings-chromium/`: `settings-390-100%.png`, `settings-320-200%.png` and `settings-667-200%.png`. Theme, visible account identity and sign-out are contained in Settings. The enlarged narrow portrait view keeps them readable; landscape uses the panel's scroll body. The lower canvas edge has no account controls. No actionable account-content findings remain.
+
+Verdict: Approve for inspected account content and source flow. Standalone Settings rendering, screen-reader speech and iOS remain unverified here; integration tests cover their supported browser behavior separately.
