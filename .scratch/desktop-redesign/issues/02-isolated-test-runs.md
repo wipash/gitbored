@@ -18,3 +18,5 @@ A preview occupied the diagnostics port; simultaneous browser runs shared artifa
 ## Comments
 
 - 2026-11-06 — Recorded from the desktop redesign retrospective. Implementation has not started.
+
+- 2026-11-06 — Follow-up validation on `c57d38f` also hit an intermittent 30-second timeout awaiting `/__runner/restart` in `boards.spec.ts:110`; the same production build passed all five board tests in isolation immediately afterward (restart scenario 3.2 seconds). Cause not established. Preserve the actual process lifecycle and pending-request evidence before changing timeouts; failure trace `/tmp/gitboard-followup-restart-failure/trace.zip`, full-run log `/tmp/gitboard-followup-gate-final.log`.

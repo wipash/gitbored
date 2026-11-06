@@ -236,7 +236,7 @@ references are links in details and never create cards automatically.
 through GitHub GraphQL under the current user's authorization. Responses are
 bounded (20 memberships, 100 fields/values/events) and report partial/unavailable
 data explicitly. The app needs access to the chosen project as well as the
-repository; review GitHub's [App permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)
+repository. For organization-owned projects, grant **Organization permissions → Projects → Read-only**, approve the permission update on the installation, and ensure the signed-in user can read the project. See GitHub's [App permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)
 and [Projects API](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects)
 when enabling private Projects. Controlled-provider tests exercise this integration;
 live Project access must be verified against the deployment's App permissions.

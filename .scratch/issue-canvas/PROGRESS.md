@@ -10,6 +10,8 @@ Local commits: `e16bccd` implementation, `94af19e` design/checkpoint records, `f
 
 Validation complete on application commit `f636ca7`: full Node 26.8.1 gate passed (89 browser tests; lint/types, 13 native-document tests, server diagnostics). Both environment-specific skips passed separately against the same production build: session expiry and missing GitHub configuration. Final tracking commits change documentation only. Independent Fable rendered review and corrections are recorded in [reviews](../desktop-redesign/reviews/); the subsequent SDK review found no material regression. Final panel/focus/footer checks passed in light/dark desktop and narrow/enlarged text.
 
+Follow-up fixes for startup flash, Account/Theme overlap, Incoming’s pinned selection action and drag performance are committed and validated through `c57d38f`. Full Node 26 gate passed: lint/types, 13 native-document tests, diagnostics and 93 production browser tests; session-expiry and missing-configuration cases passed separately. Independent review and the gate exposed additional layout/selector defects, now corrected. One intermittent test-runner restart timeout passed unchanged in isolation and in the full confirmation run; its cause remains recorded under tooling. See [follow-up evidence](../desktop-redesign/FOLLOWUP.md).
+
 ## Next product checkpoint
 
 Use Sean’s existing app to connect a real repository, bulk-place work, arrange/resize it, and reopen the saved board. Prior live sign-in/repository browsing was confirmed; the redesigned flow and GitHub Projects permissions still need live-account verification. Controlled-provider coverage is not evidence of live Projects access.
@@ -19,6 +21,8 @@ Sean’s app remains on ports 3001/3002 with `.data/github-debug` and ignored `.
 ## Retrospective follow-ups
 
 Queued tooling: [runtime preflight](../desktop-redesign/issues/01-runtime-preflight.md), [isolated test runs and auth modes](../desktop-redesign/issues/02-isolated-test-runs.md), then [CI enforcement](../desktop-redesign/issues/03-ci-gate.md). Early live-path and stable visual milestones are recorded in the project guide; editor-lifetime review is in coding conventions.
+
+Remaining UI edge case: [constrained account-error layout](../desktop-redesign/issues/04-constrained-account-error-layout.md). Recovery controls remain reachable, but simultaneous notices can still crowd Incoming at very small/enlarged viewports.
 
 ## Preserved work
 
