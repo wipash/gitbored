@@ -284,3 +284,17 @@ Boards persist on the local/self-hosted application server and reopen across the
 - Non-modal interactions and Incoming: local branch `prototype/atlas-interactions`, capture `6dccd20`; Contextual selected. The sibling prototype worktree is `../gitboard-canvas-prototype`. Its `tldraw/README.md` documents reproduction and limitations; `atlas-evidence/observations.json` and the accompanying screenshots preserve observed checks.
 - Prototype refresh cadence, planning values, repositories, and Incoming items are fixtures. The comparison source is a primary design reference, not production code to promote unchanged.
 - The repository's local Markdown tracker and canonical `ready-for-agent` status apply to this published spec. Project-management guidance describes subsequent implementation tracking; this task does not create or claim implementation tickets, start a development team, or push changes.
+
+## Accepted desktop redesign — 2026-11-06
+
+Sean authorized implementation after reviewing the [interactive design](../desktop-redesign/proposal.html) and [desktop audit](../desktop-redesign/audit.html). These decisions supersede earlier layout and placement requirements where they conflict:
+
+- The canvas fills the desktop viewport. Small, sharp floating controls replace the page header, large whitespace, and normal-flow source section. Root restores the last board; board selection/creation happens over the workspace.
+- Internal navigation keeps the document alive and drains saves before leaving. Theme applies before first paint.
+- Repository search filters preloaded results as the user types. Connection offers state/type/label import filters. Incoming automatically continues pagination, supports transient filters, checkboxes, selected/all-matching add, and retains its panel after placement. All matching means every source page, never just loaded results. Errors stop automatic retries and expose explicit retry.
+- Adding a card or a batch never changes the camera or existing placements. A batch is one native undo operation, including restoring Incoming membership.
+- Cards use compact iconography, readable full details, native resizing, and optional mapped GitHub Project Status, Weight, Priority, and Sprint values. Project membership and field IDs are explicit; zero, unset, and unavailable differ. Private metadata stays outside the canvas document/history.
+- Related references use generic, undirected connections. View mode is Off / Selected / All, default Selected. Exact closes/blocks semantics are unnecessary. Connections are an overlay and do not create native arrows or change geometry.
+- Keep the faint dot grid and dark theme. Ordinary menus contain labels, counts, and actions without implementation explanations or promotional subheaders.
+
+Implementation state and evidence: [desktop redesign](../desktop-redesign/IMPLEMENTATION.md).

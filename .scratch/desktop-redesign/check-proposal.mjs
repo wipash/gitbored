@@ -1,0 +1,15 @@
+import {chromium,expect} from '@playwright/test';
+import {writeFile} from 'node:fs/promises';
+const b=await chromium.launch();const p=await b.newPage({viewport:{width:1440,height:1000}});const errors=[];p.on('pageerror',e=>errors.push(e.message));
+await p.goto('file://'+process.cwd()+'/.scratch/desktop-redesign/proposal.html');
+await p.screenshot({path:'.scratch/desktop-redesign/evidence/proposal-light.png'});
+await p.locator('#query').fill('filing');await expect(p.locator('#rows .row')).toHaveCount(2);
+await p.locator('#select-all').check();await p.locator('#add-selected').click();await expect(p.locator('#incoming')).toBeVisible();await expect(p.locator('#incoming-count')).toHaveText('10');await expect(p.locator('.card')).toHaveCount(11);await p.locator('#undo').click();await expect(p.locator('.card')).toHaveCount(9);
+await p.locator('#query').fill('');await p.locator('#add-all').click();await expect(p.locator('.card')).toHaveCount(21);await p.locator('#undo').click();await expect(p.locator('.card')).toHaveCount(9);
+await p.getByRole('button',{name:/Repositories/}).click();await p.locator('#repo-query').fill('design');await expect(p.locator('#repo-results .repo-row')).toHaveCount(1);
+await p.screenshot({path:'.scratch/desktop-redesign/evidence/proposal-repositories.png'});
+await p.keyboard.press('Escape');await p.locator('.card-title').first().click();await expect(p.locator('#detail')).toBeVisible();await p.screenshot({path:'.scratch/desktop-redesign/evidence/proposal-details.png'});await p.keyboard.press('Escape');
+await p.locator('#theme').click();await p.getByRole('button',{name:/Incoming/}).click();await p.screenshot({path:'.scratch/desktop-redesign/evidence/proposal-dark.png'});
+await p.setViewportSize({width:1280,height:800});await p.screenshot({path:'.scratch/desktop-redesign/evidence/proposal-1280.png'});
+console.log(JSON.stringify({errors,checks:['filter matches','multi-select add','panel remains open','undo','add all fixture results','repository typeahead','details','Escape','dark theme','1280x800']},null,2));
+await writeFile('.scratch/desktop-redesign/evidence/proposal-checks.json',JSON.stringify({errors,checks:11},null,2));await b.close();

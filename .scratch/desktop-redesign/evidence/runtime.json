@@ -1,0 +1,54 @@
+{
+  "docs": [
+    "/",
+    "/api/auth/github",
+    "/login/oauth/authorize",
+    "/login/oauth/authorize",
+    "/api/auth/callback",
+    "/",
+    "/boards",
+    "/boards/9d94f442-9b38-476a-b2c3-6d9b26bfcc0c",
+    "/sources",
+    "/boards/9d94f442-9b38-476a-b2c3-6d9b26bfcc0c"
+  ],
+  "before": "transform: scale(1) translate(0.125px, 0.125px);",
+  "focus": {
+    "name": "Add to board",
+    "outline": "rgb(52, 73, 161) solid 3px"
+  },
+  "measured": {
+    "canvas": {
+      "x": 48,
+      "y": 300.1875,
+      "w": 1344,
+      "h": 700
+    },
+    "card": {
+      "x": 339.78436279296875,
+      "y": 364.97174072265625,
+      "w": 760.0000610351562,
+      "h": 570
+    },
+    "title": {
+      "x": 380.15936279296875,
+      "y": 545.4717407226562,
+      "w": 679.2500610351562,
+      "h": 81.9375
+    },
+    "titleText": "alice private issue — Long complete title, with accessible full details. Long complete title, with accessible full details. Long complete title, with accessible full details. Long complete title, with accessible full details. Long complete title, with accessible full details. Long complete title, with accessible full details. Long complete title, with accessible full details. Long complete title, with accessible full details. ",
+    "titleScrollHeight": 312,
+    "titleClientHeight": 35,
+    "footer": {
+      "x": 380.15936279296875,
+      "y": 731.9092407226562,
+      "w": 679.2500610351562,
+      "h": 162.6875
+    },
+    "footerPadding": "24px 0px",
+    "rootFont": "16px",
+    "documentHeight": 1090,
+    "incomingOpen": false,
+    "transform": "transform: scale(2.375) translate(122.725px, 27.146px);"
+  },
+  "escapeFocus": "Incoming 2"
+}

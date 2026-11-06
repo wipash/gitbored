@@ -1,0 +1,11 @@
+import { chromium, expect } from '@playwright/test';
+const browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('file://'+process.cwd()+'/.scratch/desktop-redesign/proposal.html');
+await expect(page.locator('.connection-line')).toHaveCount(0);
+const before=await page.locator('.card').evaluateAll(cs=>cs.map(c=>({x:c.style.left,y:c.style.top})));
+await page.getByRole('button',{name:'Show connections for card 18',exact:true}).click();await expect(page.locator('.connection-line')).toHaveCount(1);await expect(page.locator('[data-num="12"]')).toHaveClass(/related/);
+await page.screenshot({path:'.scratch/desktop-redesign/evidence/proposal-connections-selected.png'});
+await page.getByRole('button',{name:'Open board and account menu'}).click();await page.getByLabel('Connections',{exact:true}).selectOption('off');await expect(page.locator('.connection-line')).toHaveCount(0);
+await page.getByLabel('Connections',{exact:true}).selectOption('all');await expect(page.locator('.connection-line')).toHaveCount(4);await page.keyboard.press('Escape');
+await page.screenshot({path:'.scratch/desktop-redesign/evidence/proposal-connections-all.png'});
+await page.locator('[data-num="18"] .card-title').click();await expect(page.locator('.connection-list')).toContainText('Related');await page.locator('[data-related="12"]').click();await expect(page.locator('#detail-meta')).toHaveText('email-filer #12');await expect(page.locator('.connection-list')).toContainText('Related');
+expect(await page.locator('.card').evaluateAll(cs=>cs.map(c=>({x:c.style.left,y:c.style.top})))).toEqual(before);expect(errors).toEqual([]);console.log('Passed: Selected, All, Off, neighbor highlighting, relationship navigation, unchanged positions; no page errors.');await browser.close();

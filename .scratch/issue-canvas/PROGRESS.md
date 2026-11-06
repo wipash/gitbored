@@ -4,7 +4,9 @@ Updated: 2026-11-06
 
 ## Current state
 
-Sean authorized redesigning repository selection after live source browsing was repaired. Current work is this Sources-to-board flow; the older feature queue and three parked branches remain paused.
+Sean approved the full desktop redesign and authorized implementation on 2026-11-06. The current working tree implements the full-screen workspace, floating controls, client navigation, persistent/filterable/bulk Incoming, preloaded repository search/import filters, resizable cards, project mappings, and generic related-item overlays. It is **in progress at Sean’s requested local checkpoint, with final validation unfinished**. See [implementation state](../desktop-redesign/IMPLEMENTATION.md), [approved prototype](../desktop-redesign/proposal.html), and [audit](../desktop-redesign/audit.html).
+
+Focused checks pass bulk placement/undo, automatic paging, project mappings and related links, navigation, account isolation and save/copy recovery. Fable approved the major rendered corrections; the remaining panel/focus/footer corrections passed targeted checks. The production gate reached 82 browser passes, 7 failures and 2 skips before corrections; it is not green. Immediate work: fix native held-Comma release across panel rerenders, then run a clean final gate and the complementary session-expiry check. See implementation state for evidence and limitations. The rest of this record describes the historical baseline and parked work.
 
 The committed baseline contains sign-in, private durable boards, the native workspace, source browsing, Incoming, save/conflict recovery, and backup/restore tooling (tickets 01–05, 11, 16 and corrections 20–23). Its historical checked commit is `de017ac`. Commit `900e8e0` adds the live pagination repair, repository diagnostics and the repository connection redesign described below.
 

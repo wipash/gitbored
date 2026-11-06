@@ -1,0 +1,58 @@
+[
+  {
+    "role": "light app primary",
+    "fg": "#222733",
+    "bg": "#ffffff",
+    "ratio": 14.94,
+    "threshold": 4.5
+  },
+  {
+    "role": "light app secondary",
+    "fg": "#566071",
+    "bg": "#ffffff",
+    "ratio": 6.35,
+    "threshold": 4.5
+  },
+  {
+    "role": "light card primary",
+    "fg": "#243247",
+    "bg": "#ffffff",
+    "ratio": 12.95,
+    "threshold": 4.5
+  },
+  {
+    "role": "light card muted",
+    "fg": "#566071",
+    "bg": "#ffffff",
+    "ratio": 6.35,
+    "threshold": 4.5
+  },
+  {
+    "role": "light link",
+    "fg": "#3449a1",
+    "bg": "#ffffff",
+    "ratio": 8.03,
+    "threshold": 4.5
+  },
+  {
+    "role": "dark primary",
+    "fg": "#edf0f5",
+    "bg": "#1f232c",
+    "ratio": 13.77,
+    "threshold": 4.5
+  },
+  {
+    "role": "dark secondary",
+    "fg": "#b2bccb",
+    "bg": "#1f232c",
+    "ratio": 8.2,
+    "threshold": 4.5
+  },
+  {
+    "role": "dark link",
+    "fg": "#b0bfff",
+    "bg": "#1f232c",
+    "ratio": 8.8,
+    "threshold": 4.5
+  }
+]
