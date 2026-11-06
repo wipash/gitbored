@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 export interface ControlledSourceSettings {
   sourceMode: 'normal' | 'empty' | 'malformed' | 'untrusted-link';
   sourceFailurePage: number;
+  sourceDetailFailure: boolean;
   pullUnavailable: boolean;
   sourceDelayMs: number;
   sourceDenied: boolean;
@@ -68,6 +69,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
   const issue = (owner: string, name: string, number: number, pull = false) => ({ id: `raw:${9007199254741001n + BigInt(number) + (name === 'other' ? 2000n : 0n) + (owner === 'alice' ? 0n : owner === 'bob' ? 10000n : 20000n)}`,
     node_id: `${pull ? 'PR' : 'I'}_${owner}_${canonicalName(owner, name)}_${number}`, number, title: number === 1
       ? `${owner} ${name === 'outside' ? 'public' : 'private'} issue — ${'Long complete title, with accessible full details. '.repeat(8)}` : `${pull ? 'Pull request' : 'Issue'} ${number}`,
+    body: `## ${pull ? 'Pull request summary' : 'Issue description'}\n\nInvestigate the board loading behaviour.\n\n- [ ] Preserve cached content\n- [x] Keep the canvas usable\n\n<script>window.fixtureBodyExecuted = true</script>\n<img src=x onerror="window.fixtureBodyExecuted = true">`,
     state: pull ? 'closed' : 'open', state_reason: pull ? null : 'reopened',
     ...(pull ? { pull_request: { url: `http://127.0.0.1:${port}/repos/${owner}/${name}/pulls/${number}` } } : {}),
     labels: Array.from({ length: 8 }, (_, index) => ({ name: `Label ${index + 1} ${'extended '.repeat(4)}` })),
@@ -161,6 +163,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
   app.get<{ Params: { owner: string; name: string; number: string } }>('/repos/:owner/:name/issues/:number', async (request, reply) => {
     if (!authorize(request, reply)) return reply;
     const { owner, name, number } = request.params;
+    if (settings().sourceDetailFailure) return reply.code(503).send({ message: 'Controlled unavailable item detail' });
     if (!await hold('issue-detail')) await hold('issue-detail-next');
     return raw(reply, issue(owner, name, Number(number), (Number(number) % 2 === 0 || Number(number) === 3)));
   });
@@ -168,6 +171,6 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (!authorize(request, reply)) return reply;
     if (settings().pullUnavailable) return reply.code(403).send({ message: 'PR enrichment unavailable' });
     const { owner, name, number } = request.params;
-    return raw(reply, { id: 'raw:9007199254741999', node_id: `PR_${owner}_${canonicalName(owner, name)}_${number}`, number: Number(number), state: 'closed', merged: true, draft: false, base: { repo: repo(owner, name) } });
+    return raw(reply, { id: 'raw:9007199254741999', node_id: `PR_${owner}_${canonicalName(owner, name)}_${number}`, number: Number(number), body: '## Pull request details\n\nThis change fixes cached board loading.\n\n```ts\nconst ready = true;\n```', state: 'closed', merged: true, draft: false, base: { repo: repo(owner, name) } });
   });
 }

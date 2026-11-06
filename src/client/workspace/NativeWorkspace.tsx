@@ -20,6 +20,7 @@ import type { PlanningSelection } from '../../shared/planning';
 import { PlanningContext } from './planning';
 import { WorkspacePanels } from './WorkspacePanels';
 import { CardColourProvider } from './cardColours';
+import { CardDetailsProvider } from './cardDetails';
 
 export interface NativeWorkspaceProps {
   planning?: PlanningSelection | undefined;
@@ -153,10 +154,10 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
     <MetadataContext value={props.metadata}><PlanningContext value={props.planning}><CardColourProvider preferenceKey={props.preferenceKey}>
-      <Tldraw {...(licenseKey ? { licenseKey } : {})} getShapeVisibility={getShapeVisibility} store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
+      <CardDetailsProvider><Tldraw {...(licenseKey ? { licenseKey } : {})} getShapeVisibility={getShapeVisibility} store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
         <WorkspacePanels hideClosed={hideClosed} onHideClosedChange={setHideClosed} metadata={props.metadata} planning={props.planning} onPlanningChange={props.onPlanningChange} preferenceKey={props.preferenceKey}>{props.children}</WorkspacePanels>
         <div className="workspace-status" role="status">{pasteError}</div>
-      </Tldraw>
+      </Tldraw></CardDetailsProvider>
     </CardColourProvider></PlanningContext></MetadataContext>
   </section>;
 }

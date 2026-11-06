@@ -29,7 +29,7 @@ test('saved card colours return after temporary status, priority and split-label
   await expect(card).toHaveCount(1);
   const reference = await card.getAttribute('data-reference-id');
   const original = await card.evaluate((element) => getComputedStyle(element).backgroundImage);
-  await page.getByRole('button', { name: 'Close details' }).click();
+  await expect(page.getByRole('region', { name: 'Card details', exact: true })).toHaveCount(0);
   await openSettings(page);
   await page.getByLabel('Colour cards by').selectOption('status');
   await expect(card).toHaveAttribute('data-colour-by', 'status');

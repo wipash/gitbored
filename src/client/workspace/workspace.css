@@ -132,3 +132,13 @@
  .workspace-tools .incoming-controls { width: 100%; justify-content: start; flex-wrap: wrap; }
  .workspace-tools .incoming-panel, .workspace-tools .workspace-floating-panel { top: 100%; margin-top: 6px; right: auto; left: 0; }
 }
+
+.workspace-card-repository { display: flex; align-items: center; gap: 6px; min-height: 28px; overflow: visible; }
+.workspace-card-repository > bdi { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.workspace-card .card-details-trigger { pointer-events: auto; flex: none; display: grid; place-items: center; width: 28px; min-height: 28px; padding: 4px; border: 1px solid var(--workspace-border); border-radius: 4px; color: var(--workspace-text); background: var(--workspace-surface); }
+.workspace-card .card-details-trigger[aria-expanded="true"] { outline: 2px solid var(--workspace-focus); outline-offset: 1px; }
+.card-refresh-indicator { flex: none; display: inline-flex; color: var(--workspace-muted); }
+.card-refresh-indicator .app-icon { width: 14px; height: 14px; animation: card-refresh 1s linear infinite; }
+.card-detail-body { margin-block: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; user-select: text; }
+@keyframes card-refresh { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .card-refresh-indicator .app-icon { animation: none; } }

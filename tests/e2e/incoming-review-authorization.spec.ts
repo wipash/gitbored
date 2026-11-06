@@ -229,14 +229,22 @@ test('a retained repository connector session loss invalidates accepted hydratio
   try {
     await page.goto(`/boards/${board.id}`);
     await expect(page.locator('.tl-container')).toBeVisible();
+    // Refresh the existing references without discovering additional fixture items.
+    await controlProvider(page.request, { sourceMode: 'empty' });
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect.poll(() => [...new Set(accepted.map(({ route }) => decodeURIComponent(new URL(route.request().url()).pathname.slice('/api/references/'.length))))].sort()).toEqual(items.map((item) => item.reference.id).sort());
     const original = await page.locator('.tl-container').elementHandle();
     if (!original) throw new Error('Missing retained native editor');
     await page.getByRole('button', { name: 'Incoming 2', exact: true }).click();
+    // A held refresh keeps cached Incoming titles visible before account loss.
+    for (const item of items) await expect(page.locator('.incoming-panel')).toContainText(item.metadata.title);
+    await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+    const refreshed = await read(page, board.id);
+    expect(refreshed.document).toEqual(board.document);
+    expect(refreshed.incoming).toEqual(board.incoming);
     await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     const browser = page.getByRole('region', { name: 'Board repository connection', exact: true });
     await expect(browser.getByLabel('Search repositories')).toBeVisible();
-    await privateValuesAbsent(page, items);
     await other.goto('/boards');
     await openSettings(other);
     await other.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -278,7 +286,7 @@ test('a retained repository connector session loss invalidates accepted hydratio
     // No placement or autosave has been used to trigger the metadata-loss boundary.
     await signIn(other);
     const unchanged = await read(other, board.id);
-    expect(unchanged).toEqual(board);
+    expect(unchanged).toEqual(refreshed);
     metadataNotPersisted(unchanged, items);
   } finally {
     holdSession = false;

@@ -1,3 +1,5 @@
+import { readCachedBoardMetadata } from '../../shared/cachedMetadata';
+import { BoardMetadataContext, type BoardMetadataBootstrap } from './cachedBoardMetadata';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { T } from '@tldraw/validate';
 import { boardSummaryValidator, validateBoard, type Board, type BoardSummary } from '../../shared/boards';
@@ -83,6 +85,7 @@ function BoardList({ authority, restore = true, embedded = false }: { authority:
 }
 function LoadBoard({ id, authority, theme }: { id: string; authority: BoardAuthority; theme: 'light' | 'dark' }) {
   const [board, setBoard] = useState<Board | null>(null);
+  const [bootstrap, setBootstrap] = useState<BoardMetadataBootstrap | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -92,16 +95,23 @@ function LoadBoard({ id, authority, theme }: { id: string; authority: BoardAutho
     if (board || !authority.ready) return () => controller.abort();
     const load = async () => {
       try {
-        const response = await requestBoard(`/api/boards/${encodeURIComponent(id)}`, authority, 'GET', undefined, controller.signal);
+        const [response, cachedResponse] = await Promise.all([
+          requestBoard(`/api/boards/${encodeURIComponent(id)}`, authority, 'GET', undefined, controller.signal),
+          authority.session.authorization === 'ready'
+            ? requestBoard(`/api/boards/${encodeURIComponent(id)}/metadata`, authority, 'GET', undefined, controller.signal).catch(() => null)
+            : Promise.resolve(null),
+        ]);
         if (!response.ok) throw new Error('Cannot load board');
         const result = validateBoard(await response.json());
-        if (!controller.signal.aborted) setBoard(result);
+        let cache: ReturnType<typeof readCachedBoardMetadata> = { items: [] };
+        try { if (cachedResponse?.ok) cache = readCachedBoardMetadata(await cachedResponse.json()); } catch { /* Metadata can rebuild without blocking the board. */ }
+        if (!controller.signal.aborted) { setBootstrap({ authority, value: cache }); setBoard(result); }
       } catch { if (!controller.signal.aborted) setError('This board could not be opened. Check your connection and Retry opening, or return to Boards. If your session ended, sign in again.'); }
     };
     void load();
     return () => controller.abort();
   }, [id, attempt, authority, board]);
-  if (board) return <RecoverBoard board={board} authority={authority} theme={theme} />;
+  if (board) return <BoardMetadataContext value={bootstrap}><RecoverBoard board={board} authority={authority} theme={theme} /></BoardMetadataContext>;
   return <section className="board-loading"><h1 ref={heading} tabIndex={-1}>Open board</h1><p role="status">{!authority.ready ? 'Opening is paused until your account is checked.' : !error ? 'Loading your board…' : ''}</p>{authority.ready && error && <><p role="alert" className="board-error">{error}</p><button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>Retry opening</button></>}<a href="/boards">Return to Boards</a></section>;
 }
 function RecoverBoard({ board, authority, theme }: { board: Board; authority: BoardAuthority; theme: 'light' | 'dark' }) {

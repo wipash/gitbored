@@ -1,9 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { ItemKind, ItemMetadata } from '../shared/items.js';
+import { MAX_ITEM_BODY_LENGTH, type ItemKind, type ItemMetadata } from '../shared/items.js';
 import { readRepository, readSourceItem, readSourcePage, type RepositorySource, type SourceItem } from '../shared/sources.js';
 import { readItemContext } from '../shared/planning.js';
+import type { CachedBoardMetadataItem } from '../shared/cachedMetadata.js';
+import { getDocumentReferenceIds, validateNativeDocument } from '../shared/nativeDocument.js';
+import { validateIncoming } from '../shared/incoming.js';
 import { AuthenticationError, type AuthenticatedUser } from './auth.js';
 import type { AuthConfig } from './config.js';
 import { boolean, id, installation, invalidProvider, list, number, object, opaque, owner, parseItemUrl, providerRead, repository, text } from './sourceProvider.js';
@@ -64,19 +67,21 @@ function normalize(value: unknown, repo: RepositorySource, detail?: unknown): No
   if (commonState !== 'open' && commonState !== 'closed') return invalidProvider();
   let state: ItemMetadata['state'] = kind === 'issue' ? commonState : 'unknown';
   let pullId: string | null = null;
+  let body = row['body'] === undefined || row['body'] === null ? null : text(row['body'], MAX_ITEM_BODY_LENGTH);
   if (kind === 'pull-request' && detail !== undefined) {
     const pull = object(detail);
     if (opaque(pull['node_id']) !== nodeId || number(pull['number']) !== itemNumber) return invalidProvider();
     const headRepo = repository(object(pull['base'])['repo']);
     if (headRepo.nodeId !== repo.nodeId || headRepo.id !== repo.id) return invalidProvider();
     pullId = id(pull['id']);
+    if (pull['body'] !== undefined) body = pull['body'] === null ? null : text(pull['body'], MAX_ITEM_BODY_LENGTH);
     const merged = boolean(pull['merged']); const draft = boolean(pull['draft']);
     if (pull['state'] !== 'open' && pull['state'] !== 'closed') return invalidProvider();
     state = merged ? 'merged' : pull['state'] === 'closed' ? 'closed' : draft ? 'draft' : 'open';
   }
   const reason = row['state_reason'];
   const metadata: ItemMetadata = { kind, locator: { owner: repo.owner, repository: repo.name, number: itemNumber },
-    title: text(row['title']), state, sourceState: commonState, labels: list(row['labels'], 1000).map((label) => text(object(label)['name'], 1024)),
+    title: text(row['title']), body, state, sourceState: commonState, labels: list(row['labels'], 1000).map((label) => text(object(label)['name'], 1024)),
     assignees: list(row['assignees'], 1000).map((assignee) => text(object(assignee)['login'], 256)), freshness: 'current',
     stateReason: reason === undefined || reason === null ? null : text(reason, 256),
     createdAt: timestamp(row['created_at']), updatedAt: timestamp(row['updated_at']),
@@ -160,6 +165,42 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       throw error;
     }
   }
+  app.get<{ Params: { id: string } }>('/api/boards/:id/metadata', async (request) => {
+    const user = app.authentication.requireUserContext(request);
+    const board = database.prepare('SELECT document, incoming FROM boards WHERE id=? AND owner_id=?').get(request.params.id, user.id);
+    if (!board) throw new AuthenticationError(404, 'board_not_found', 'This board is unavailable. Return to Boards.');
+    const ctx = await context(request);
+    if (typeof board['document'] !== 'string' || typeof board['incoming'] !== 'string') throw new Error('Invalid stored board');
+    const document = validateNativeDocument(JSON.parse(board['document']));
+    const incoming = validateIncoming(JSON.parse(board['incoming']));
+    const references = new Set([...getDocumentReferenceIds(document), ...incoming.queue.map((candidate) => candidate.referenceId)]);
+    const lookup = database.prepare(`SELECT c.payload, c.fetched_at AS fetchedAt FROM github_cache c
+      JOIN item_references r ON r.id=? AND r.user_id=c.user_id
+      WHERE c.user_id=? AND c.credential_hash=? AND c.cache_key=?`);
+    const fingerprint = credentialHash(ctx);
+    const cutoff = Date.now() - cacheLifetime;
+    function entry<T>(referenceId: string, key: string, validate: (value: unknown) => T): { value: T; stale: boolean } | null {
+      const row = lookup.get(referenceId, user.id, fingerprint, key);
+      if (typeof row?.['payload'] !== 'string' || typeof row['fetchedAt'] !== 'number') return null;
+      try { return { value: validate(JSON.parse(row['payload'])), stale: row['fetchedAt'] <= cutoff }; }
+      catch {
+        // Invalid cached metadata is omitted; ordinary hydration will rebuild it.
+        database.prepare('DELETE FROM github_cache WHERE user_id=? AND cache_key=?').run(user.id, key);
+        return null;
+      }
+    }
+    const items: CachedBoardMetadataItem[] = [];
+    for (const referenceId of references) {
+      const cachedItem = entry(referenceId, `reference:${referenceId}`, readSourceItem);
+      if (!cachedItem || cachedItem.value.reference.id !== referenceId) continue;
+      const cachedContext = entry(referenceId, `context:${referenceId}`, readItemContext);
+      const stale = cachedItem.stale || cachedItem.value.metadata.body === undefined
+        || (cachedItem.value.reference.kind === 'pull-request' && cachedItem.value.metadata.state === 'unknown');
+      items.push({ item: { ...cachedItem.value, metadata: { ...cachedItem.value.metadata, freshness: stale ? 'stale' : 'current' } },
+        context: cachedContext?.value ?? null, stale, contextStale: cachedContext?.stale ?? true });
+    }
+    return { items };
+  });
   app.get('/api/sources/installations', async (request) => {
     const ctx = await context(request); const page = pageInput(request);
     const result = await read(ctx, '/user/installations', page);
@@ -217,7 +258,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     database.exec('BEGIN IMMEDIATE');
     try {
       const items = normalized.map((item) => persistItem(ctx.user.id, repo, item));
-      for (const item of items) if (item.reference.kind === 'issue') cache(ctx, `reference:${item.reference.id}`, item);
+      for (const item of items) cache(ctx, `reference:${item.reference.id}`, item);
       persistRepository(ctx.user.id, repo, result.nextPage);
       rememberRepository(ctx.user.id, repo);
       const response = { items, repository: repo, page, nextPage: result.nextPage };
@@ -285,7 +326,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const row = database.prepare('SELECT owner, repository, number, kind, node_id AS nodeId FROM item_references WHERE id=? AND user_id=?').get(request.params.id, ctx.user.id);
     if (!row) throw new AuthenticationError(404, 'unavailable', 'This reference is unavailable. Open Repositories and connect its repository or paste its GitHub URL again.');
     const previous = cached(ctx, `reference:${request.params.id}`, readSourceItem);
-    if (previous) return previous;
+    if (previous && previous.metadata.body !== undefined && !(previous.reference.kind === 'pull-request' && previous.metadata.state === 'unknown')) return previous;
     return await resolve(ctx, `https://github.com/${String(row['owner'])}/${String(row['repository'])}/${row['kind'] === 'issue' ? 'issues' : 'pull'}/${String(row['number'])}`, String(row['nodeId']));
   });
 }

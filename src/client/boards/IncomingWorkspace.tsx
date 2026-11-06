@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { readCachedBoardMetadata } from '../../shared/cachedMetadata';
+import { BoardMetadataContext, cachedWorkspaceMetadata } from './cachedBoardMetadata';
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createShapeId, useEditor, type Editor, type TLShapeId } from 'tldraw';
 import { readItemContext } from '../../shared/planning';
@@ -51,6 +53,11 @@ function placedReferences(document: NativeDocument): Set<string> {
 }
 /** One native editor/coordinator lifetime; metadata and Incoming never enter SDK history. */
 export function IncomingWorkspace({ board, authority, coordinator, theme, noticeHost }: { noticeHost: HTMLDivElement | null; board: Board; authority: BoardAuthority; coordinator: SaveCoordinator; theme: 'light' | 'dark' }) {
+  const bootstrap = useContext(BoardMetadataContext);
+  const initialCache = bootstrap?.authority === authority ? bootstrap.value : { items: [] };
+  const [batchAuthority, setBatchAuthority] = useState<BoardAuthority | null>(bootstrap?.authority === authority ? authority : null);
+  const refreshReferences = useRef(new Set(initialCache.items.filter((entry) => entry.stale).map((entry) => entry.item.reference.id)));
+  const refreshContexts = useRef(new Set(initialCache.items.filter((entry) => entry.contextStale).map((entry) => entry.item.reference.id)));
   const { failures: ssoFailures, update: reportSso } = useSsoRecovery(authority);
   const [ssoAttempt, setSsoAttempt] = useState(0);
   const restoreSsoFocus = useRef(false);
@@ -63,10 +70,9 @@ export function IncomingWorkspace({ board, authority, coordinator, theme, notice
   const documentSerialization = useRef<string | null>(null);
   const history = useRef(new Map<string, PlacementHistory>());
   const [references, setReferences] = useState(() => [...new Set([...placedReferences(board.document), ...board.incoming.queue.map((candidate) => candidate.referenceId)])].sort((a, b) => a.localeCompare(b)).join(','));
-  const [metadata, setMetadata] = useState<{ authority: BoardAuthority | null; values: WorkspaceMetadata }>(() => ({ authority, values: new Map() }));
+  const [metadata, setMetadata] = useState<{ authority: BoardAuthority | null; values: WorkspaceMetadata }>(() => ({ authority, values: cachedWorkspaceMetadata(initialCache) }));
   const metadataRef = useRef(metadata.values);
   const [metadataAttempt, setMetadataAttempt] = useState(0);
-  const lastAuthority = useRef(authority);
   const authorityRef = useRef(authority);
   const deniedScopes = useRef(new Set<string>());
   const rejectedAuthority = useRef<BoardAuthority | null>(null);
@@ -121,7 +127,9 @@ export function IncomingWorkspace({ board, authority, coordinator, theme, notice
   const remember = useCallback((item: SourceItem) => {
     const scope = `${item.metadata.locator.owner}/${item.metadata.locator.repository}`.toLowerCase();
     if (!canRead(authority) || deniedScopes.current.has(scope)) return;
-    const next = new Map(metadataRef.current); next.set(item.reference.id, { status: 'ready', item: item.metadata }); publishMetadata(next, authority);
+    const previous = metadataRef.current.get(item.reference.id);
+    const context = previous?.status === 'ready' ? previous.item.context : undefined;
+    const next = new Map(metadataRef.current); next.set(item.reference.id, { status: 'ready', item: { ...item.metadata, ...(context ? { context } : {}) }, refreshing: refreshContexts.current.has(item.reference.id) }); publishMetadata(next, authority);
   }, [authority, canRead, publishMetadata]);
   const accessLost = useCallback((scope?: string, ssoRequired = false) => {
     if (authorityRef.current !== authority) return;
@@ -142,80 +150,116 @@ export function IncomingWorkspace({ board, authority, coordinator, theme, notice
     publishMetadata(next, authority);
   }, [authority, publishMetadata]);
   useEffect(() => {
+    if (!canRead(authority) || batchAuthority === authority) return;
     const controller = new AbortController();
-    const changedAuthority = lastAuthority.current !== authority;
-    lastAuthority.current = authority;
+    const load = async () => {
+      let cache: ReturnType<typeof readCachedBoardMetadata> = { items: [] };
+      try {
+        const response = await requestBoard(`/api/boards/${encodeURIComponent(board.id)}/metadata`, authority, 'GET', undefined, controller.signal);
+        if (response.ok) cache = readCachedBoardMetadata(await response.json());
+      } catch { /* Cold reads below recover a failed optional cache bootstrap. */ }
+      if (controller.signal.aborted || !canRead(authority)) return;
+      refreshReferences.current = new Set(cache.items.filter((entry) => entry.stale).map((entry) => entry.item.reference.id));
+      refreshContexts.current = new Set(cache.items.filter((entry) => entry.contextStale).map((entry) => entry.item.reference.id));
+      deniedScopes.current.clear();
+      publishMetadata(cachedWorkspaceMetadata(cache), authority);
+      setBatchAuthority(authority);
+    };
+    void load();
+    return () => controller.abort();
+  }, [authority, batchAuthority, board.id, canRead, publishMetadata]);
+  useEffect(() => {
+    if (!canRead(authority) || batchAuthority !== authority) return;
+    const controller = new AbortController();
+    const currentRead = () => !controller.signal.aborted && canRead(authority);
+    const placed = new Set(placedIds.split(','));
     const next = new Map<string, ItemMetadataState>();
-    const readable = canRead(authority);
-    if (readable) for (const id of references ? references.split(',') : []) next.set(id, !changedAuthority ? metadataRef.current.get(id) ?? { status: 'loading' } : { status: 'loading' });
-    // Synchronize fetched state with the external authorization/request lifetime.
+    const ids: string[] = [];
+    for (const id of references ? references.split(',') : []) {
+      const value = metadataRef.current.get(id);
+      const needsReference = value?.status !== 'ready' || refreshReferences.current.has(id)
+        || value.item.kind === 'pull-request' && value.item.state === 'unknown';
+      const needsContext = placed.has(id) && (value?.status !== 'ready' || !value.item.context || refreshContexts.current.has(id));
+      if (needsReference) ids.push(id);
+      next.set(id, value?.status === 'ready' ? { ...value, refreshing: needsReference || needsContext } : { status: 'loading' });
+    }
+    // Install the complete cached map before any provider request can complete.
     // oxlint-disable-next-line react/set-state-in-effect
     publishMetadata(next, authority);
-    if (!readable) return () => controller.abort();
-    const ids = [...next.keys()].filter((id) => { const value = next.get(id); return value?.status !== 'ready' || value.item.kind === 'pull-request' && value.item.state === 'unknown'; });
-    const cursor = { index: 0 };
+    async function pool(values: string[], task: (id: string) => Promise<void>) {
+      const cursor = { index: 0 };
+      await Promise.all(Array.from({ length: Math.min(4, values.length) }, async () => {
+        while (cursor.index < values.length && currentRead()) { const id = values[cursor.index++]; if (id) await task(id); }
+      }));
+    }
+    function referenceFailed(id: string, denied: boolean, sso: boolean) {
+      const updated = new Map(metadataRef.current);
+      const previous = updated.get(id);
+      if (denied && previous?.status === 'ready') {
+        const scope = `${previous.item.locator.owner}/${previous.item.locator.repository}`.toLowerCase();
+        deniedScopes.current.add(scope);
+        for (const [key, value] of updated) if (value.status === 'ready' && `${value.item.locator.owner}/${value.item.locator.repository}`.toLowerCase() === scope) {
+          updated.set(key, { status: sso ? 'sso-required' : 'unavailable' });
+        }
+      }
+      updated.set(id, !denied && previous?.status === 'ready'
+        ? { status: 'ready', item: { ...previous.item, freshness: 'stale' }, refreshing: false }
+        : { status: sso ? 'sso-required' : denied ? 'unavailable' : 'error' });
+      publishMetadata(updated, authority);
+    }
+    async function hydrateReference(id: string) {
+      try {
+        const response = await requestBoard(`/api/references/${encodeURIComponent(id)}${refreshReferences.current.has(id) ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
+        const failure = await readSsoFailure(response);
+        if (!currentRead()) return;
+        reportSso(`reference:${id}`, failure);
+        if (!response.ok) { referenceFailed(id, response.status === 403 || response.status === 404, failure !== null); return; }
+        const item = readSourceItem(await response.json());
+        if (!currentRead() || item.reference.id !== id) return;
+        refreshReferences.current.delete(id);
+        remember(item);
+      } catch { if (currentRead()) referenceFailed(id, false, false); }
+    }
+    async function hydrateContext(id: string) {
+      try {
+        const response = await requestBoard(`/api/references/${encodeURIComponent(id)}/context${refreshContexts.current.has(id) ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
+        const failure = await readSsoFailure(response);
+        if (!currentRead()) return;
+        reportSso(`context:${id}`, failure);
+        const fetchedContext = response.ok ? readItemContext(await response.json()) : null;
+        if (!currentRead()) return;
+        // Another request may revoke this scope while the response body is read.
+        const latest = metadataRef.current.get(id);
+        if (latest?.status !== 'ready' || deniedScopes.current.has(`${latest.item.locator.owner}/${latest.item.locator.repository}`.toLowerCase())) return;
+        const denied = response.status === 403 || response.status === 404;
+        const context = fetchedContext ?? (denied || !latest.item.context
+          ? { status: 'unavailable' as const, projects: [], related: [] } : latest.item.context);
+        if (response.ok) refreshContexts.current.delete(id);
+        const updated = new Map(metadataRef.current);
+        updated.set(id, { status: 'ready', item: { ...latest.item, context, ...(!response.ok ? { freshness: 'stale' as const } : {}) }, refreshing: false });
+        publishMetadata(updated, authority);
+      } catch {
+        if (!currentRead()) return;
+        const latest = metadataRef.current.get(id);
+        if (latest?.status !== 'ready') return;
+        const updated = new Map(metadataRef.current);
+        updated.set(id, { status: 'ready', item: { ...latest.item, freshness: 'stale' }, refreshing: false });
+        publishMetadata(updated, authority);
+      }
+    }
     const hydrate = async () => {
-      while (cursor.index < ids.length && !controller.signal.aborted && canRead(authority)) {
-        const id = ids[cursor.index++];
-        if (!id) continue;
-        try {
-          const response = await requestBoard(`/api/references/${encodeURIComponent(id)}${metadataAttempt > 0 ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
-          if (controller.signal.aborted || !canRead(authority)) return;
-          const failure = await readSsoFailure(response);
-          if (controller.signal.aborted || !canRead(authority)) return;
-          reportSso(`reference:${id}`, failure);
-          if (!response.ok) {
-            const updated = new Map(metadataRef.current);
-            const previous = updated.get(id);
-            if ((response.status === 403 || response.status === 404) && previous?.status === 'ready') {
-              for (const [key, state] of updated) if (state.status === 'ready' && state.item.locator.owner === previous.item.locator.owner && state.item.locator.repository === previous.item.locator.repository) updated.set(key, { status: 'unavailable' });
-            }
-            updated.set(id, { status: failure ? 'sso-required' : response.status === 403 || response.status === 404 ? 'unavailable' : 'error' }); publishMetadata(updated, authority); continue;
-          }
-          const item = readSourceItem(await response.json());
-          if (!controller.signal.aborted && canRead(authority) && item.reference.id === id) remember(item);
-        } catch {
-          if (controller.signal.aborted || !canRead(authority)) return;
-          const updated = new Map(metadataRef.current); updated.set(id, { status: 'error' }); publishMetadata(updated, authority);
-        }
-      }
+      await pool(ids, hydrateReference);
+      if (!currentRead()) return;
+      const contextIds = [...placed].filter((id) => { const value = metadataRef.current.get(id); return value?.status === 'ready' && (!value.item.context || refreshContexts.current.has(id)); });
+      await pool(contextIds, hydrateContext);
+      if (!currentRead()) return;
+      const settled = new Map(metadataRef.current);
+      for (const [id, value] of settled) if (value.status === 'ready' && value.refreshing) settled.set(id, { ...value, refreshing: false });
+      publishMetadata(settled, authority);
     };
-    void Promise.all(Array.from({ length: Math.min(4, ids.length) }, hydrate));
+    void hydrate();
     return () => controller.abort();
-  }, [authority, references, metadataAttempt, canRead, publishMetadata, remember, reportSso]);
-  useEffect(() => {
-    const controller = new AbortController();
-    if (!canRead(authority)) return () => controller.abort();
-    const hydrateContext = async () => {
-      for (const id of placedIds ? placedIds.split(',') : []) {
-        if (controller.signal.aborted || !canRead(authority)) return;
-        const previous = metadataRef.current.get(id);
-        if (previous?.status !== 'ready' || previous.item.context) continue;
-        try {
-          const response = await requestBoard(`/api/references/${encodeURIComponent(id)}/context${metadataAttempt > 0 ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
-          if (controller.signal.aborted || !canRead(authority)) return;
-          const failure = await readSsoFailure(response);
-          if (controller.signal.aborted || !canRead(authority)) return;
-          reportSso(`context:${id}`, failure);
-          const context = response.ok ? readItemContext(await response.json()) : { status: 'unavailable' as const, projects: [], related: [] };
-          const latest = metadataRef.current.get(id);
-          if (latest?.status !== 'ready') continue;
-          const next = new Map(metadataRef.current);
-          next.set(id, { status: 'ready', item: { ...latest.item, context } });
-          publishMetadata(next, authority);
-        } catch {
-          if (controller.signal.aborted || !canRead(authority)) return;
-          const latest = metadataRef.current.get(id);
-          if (latest?.status !== 'ready') continue;
-          const next = new Map(metadataRef.current);
-          next.set(id, { status: 'ready', item: { ...latest.item, context: { status: 'unavailable', projects: [], related: [] } } });
-          publishMetadata(next, authority);
-        }
-      }
-    };
-    void hydrateContext();
-    return () => controller.abort();
-  }, [authority, placedIds, metadataAttempt, metadata, canRead, publishMetadata, reportSso]);
+  }, [authority, batchAuthority, references, placedIds, metadataAttempt, canRead, publishMetadata, remember, reportSso]);
   useEffect(() => {
     const liveReferences = new Set(references.split(','));
     const livePlacements = new Set(placedIds.split(','));
@@ -234,13 +278,13 @@ export function IncomingWorkspace({ board, authority, coordinator, theme, notice
     restoreSsoFocus.current = !!noticeHost?.contains(document.activeElement);
     const next = new Map(metadataRef.current);
     for (const key of ssoFailures.keys()) {
-      if (key.startsWith('reference:')) next.set(key.slice('reference:'.length), { status: 'loading' });
+      if (key.startsWith('reference:')) refreshReferences.current.add(key.slice('reference:'.length));
       if (key.startsWith('context:')) {
         const id = key.slice('context:'.length);
         const value = next.get(id);
         if (value?.status === 'ready') {
-          const { context: _context, ...item } = value.item;
-          next.set(id, { status: 'ready', item });
+          refreshContexts.current.add(id);
+          next.set(id, { ...value, refreshing: true });
         }
       }
     }
@@ -310,10 +354,12 @@ export function IncomingWorkspace({ board, authority, coordinator, theme, notice
     ssoRequired: (owner, key = 'catalogue') => reportSso(`connector:${key}`, owner === undefined ? {} : { owner }),
     ssoRecovered: (key = 'catalogue') => reportSso(`connector:${key}`, null),
     retrySource: (scope) => { deniedScopes.current.delete(scope); },
-    refresh: () => { if (!canRead(authority)) return; deniedScopes.current.clear(); commit((state) => ({ ...state, sources: state.sources.map((source) => ({ ...source, nextPage: 1, loadedPage: 0, status: 'idle' })) })); publishMetadata(new Map(), authority); setMetadataAttempt((attempt) => attempt + 1); },
+    refresh: () => { if (!canRead(authority)) return; deniedScopes.current.clear(); refreshReferences.current = new Set(references.split(',')); refreshContexts.current = new Set(placedIds.split(',')); commit((state) => ({ ...state, sources: state.sources.map((source) => ({ ...source, nextPage: 1, loadedPage: 0, status: 'idle' })) })); setMetadataAttempt((attempt) => attempt + 1); },
     retryMetadata: () => {
     if (!canRead(authority)) return;
-    deniedScopes.current.clear(); publishMetadata(new Map(), authority); setMetadataAttempt((attempt) => attempt + 1);
+    deniedScopes.current.clear();
+    for (const [id, value] of metadataRef.current) if (value.status !== 'ready' || value.item.freshness === 'stale') { refreshReferences.current.add(id); refreshContexts.current.add(id); }
+    setMetadataAttempt((attempt) => attempt + 1);
   } };
   return <>{noticeHost && ssoFailures.size > 0 && createPortal(<SsoRecoveryNotice owners={[...new Set([...ssoFailures.values()].filter((owner): owner is string => !!owner))]} onRetry={retrySso} />, noticeHost)}<div ref={setSourceHost} className="board-source-host" data-native-ui="sources" />
     <div className="board-canvas"><NativeWorkspace preferenceKey={`${authority.session.user.id}:${board.id}`} planning={incoming.planning} onPlanningChange={(planning) => commit((state) => ({ ...state, planning }))} initialDocument={board.document} metadata={model.metadata} theme={theme} onDocumentChange={onDocumentChange} onNativeHistory={onNativeHistory} onMount={mount}><IncomingTray model={model} sourceHost={sourceHost} /></NativeWorkspace></div></>;
