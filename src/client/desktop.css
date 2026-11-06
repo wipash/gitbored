@@ -69,7 +69,7 @@
 
 .app-loading { max-inline-size: none; margin: 0; padding: 0; min-height: 100dvh; display: grid; place-items: center; background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px); background-size: 20px 20px; }
 .app-loading p { color: var(--color-text-secondary); font-size: 0.8125rem; }
-.desktop-app .workspace-account { position: fixed; bottom: 48px; right: 12px; z-index: 500; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: calc(100vw - 24px); }
+.desktop-app .workspace-account { position: fixed; bottom: 48px; right: 12px; z-index: 700; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: calc(100vw - 24px); }
 @media (max-width: 700px) { .desktop-app .workspace-account { right: 6px; } }
 @media (max-width: 400px) { .desktop-app .workspace-account { bottom: 120px; } }
 

@@ -167,14 +167,17 @@ test('account and theme controls have separate hit areas at normal and enlarged 
 
 test('account recovery messages leave account actions and theme reachable', async ({ page }) => {
   const id = await create(page, 'Account recovery controls');
+  await connect(page);
+  await expect(page.locator('.incoming-candidates > li')).toHaveCount(5);
+  await saved(page);
   await page.route('**/api/session', (route) => route.abort('failed'));
-  await page.route(`**/api/boards/${id}`, (route) => route.request().method() === 'PATCH'
+  await page.route(`**/api/boards/${id}`, (route) => route.request().method() === 'PUT'
     ? route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }) : route.continue());
-  await page.getByRole('button', { name: 'Board settings', exact: true }).click();
-  await page.getByLabel('Board name', { exact: true }).fill('Trigger account check');
-  await page.getByRole('button', { name: 'Rename board', exact: true }).click();
+  await page.locator('.incoming-candidates input[type=checkbox]').first().check();
+  await page.getByRole('button', { name: 'Add selected', exact: true }).click();
   await expect(page.locator('.account-context-status')).toContainText('Your account could not be checked');
-  await page.getByRole('button', { name: 'Close board settings' }).click();
+  await expect(page.locator('.board-save')).toContainText('saving is paused');
+  await page.getByRole('button', { name: 'Close Incoming' }).click();
   for (const width of [1280, 320]) {
     await page.setViewportSize({ width, height: 800 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
