@@ -16,6 +16,10 @@ Use Sean’s existing app to connect a real repository, bulk-place work, arrange
 
 Sean’s app remains on ports 3001/3002 with `.data/github-debug` and ignored `.env.github-debug`; its process and credentials are preserved. The user-owned launcher `.scratch/github-debug-local.sh` remains untracked. The accepted static prototype is still served at `http://10.0.16.32:3018/proposal.html`; it is not the live GitHub application.
 
+## Retrospective follow-ups
+
+Queued tooling: [runtime preflight](../desktop-redesign/issues/01-runtime-preflight.md), [isolated test runs and auth modes](../desktop-redesign/issues/02-isolated-test-runs.md), then [CI enforcement](../desktop-redesign/issues/03-ci-gate.md). Early live-path and stable visual milestones are recorded in the project guide; editor-lifetime review is in coding conventions.
+
 ## Preserved work
 
 These older worktrees remain paused and unmerged under `../gitbored-wt/`. The desktop redesign now overlaps details/filters/refresh, so compare the current implementation before reviving older work. Do not merge stale UI wholesale. Preserve concrete unfinished requirements in each ticket.

@@ -16,7 +16,7 @@ Read the progress record, relevant specification/ticket, and coding conventions 
 
 Keep one active product slice with one owner responsible through integration. Name the user action that will work at the end and the observable completion criterion. Prefer short flows Sean can try over infrastructure or exhaustive acceptance matrices.
 
-Exercise real GitHub sign-in and repository access as soon as their implementation exists. Use controlled-provider tests for repeatable regression coverage, and live smoke checks to establish actual integration. A later comprehensive acceptance ticket does not prevent earlier live checks.
+Exercise real GitHub sign-in and repository access as soon as their implementation exists. Use controlled-provider tests for repeatable regression coverage, and live smoke checks to establish actual integration. For a changed GitHub workflow, exercise its first complete live path before final validation; record unavailable access as an explicit integration limit. A later comprehensive acceptance ticket does not prevent earlier live checks.
 
 Show a working flow after each slice and use feedback to choose the next one. Defer secondary features explicitly without calling the whole specification complete. Choose routine reversible implementation details directly from existing conventions; ask Sean when changing settled product scope, crossing an authorization boundary, requiring human provisioning or spending, or taking destructive action.
 
@@ -43,7 +43,7 @@ Treat a broken test driver as tooling work: correct its observation and rerun th
 
 ## Rendered UI milestones
 
-Keep Sean's requested independent Claude Fable reviews through herdr-core at coherent UI milestones and substantial navigation, theme, or interaction changes. A Fable review can supply the rendered portion of the consolidated review; avoid overlapping browser audits of the same flow. Obtain feedback while fixes can still shape the interface.
+Keep Sean's requested independent Claude Fable reviews through herdr-core at coherent UI milestones and substantial navigation, theme, or interaction changes. A Fable review can supply the rendered portion of the consolidated review; avoid overlapping browser audits of the same flow. For a broad redesign, make the shell and one complete primary flow the first rendered milestone, before expanding secondary features. Review a named commit or snapshot and keep its preview stable until findings are collected; use a separate checkout if implementation must continue.
 
 Give Fable the intended design, commit, reachable preview, and concrete flow. Cover light/dark desktop, essential keyboard/focus behavior, narrow/enlarged controls, and relevant loading/error states. Consolidate findings into one correction list. Review affected corrections before closing the milestone; distinguish observed defects from taste and unvisited states from verified behavior.
 

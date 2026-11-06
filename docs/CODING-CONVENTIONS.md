@@ -29,6 +29,7 @@ Every agent or subagent implementing interface features must use **`better-inter
 
 - **Review/browser:** preserve Atlas + Contextual, including the dark theme. Use semantic tokens for both themes, native controls where suitable, accessible names, visible focus, and appropriate status announcements.
 - **Review/browser:** inspect actual desktop rendering and the affected interactions. Cover loading, empty, failure, and long-content states when they exist. At 320px and enlarged text, controls remain reachable and the document does not scroll sideways; the spatial canvas may scroll internally.
+- **Review/browser:** when React state or callbacks around the canvas change, check editor lifetime, in-flight gestures and native history across panel rerenders. Use the existing real-key and pointer regressions to verify continuity.
 - **Review/browser:** an anchored panel is non-modal: it must not block the canvas or trap focus. Verify placement, direct card switching, dismissal, and focus return. Dragging and keyboard alternatives must produce the same intended operation.
 - **Review/browser:** respect reduced-motion preferences and communicate state with more than color or motion alone. Judge failures against evidence, not personal taste. Periodic independent Claude Fable review follows the management guide; it does not replace implementation validation.
 
