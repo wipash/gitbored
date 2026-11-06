@@ -7,6 +7,8 @@ import { MAX_INCOMING_REFERENCES, type IncomingCandidate, type IncomingSource, t
 import type { ItemMetadataState, WorkspaceMetadata } from '../../shared/items';
 import { ITEM_CARD_TYPE, type NativeDocument } from '../../shared/nativeDocument';
 import { readRepository, readSourceItem, readSourcePage, type RepositorySource, type SourceItem } from '../../shared/sources';
+import { SsoRecoveryNotice } from '../SsoRecoveryNotice';
+import { readSsoFailure, useSsoRecovery } from './useSsoRecovery';
 import { RepositoryConnector } from '../RepositoryConnector';
 import { captureNativeDocument, NativeWorkspace } from '../workspace/NativeWorkspace';
 import { Icon } from '../Icon';
@@ -30,11 +32,15 @@ interface WorkspaceModel {
   place: (candidate: IncomingCandidate, point?: { x: number; y: number }) => boolean;
   undo: () => void;
   placeMany: (candidates: IncomingCandidate[]) => number;
-  accessLost: (scope?: string) => void;
+  accessLost: (scope?: string, ssoRequired?: boolean) => void;
   retrySource: (scope: string) => void;
   retryMetadata: () => void;
   refresh: () => void;
   refreshRequested: boolean;
+  ssoRequired: (owner?: string, key?: string) => void;
+  ssoRecovered: (key?: string) => void;
+  retryAttempt: number;
+  reportSso: (key: string, failure: { owner?: string } | null) => void;
 }
 function placedReferences(document: NativeDocument): Set<string> {
   const result = new Set<string>();
@@ -44,7 +50,10 @@ function placedReferences(document: NativeDocument): Set<string> {
   return result;
 }
 /** One native editor/coordinator lifetime; metadata and Incoming never enter SDK history. */
-export function IncomingWorkspace({ board, authority, coordinator, theme }: { board: Board; authority: BoardAuthority; coordinator: SaveCoordinator; theme: 'light' | 'dark' }) {
+export function IncomingWorkspace({ board, authority, coordinator, theme, noticeHost }: { noticeHost: HTMLDivElement | null; board: Board; authority: BoardAuthority; coordinator: SaveCoordinator; theme: 'light' | 'dark' }) {
+  const { failures: ssoFailures, update: reportSso } = useSsoRecovery(authority);
+  const [ssoAttempt, setSsoAttempt] = useState(0);
+  const restoreSsoFocus = useRef(false);
   const [sourceHost, setSourceHost] = useState<HTMLDivElement | null>(null);
   const [incoming, setIncoming] = useState(board.incoming);
   const current = useRef(board.incoming);
@@ -114,7 +123,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     if (!canRead(authority) || deniedScopes.current.has(scope)) return;
     const next = new Map(metadataRef.current); next.set(item.reference.id, { status: 'ready', item: item.metadata }); publishMetadata(next, authority);
   }, [authority, canRead, publishMetadata]);
-  const accessLost = useCallback((scope?: string) => {
+  const accessLost = useCallback((scope?: string, ssoRequired = false) => {
     if (authorityRef.current !== authority) return;
     if (scope === undefined) {
       if (rejectedAuthority.current === authority) return;
@@ -128,7 +137,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     const next = new Map(metadataRef.current);
     deniedScopes.current.add(scope);
     for (const [id, state] of next) {
-      if (state.status === 'ready' && `${state.item.locator.owner}/${state.item.locator.repository}`.toLowerCase() === scope) next.set(id, { status: 'unavailable' });
+      if (state.status === 'ready' && `${state.item.locator.owner}/${state.item.locator.repository}`.toLowerCase() === scope) next.set(id, { status: ssoRequired ? 'sso-required' : 'unavailable' });
     }
     publishMetadata(next, authority);
   }, [authority, publishMetadata]);
@@ -152,13 +161,16 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
         try {
           const response = await requestBoard(`/api/references/${encodeURIComponent(id)}${metadataAttempt > 0 ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
           if (controller.signal.aborted || !canRead(authority)) return;
+          const failure = await readSsoFailure(response);
+          if (controller.signal.aborted || !canRead(authority)) return;
+          reportSso(`reference:${id}`, failure);
           if (!response.ok) {
             const updated = new Map(metadataRef.current);
             const previous = updated.get(id);
             if ((response.status === 403 || response.status === 404) && previous?.status === 'ready') {
               for (const [key, state] of updated) if (state.status === 'ready' && state.item.locator.owner === previous.item.locator.owner && state.item.locator.repository === previous.item.locator.repository) updated.set(key, { status: 'unavailable' });
             }
-            updated.set(id, { status: response.status === 403 || response.status === 404 ? 'unavailable' : 'error' }); publishMetadata(updated, authority); continue;
+            updated.set(id, { status: failure ? 'sso-required' : response.status === 403 || response.status === 404 ? 'unavailable' : 'error' }); publishMetadata(updated, authority); continue;
           }
           const item = readSourceItem(await response.json());
           if (!controller.signal.aborted && canRead(authority) && item.reference.id === id) remember(item);
@@ -170,7 +182,7 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     };
     void Promise.all(Array.from({ length: Math.min(4, ids.length) }, hydrate));
     return () => controller.abort();
-  }, [authority, references, metadataAttempt, canRead, publishMetadata, remember]);
+  }, [authority, references, metadataAttempt, canRead, publishMetadata, remember, reportSso]);
   useEffect(() => {
     const controller = new AbortController();
     if (!canRead(authority)) return () => controller.abort();
@@ -182,6 +194,9 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
         try {
           const response = await requestBoard(`/api/references/${encodeURIComponent(id)}/context${metadataAttempt > 0 ? '?refresh=1' : ''}`, authority, 'GET', undefined, controller.signal);
           if (controller.signal.aborted || !canRead(authority)) return;
+          const failure = await readSsoFailure(response);
+          if (controller.signal.aborted || !canRead(authority)) return;
+          reportSso(`context:${id}`, failure);
           const context = response.ok ? readItemContext(await response.json()) : { status: 'unavailable' as const, projects: [], related: [] };
           const latest = metadataRef.current.get(id);
           if (latest?.status !== 'ready') continue;
@@ -200,7 +215,46 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
     };
     void hydrateContext();
     return () => controller.abort();
-  }, [authority, placedIds, metadataAttempt, metadata, canRead, publishMetadata]);
+  }, [authority, placedIds, metadataAttempt, metadata, canRead, publishMetadata, reportSso]);
+  function retrySso() {
+    if (!canRead(authority)) return;
+    restoreSsoFocus.current = !!noticeHost?.contains(document.activeElement);
+    const next = new Map(metadataRef.current);
+    for (const key of ssoFailures.keys()) {
+      if (key.startsWith('reference:')) next.set(key.slice('reference:'.length), { status: 'loading' });
+      if (key.startsWith('context:')) {
+        const id = key.slice('context:'.length);
+        const value = next.get(id);
+        if (value?.status === 'ready') {
+          const { context: _context, ...item } = value.item;
+          next.set(id, { status: 'ready', item });
+        }
+      }
+    }
+    deniedScopes.current.clear();
+    commit((state) => ({ ...state, sources: state.sources.map((source) => ssoFailures.has(`source:${source.repositoryNodeId}`) ? { ...source, status: 'idle' } : source) }));
+    publishMetadata(next, authority);
+    setMetadataAttempt((attempt) => attempt + 1);
+    setSsoAttempt((attempt) => attempt + 1);
+  }
+  const retrySsoRef = useRef(retrySso);
+  useLayoutEffect(() => { retrySsoRef.current = retrySso; });
+  useEffect(() => {
+    if (!ssoFailures.size) return;
+    // One check on return from GitHub; no timer or background retry loop.
+    const onFocus = () => { if (document.visibilityState === 'visible') retrySsoRef.current(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [ssoFailures.size]);
+  useLayoutEffect(() => {
+    if (!ssoFailures.size && restoreSsoFocus.current) {
+      restoreSsoFocus.current = false;
+      if (document.activeElement === document.body) {
+        editorRef.current?.getContainer().focus({ preventScroll: true });
+        editorRef.current?.focus();
+      }
+    }
+  }, [ssoFailures.size]);
   function placeMany(candidates: IncomingCandidate[], point?: { x: number; y: number }): number {
     const editor = editorRef.current;
     if (!editor || !authorityRef.current.ready) return 0;
@@ -237,13 +291,17 @@ export function IncomingWorkspace({ board, authority, coordinator, theme }: { bo
   const readReady = authority.ready && authority.session.authorization === 'ready' && metadata.authority === authority;
   const model: WorkspaceModel = { undo: () => { const editor = editorRef.current; if (editor) { editor.undo(); onNativeHistory(editor, 'undo'); } }, incoming, metadata: readReady ? metadata.values : new Map(), authority, readReady, canRead: () => canRead(authority), commit, remember, place, placeMany, accessLost,
     refreshRequested: metadataAttempt > 0,
+    reportSso,
+    retryAttempt: ssoAttempt,
+    ssoRequired: (owner, key = 'catalogue') => reportSso(`connector:${key}`, owner === undefined ? {} : { owner }),
+    ssoRecovered: (key = 'catalogue') => reportSso(`connector:${key}`, null),
     retrySource: (scope) => { deniedScopes.current.delete(scope); },
     refresh: () => { if (!canRead(authority)) return; deniedScopes.current.clear(); commit((state) => ({ ...state, sources: state.sources.map((source) => ({ ...source, nextPage: 1, loadedPage: 0, status: 'idle' })) })); publishMetadata(new Map(), authority); setMetadataAttempt((attempt) => attempt + 1); },
     retryMetadata: () => {
     if (!canRead(authority)) return;
     deniedScopes.current.clear(); publishMetadata(new Map(), authority); setMetadataAttempt((attempt) => attempt + 1);
   } };
-  return <><div ref={setSourceHost} className="board-source-host" data-native-ui="sources" />
+  return <>{noticeHost && ssoFailures.size > 0 && createPortal(<SsoRecoveryNotice owners={[...new Set([...ssoFailures.values()].filter((owner): owner is string => !!owner))]} onRetry={retrySso} />, noticeHost)}<div ref={setSourceHost} className="board-source-host" data-native-ui="sources" />
     <div className="board-canvas"><NativeWorkspace preferenceKey={`${authority.session.user.id}:${board.id}`} planning={incoming.planning} onPlanningChange={(planning) => commit((state) => ({ ...state, planning }))} initialDocument={board.document} metadata={model.metadata} theme={theme} onDocumentChange={onDocumentChange} onNativeHistory={onNativeHistory} onMount={mount}><IncomingTray model={model} sourceHost={sourceHost} /></NativeWorkspace></div></>;
 }
 
@@ -352,9 +410,13 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
       const response = await requestBoard(`/api/sources/repositories/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/items?page=${page}${model.refreshRequested ? '&refresh=1' : ''}`, model.authority, 'GET', undefined, signal);
       if (signal?.aborted || !model.canRead()) return;
       if (!response.ok) {
-        if (response.status === 403 || response.status === 404) model.accessLost(`${source.owner}/${source.repository}`.toLowerCase());
+        const failure = await readSsoFailure(response);
+        if (signal?.aborted || !model.canRead()) return;
+        model.reportSso(`source:${source.repositoryNodeId}`, failure ? { owner: failure.owner ?? source.owner } : null);
+        if (response.status === 403 || response.status === 404) model.accessLost(`${source.owner}/${source.repository}`.toLowerCase(), failure !== null);
         throw new Error('Discovery failed');
       }
+      model.reportSso(`source:${source.repositoryNodeId}`, null);
       const payload: unknown = await response.json();
       if (typeof payload !== 'object' || payload === null || !('repository' in payload) || readRepository(payload.repository).nodeId !== source.repositoryNodeId) throw new Error('Source identity changed');
       const result = readSourcePage(payload, readSourceItem);
@@ -388,7 +450,7 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
     const source = model.incoming.sources.find((entry) => entry.nextPage !== null && entry.status !== 'error');
     if (source) void discover(source);
   });
-  const missingMetadata = [...model.metadata.values()].some((value) => value.status === 'error' || value.status === 'unavailable');
+  const missingMetadata = [...model.metadata.values()].some((value) => value.status === 'error' || value.status === 'unavailable' || value.status === 'sso-required');
   const complete = model.incoming.sources.every((source) => source.nextPage === null);
   const matches = model.incoming.queue.filter((candidate) => {
     const value = model.metadata.get(candidate.referenceId);
@@ -412,7 +474,7 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
     </div>
     {model.authority.ready && sourceHost && createPortal(<section hidden={!browsing} className="board-source-panel" aria-label="Board repository connection">
       <div className="incoming-heading"><h2>Repositories</h2><button type="button" data-native-dismiss onClick={() => { setBrowsing(false); focusPanelTrigger(repositoryTrigger.current); }} aria-label="Close repositories"><Icon name="close" /></button></div>
-      {model.readReady ? <RepositoryConnector session={model.authority.session} onConnect={selectSource} onAddItem={addCandidate} onAccessLoss={model.accessLost} connected={model.incoming.sources} /> : <p role="status">Check your GitHub account to continue.</p>}
+      {model.readReady ? <RepositoryConnector session={model.authority.session} onConnect={selectSource} onAddItem={addCandidate} onAccessLoss={model.accessLost} onSsoRequired={model.ssoRequired} onSsoRecovered={model.ssoRecovered} retryAttempt={model.retryAttempt} connected={model.incoming.sources} /> : <p role="status">Check your GitHub account to continue.</p>}
       <ul className="incoming-sources">{model.incoming.sources.map((source) => <li key={source.repositoryNodeId}><span>{source.owner}/{source.repository}</span><button type="button" disabled={busySource !== null} onClick={() => model.commit((state) => ({ ...state, sources: state.sources.filter((entry) => entry.repositoryNodeId !== source.repositoryNodeId) }))}>Disconnect</button></li>)}</ul>
     </section>, sourceHost)}
     <p className="incoming-announcement" role="status">{message}</p>

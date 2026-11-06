@@ -14,13 +14,14 @@ function ItemCard({ shape }: { shape: ItemCardShape }) {
   const description = describeItem(shape.props.kind, state);
   const url = item ? githubItemUrl(shape.props.kind, item.locator) : null;
   const anonymousMessage = state.status === 'loading' ? 'Loading…'
+    : state.status === 'sso-required' ? 'SSO required. Reconnect your organisation.'
     : state.status === 'error' ? 'Could not load. Refresh to retry.'
       : state.status === 'unavailable' || state.status === 'ready' ? 'Unavailable. Check GitHub access.'
         : 'Unresolved reference.';
   return <HTMLContainer className="workspace-card-container">
     <article className="workspace-card" style={colours.cardStyle} data-card-colour={shape.props.color} data-colour-by={colours.mode} aria-label={description} data-reference-id={shape.props.referenceId}>
       <div className="workspace-card-repository"><bdi>{item ? `${item.locator.owner}/${item.locator.repository}` : 'GitHub reference'}</bdi></div>
-      <div className="workspace-card-heading"><strong className="card-category" style={badgeStyle(colours.type)}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} />{shape.props.kind === 'issue' ? 'Issue' : 'Pull request'}{item ? ` #${item.locator.number}` : ''}</strong><span className="card-category" style={badgeStyle(colours.status)}>{item ? itemStateLabel(item) : state.status === 'loading' ? 'Loading…' : 'Unavailable'}</span></div>
+      <div className="workspace-card-heading"><strong className="card-category" style={badgeStyle(colours.type)}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} />{shape.props.kind === 'issue' ? 'Issue' : 'Pull request'}{item ? ` #${item.locator.number}` : ''}</strong><span className="card-category" style={badgeStyle(colours.status)}>{item ? itemStateLabel(item) : state.status === 'loading' ? 'Loading…' : state.status === 'sso-required' ? 'SSO required' : 'Unavailable'}</span></div>
       {item && itemType(item) !== 'Issue' && itemType(item) !== 'Pull request' && <span className="card-category card-type" style={badgeStyle(colours.type)}>{itemType(item)}</span>}
       <p className="workspace-card-title">{item?.title ?? anonymousMessage}</p>
       <div className="workspace-card-labels">{item?.labels.slice(0, 2).map((label, index) => <span className="card-category" style={badgeStyle(colours.label(label))} title={label} key={index}><bdi>{label}</bdi></span>)}{item && item.labels.length > 2 && <span>+{item.labels.length - 2}</span>}</div>

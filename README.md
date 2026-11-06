@@ -403,6 +403,18 @@ startup; missing configuration renders an actionable unconfigured screen.
 
 ### Troubleshooting GitHub sign-in
 
+When GitHub requires organisation SSO, affected cards say **SSO required** and one
+**GitHub SSO required** notice appears below the board save status. Expand it for
+the organisation's SSO link and GitHub app reauthorization steps. Keep the board
+tab open: drawing and saving remain available. After reconnecting with the same
+account, return to the board or select **Check access** to retry the affected
+reads without reloading. The notice clears when those reads recover; ordinary
+missing-access and missing-item errors remain separate.
+
+GitBored refreshes expiring GitHub user tokens automatically. This does not
+replace an organisation's interactive SSO challenge. Recovery follows
+[GitHub's SAML and GitHub Apps instructions](https://docs.github.com/en/enterprise-cloud@latest/apps/using-github-apps/saml-and-github-apps).
+
 If sign-in succeeds but selecting an installation fails to list repositories,
 the server emits `github_repository_access_failed` with a bounded category,
 upstream status and available GitHub request ID, rate-limit count and recognized
