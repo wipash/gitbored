@@ -58,7 +58,11 @@ export class SaveCoordinator {
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private publish(state: SaveState): void {
     if (this.stopped) return;
-    this.state = { ...state, ...(this.state.recoveryUnavailable ? { recoveryUnavailable: true } : {}) };
+    const next: SaveState = { ...state, ...(this.state.recoveryUnavailable ? { recoveryUnavailable: true } : {}) };
+    // Keep the React snapshot stable while a gesture repeats the same save status.
+    // Subscribers still observe every publication, including flush completion.
+    if (next.status !== this.state.status || next.message !== this.state.message
+      || next.retryable !== this.state.retryable || next.recoveryUnavailable !== this.state.recoveryUnavailable) this.state = next;
     for (const listener of this.listeners) listener();
   }
   get dirty(): boolean { return !this.stopped && this.generation !== this.acknowledged; }

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useEditor, useValue } from 'tldraw';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { computed, useEditor, useValue } from 'tldraw';
 import { githubItemUrl, type WorkspaceMetadata } from '../../shared/items';
 import { ITEM_CARD_TYPE, type ItemCardShape } from '../../shared/nativeDocument';
 import { Icon } from '../Icon';
@@ -26,11 +26,14 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   const viewTrigger = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
-  const cards = useValue('Board cards', () => editor.getCurrentPageShapes().filter((shape): shape is ItemCardShape => shape.type === ITEM_CARD_TYPE && !editor.isShapeHidden(shape)), [editor]);
-  const selected = useValue('Inspected card', () => {
+  // Panel content follows membership and card properties; geometry stays in the canvas.
+  const cards = useValue(useMemo(() => computed('Board cards', () => editor.getCurrentPageShapes().filter((shape): shape is ItemCardShape => shape.type === ITEM_CARD_TYPE && !editor.isShapeHidden(shape)), {
+    isEqual: (a: ItemCardShape[], b: ItemCardShape[]) => a.length === b.length && a.every((shape, index) => shape.id === b[index]?.id && shape.props === b[index]?.props),
+  }), [editor]));
+  const selected = useValue(useMemo(() => computed('Inspected card', () => {
     const shape = editor.getOnlySelectedShape();
     return shape?.type === ITEM_CARD_TYPE ? shape : null;
-  }, [editor]);
+  }, { isEqual: (a: ItemCardShape | null, b: ItemCardShape | null) => a?.id === b?.id && a?.props === b?.props }), [editor]));
   const state = selected ? metadata.get(selected.props.referenceId) : undefined;
   const item = state?.status === 'ready' ? state.item : null;
   const url = item ? githubItemUrl(item.kind, item.locator) : null;
@@ -67,7 +70,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
           const value = metadata.get(shape.props.referenceId);
           return <li key={shape.id}><button type="button" onClick={() => {
             editor.complete(); editor.setCurrentTool('select'); editor.select(shape.id);
-            const bounds = editor.getShapePageBounds(shape);
+            const bounds = editor.getShapePageBounds(shape.id);
             if (bounds) editor.centerOnPoint(bounds.center, { animation: { duration: 0 } });
             setDismissed(null); setOpen(false);
             editor.getContainer().focus({ preventScroll: true }); editor.focus();
