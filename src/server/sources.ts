@@ -14,6 +14,11 @@ import { boolean, id, installation, invalidProvider, list, number, object, opaqu
 import { itemContextQuery, normalizeContext } from './itemContext.js';
 
 interface SourceContext { request: FastifyRequest; user: AuthenticatedUser; token: string; origin: string; cacheGeneration: number }
+interface SourceReadOptions {
+  page?: number;
+  canonicalPaginationPath?: string;
+  graphql?: { query: string; variables: { id: string } };
+}
 interface NormalizedItem {
   item: Omit<SourceItem, 'reference'>;
   nodeId: string;
@@ -150,9 +155,9 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     app.authentication.assertUserContext(request, user);
     return { request, user, token, origin: config.apiOrigin, cacheGeneration: cacheGenerations.get(user.id) ?? 0 };
   }
-  async function read(ctx: SourceContext, path: string, page?: number, canonicalPaginationPath?: string) {
+  async function read(ctx: SourceContext, path: string, options: SourceReadOptions = {}) {
     try {
-      const result = await providerRead(ctx.origin, ctx.token, path, page, canonicalPaginationPath);
+      const result = await providerRead(ctx.origin, ctx.token, path, options.page, options.canonicalPaginationPath, options.graphql);
       app.authentication.assertUserContext(ctx.request, ctx.user);
       return result;
     }
@@ -203,7 +208,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
   });
   app.get('/api/sources/installations', async (request) => {
     const ctx = await context(request); const page = pageInput(request);
-    const result = await read(ctx, '/user/installations', page);
+    const result = await read(ctx, '/user/installations', { page });
     return { items: list(object(result.value)['installations'], 30).map(installation), page, nextPage: result.nextPage };
   });
   app.get('/api/sources/recent-repositories', (request) => {
@@ -235,7 +240,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const ctx = await context(request); const page = pageInput(request);
     const installationId = request.params.installationId;
     if (!/^[1-9][0-9]{0,127}$/.test(installationId)) return badRequest('Choose a valid installation.');
-    const result = await read(ctx, `/user/installations/${installationId}/repositories`, page);
+    const result = await read(ctx, `/user/installations/${installationId}/repositories`, { page });
     const items = list(object(result.value)['repositories'], 30).map(repository);
     app.authentication.assertUserContext(request, ctx.user);
     for (const repo of items) persistRepository(ctx.user.id, repo);
@@ -251,7 +256,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const repo = repository((await read(ctx, path)).value);
     // GitHub's Link header uses the canonical numeric repository route.
     // Derive that one allowed alias from this authorized repository response.
-    const result = await read(ctx, `${path}/issues?state=all&sort=created&direction=asc`, page, `/repositories/${repo.id}/issues`);
+    const result = await read(ctx, `${path}/issues?state=all&sort=created&direction=asc`, { page, canonicalPaginationPath: `/repositories/${repo.id}/issues` });
     // Validate the whole page before committing progress or references.
     const normalized = list(result.value, 30).map((item) => normalize(item, repo));
     app.authentication.assertUserContext(request, ctx.user);
@@ -304,16 +309,12 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const previous = cached(ctx, cacheKey, readItemContext);
     if (previous) return previous;
     try {
-      const result = await providerRead(ctx.origin, ctx.token, '/graphql', undefined, undefined,
-        { query: itemContextQuery, variables: { id: opaque(row['nodeId']) } });
+      const result = await read(ctx, '/graphql', { graphql: { query: itemContextQuery, variables: { id: opaque(row['nodeId']) } } });
       app.authentication.assertUserContext(request, ctx.user);
       const itemContext = normalizeContext(result.value);
       cache(ctx, cacheKey, itemContext);
       return itemContext;
     } catch (error) {
-      if (error instanceof AuthenticationError && ['reauthorize', 'missing_access', 'sso_required', 'unavailable'].includes(error.code)) forgetCache(ctx);
-      if (error instanceof AuthenticationError && error.code === 'reauthorize') app.authentication.invalidateAuthorizationIfCurrent(ctx.user.id, ctx.token);
-      app.authentication.assertUserContext(request, ctx.user);
       if (error instanceof AuthenticationError && error.code === 'sso_required') {
         // Context reads use /graphql, so recover the owner from this user's reference.
         throw new AuthenticationError(error.statusCode, error.code, error.message, owner(row['owner']));
