@@ -274,6 +274,7 @@ test('a retained repository connector session loss invalidates accepted hydratio
     await expect(page.getByRole('button', { name: 'Incoming 2', exact: true })).toBeVisible();
     await page.getByRole('button', { name: /^Incoming/ }).click();
     await expect(page.locator('.incoming-panel')).toContainText('Check your account');
+    await expect(page.getByRole('heading', { name: 'Incoming 2', exact: true })).toBeFocused();
     await expect(page.locator('.repository-connector')).toHaveCount(0);
     await expect.poll(() => checks.length).toBeGreaterThan(0);
     holdSession = false;

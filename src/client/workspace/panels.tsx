@@ -36,18 +36,19 @@ interface PanelFocus {
   trigger: RefObject<HTMLButtonElement | null>;
   initialFocus?: RefObject<HTMLElement | null>;
   focusWhenTriggerHidden?: boolean;
-  focusReady?: boolean;
+  /** Refocus when conditional content or account checking changes while open. */
+  contentReady?: boolean;
 }
 
 /** Callers name their focus targets; transitions and mobile focus return stay here. */
-export function useWorkspacePanel(name: Panel, { trigger, initialFocus, focusWhenTriggerHidden = false, focusReady = true }: PanelFocus) {
+export function useWorkspacePanel(name: Panel, { trigger, initialFocus, focusWhenTriggerHidden = false, contentReady = true }: PanelFocus) {
   const { active, open: openPanel, close: closePanel, toggle: togglePanel, menuTrigger } = useWorkspacePanels();
   const isOpen = active === name;
   useEffect(() => {
-    if (isOpen && focusReady && (!focusWhenTriggerHidden || trigger.current?.getClientRects().length === 0)) {
+    if (isOpen && (!focusWhenTriggerHidden || trigger.current?.getClientRects().length === 0)) {
       initialFocus?.current?.focus({ preventScroll: true });
     }
-  }, [isOpen, initialFocus, trigger, focusWhenTriggerHidden, focusReady]);
+  }, [isOpen, initialFocus, trigger, focusWhenTriggerHidden, contentReady]);
   const open = useCallback(() => openPanel(name), [openPanel, name]);
   const close = useCallback(() => closePanel(name), [closePanel, name]);
   const toggle = useCallback(() => togglePanel(name), [togglePanel, name]);

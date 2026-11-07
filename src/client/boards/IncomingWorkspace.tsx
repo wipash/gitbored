@@ -166,8 +166,8 @@ function IncomingTray({ model, sourceHost }: { model: WorkspaceModel; sourceHost
   const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const repositorySearch = useRef<HTMLInputElement>(null);
-  const incomingPanel = useWorkspacePanel('incoming', { trigger, initialFocus: heading, focusReady: model.authority.ready });
-  const repositories = useWorkspacePanel('repositories', { trigger: repositoryTrigger, initialFocus: repositorySearch, focusReady: model.readReady });
+  const incomingPanel = useWorkspacePanel('incoming', { trigger, initialFocus: heading, contentReady: model.authority.ready });
+  const repositories = useWorkspacePanel('repositories', { trigger: repositoryTrigger, initialFocus: repositorySearch, contentReady: model.readReady });
   const open = incomingPanel.isOpen;
   const browsing = repositories.isOpen;
   const openRepositories = repositories.open;
