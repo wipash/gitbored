@@ -16,6 +16,7 @@ export class SaveCoordinator {
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private listeners = new Set<() => void>();
+  private flushes = new Set<(saved: boolean) => void>();
   private state: SaveState = { status: 'saved', message: 'Saved' };
   private captureLatest: (() => void) | undefined;
   setCheckpoint(capture: () => void): () => void {
@@ -114,13 +115,21 @@ export class SaveCoordinator {
     if (!this.dirty) return true;
     if (this.state.retryable || this.state.status === 'conflict') return false;
     return await new Promise<boolean>((resolve) => {
+      const finish = (saved: boolean) => { stop(); this.flushes.delete(finish); resolve(saved); };
       const stop = this.subscribe(() => {
         if (!this.dirty || this.state.retryable || this.state.status === 'conflict') {
-          stop(); resolve(!this.dirty);
+          finish(!this.dirty);
         }
       });
+      this.flushes.add(finish);
       void this.save();
     });
   }
-  dispose(): void { this.checkpoint(); this.stopped = true; this.captureLatest = undefined; clearTimeout(this.timer); this.listeners.clear(); }
+  dispose(): void {
+    this.checkpoint(); this.stopped = true; this.captureLatest = undefined; clearTimeout(this.timer);
+    // Ending this editor cancels its pending leave decisions; it does not
+    // acknowledge their captured work or keep navigation waiting forever.
+    for (const finish of this.flushes) finish(false);
+    this.listeners.clear();
+  }
 }

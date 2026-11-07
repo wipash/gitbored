@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 let guard: (() => Promise<boolean>) | undefined;
-let navigating = false;
+let transition = 0;
 let committedPath: string | undefined;
 let committedUrl: string | undefined;
 const listeners = new Set<() => void>();
@@ -11,26 +11,30 @@ function publish() {
   for (const listener of listeners) listener();
 }
 export function setNavigationGuard(value: () => Promise<boolean>): () => void {
+  transition += 1;
   guard = value;
-  return () => { if (guard === value) guard = undefined; };
+  return () => { if (guard === value) { guard = undefined; transition += 1; } };
 }
-export async function navigate(path: string, replace = false): Promise<void> {
-  if (navigating) return;
-  navigating = true;
-  try {
-    if (guard && !await guard()) return;
-    window.history[replace ? 'replaceState' : 'pushState'](null, '', path);
-    publish();
-  } finally { navigating = false; }
-}
-async function pop() {
-  if (guard && !await guard()) {
-    // A failed save keeps the current editor and restores its address. Its recovery
-    // draft and revision remain authoritative; Back never silently discards it.
-    window.history.pushState(null, '', committedUrl ?? '/');
+async function changeLocation(destination?: { path: string; replace: boolean }): Promise<void> {
+  const attempt = ++transition;
+  const owner = guard;
+  const allowed = owner ? await owner() : true;
+  // A later click, browser traversal or board lifetime owns the destination.
+  // A slow save from the previous transition must never publish over it.
+  if (attempt !== transition || owner !== guard) return;
+  if (!allowed) {
+    // Browser traversal changes the address before its save guard completes.
+    // Restore the mounted editor's address if the latest transition is blocked.
+    if (committedUrl && window.location.pathname + window.location.search !== committedUrl) {
+      window.history.pushState(null, '', committedUrl);
+    }
     return;
   }
+  if (destination) window.history[destination.replace ? 'replaceState' : 'pushState'](null, '', destination.path);
   publish();
+}
+export async function navigate(path: string, replace = false): Promise<void> {
+  await changeLocation({ path, replace });
 }
 function subscribe(listener: () => void) {
   if (!listeners.size) {
@@ -41,7 +45,7 @@ function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => { listeners.delete(listener); if (!listeners.size) window.removeEventListener('popstate', onPop); };
 }
-function onPop() { void pop(); }
+function onPop() { void changeLocation(); }
 export function usePathname(): string {
   return useSyncExternalStore(subscribe, () => committedPath ?? window.location.pathname);
 }
