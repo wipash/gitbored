@@ -108,3 +108,79 @@ test('browser Back supersedes an earlier board link while its save is pending an
   await expect(page.getByRole('heading', { name: current.title, exact: true })).toBeFocused();
   await expect(page.locator('.tl-shape')).toHaveCount(1);
 });
+
+test('account replacement cancels a pending Back without leaving the address behind the mounted route', async ({ page, context }) => {
+  await signIn(page);
+  const board = await create(page, 'Alice pending Back');
+  await page.reload();
+  await page.getByRole('link', { name: board.title, exact: true }).click();
+  await draw(page);
+  const original = await page.locator('.tl-container').elementHandle();
+  if (!original) throw new Error('Missing original native canvas');
+  const pending: Route[] = [];
+  await page.route(`**/api/boards/${board.id}`, async (route) => {
+    if (route.request().method() === 'PUT') pending.push(route);
+    else await route.continue();
+  });
+  await page.locator('.tl-container').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => pending.length).toBe(1);
+  await page.goBack();
+  await expect(page).toHaveURL('/boards');
+  await expect(page.getByRole('heading', { name: board.title, exact: true })).toBeVisible();
+
+  const other = await context.newPage();
+  await other.goto('/boards');
+  await openSettings(other);
+  await other.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(other.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
+  // The real board-list read detects the ended session while the save stays held.
+  await page.getByRole('button', { name: 'Boards ▾', exact: true }).click();
+  await openSettings(page);
+  await expect(page.getByRole('button', { name: 'Check account', exact: true })).toBeVisible();
+  await other.getByRole('link', { name: 'Sign in with GitHub' }).click();
+  await other.getByRole('link', { name: 'Authorize Bob', exact: true }).click();
+  const bob = await create(other, 'Bob after canceled Back');
+  await page.getByRole('button', { name: 'Check account', exact: true }).click();
+  await expect(page.locator('.tl-container')).toHaveCount(0);
+  expect(await original.evaluate((element) => element.isConnected)).toBe(false);
+  await expect(page.locator('.board-loading')).toContainText('could not be opened');
+  await expect(page).toHaveURL(`/boards/${board.id}`);
+  await page.getByRole('link', { name: 'Return to Boards', exact: true }).click();
+  await expect(page).toHaveURL('/boards');
+  await expect(page.getByRole('link', { name: bob.title, exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: board.title, exact: true })).toHaveCount(0);
+  await other.close();
+});
+
+test('a failed Back save restores the current address and native draft until explicit retry', async ({ page }) => {
+  await signIn(page);
+  const board = await create(page, 'Failed Back retains native draft');
+  await page.reload();
+  await page.getByRole('link', { name: board.title, exact: true }).click();
+  await draw(page);
+  const original = await page.locator('.tl-container').elementHandle();
+  if (!original) throw new Error('Missing original native canvas');
+  const pending: Route[] = [];
+  await page.route(`**/api/boards/${board.id}`, async (route) => {
+    if (route.request().method() === 'PUT') pending.push(route);
+    else await route.continue();
+  });
+  await page.locator('.tl-container').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => pending.length).toBe(1);
+  await page.goBack();
+  await expect(page).toHaveURL('/boards');
+  const save = pending.shift();
+  if (!save) throw new Error('Missing held native save');
+  await save.abort('connectionfailed');
+  await expect(page).toHaveURL(`/boards/${board.id}`);
+  await expect(page.locator('.board-save')).toContainText('saving failed');
+  expect(await original.evaluate((element) => element.isConnected)).toBe(true);
+  await page.unroute(`**/api/boards/${board.id}`);
+  await page.getByRole('button', { name: 'Retry save', exact: true }).click();
+  await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
+  await page.goBack();
+  await expect(page).toHaveURL('/boards');
+  await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeFocused();
+});
