@@ -1,25 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { SessionResponse } from '../shared/session';
 import { isSessionContextFailure } from '../shared/session';
 import { readInstallation, readSourceItem, readRepository, readRepositoryLocator, readSourcePage, type SourceItem, type RepositorySource, type SourcePage, type Installation } from '../shared/sources';
 import type { SourceFilter } from '../shared/incoming';
 import { requestJson, SourceReadError } from './sourceRequest';
 import { Icon } from './Icon';
+export type ConnectorRead = 'catalogue' | 'lookup' | 'item';
 
 const ssoRecoveryMessage = 'GitHub SSO is required. Open the SSO recovery notice, complete its steps, then Check access.';
 
 interface Props {
+  searchRef?: RefObject<HTMLInputElement | null>;
   session: Extract<SessionResponse, { status: 'signed-in' }>;
   onConnect: (repository: RepositorySource, filter: SourceFilter) => void;
   onAccessLoss: (scope?: string, ssoRequired?: boolean) => void;
-  onSsoRequired?: (owner?: string, key?: string) => void;
-  onSsoRecovered?: (key?: string) => void;
+  onSsoRequired?: (owner?: string, key?: ConnectorRead) => void;
+  onSsoRecovered?: (key?: ConnectorRead) => void;
   retryAttempt?: number;
   onAddItem: (item: SourceItem) => void;
   connected: readonly { repositoryNodeId: string; owner: string; repository: string }[];
 }
 /** A mounted, account-owned catalogue; opening the menu never starts from scratch. */
-export function RepositoryConnector({ session, onConnect, onAccessLoss, onSsoRequired, onSsoRecovered, retryAttempt = 0, onAddItem, connected }: Props) {
+export function RepositoryConnector({ searchRef, session, onConnect, onAccessLoss, onSsoRequired, onSsoRecovered, retryAttempt = 0, onAddItem, connected }: Props) {
   const [repos, setRepos] = useState<RepositorySource[]>([]);
   const [recent, setRecent] = useState<{ owner: string; name: string }[]>([]);
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('source') ?? '');
@@ -140,7 +142,7 @@ export function RepositoryConnector({ session, onConnect, onAccessLoss, onSsoReq
     return (rank(a) < 0 ? 99 : rank(a)) - (rank(b) < 0 ? 99 : rank(b));
   });
   return <div className="repository-connector">
-    <input type="search" aria-label="Search repositories" placeholder="Search repositories or paste a URL…" value={query} onChange={(event) => { setQuery(event.currentTarget.value); setError(''); setSelected(null); setItem(null); }} />
+    <input ref={searchRef} type="search" aria-label="Search repositories" placeholder="Search repositories or paste a URL…" value={query} onChange={(event) => { setQuery(event.currentTarget.value); setError(''); setSelected(null); setItem(null); }} />
     {error && <div role="alert"><p>{error}</p><button type="button" onClick={() => setAttempt(attempt + 1)}>Retry</button></div>}
     {item && <section className="repository-preview"><h3>{item.metadata.title}</h3><p>{item.metadata.kind} #{item.metadata.locator.number} · {item.metadata.state}</p><button type="button" onClick={() => onAddItem(item)}>Add to Incoming</button></section>}
     {selected ? <section className="repository-preview"><button type="button" onClick={() => setSelected(null)}>← Repositories</button><h3>{selected.owner}/{selected.name}</h3>

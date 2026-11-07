@@ -110,8 +110,11 @@ for (const viewport of [{ width: 1440, height: 1000, text: '100%' }, { width: 32
         await page.getByRole('button', { name: close, exact: true }).focus();
         await page.keyboard.press('Escape');
         await expect(page.getByRole('button', { name: close, exact: true })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: viewport.width <= 900 ? /^Menu$/ : new RegExp(`^${trigger}`) })).toBeFocused();
       }
+      if (viewport.width <= 900) await openWorkspaceMenu(page);
       await page.getByRole('button', { name: 'Boards ▾', exact: true }).click();
+      if (viewport.width <= 900) await expect(page.getByRole('button', { name: 'Menu', exact: true })).toHaveAttribute('aria-expanded', 'false');
       await reachable(page.locator('.board-switcher').getByLabel('Board name', { exact: true }));
       const create = page.locator('.board-switcher').getByRole('button', { name: 'Create board', exact: true });
       await create.hover();

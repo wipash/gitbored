@@ -835,3 +835,13 @@ browser-safe first-party code; it does not audit third-party package internals.
 
 Interface implementers must use `better-interface`. Keep independent review
 focused on requested behavior and concrete regressions.
+
+Board coordination has explicit owners. `useBoardMetadata` owns fetched metadata,
+authorization visibility and SSO recovery; `useIncomingDiscovery` owns repository
+discovery and accepts queue/cursor changes through the native board owner.
+`IncomingWorkspace` keeps placement, native history and atomic document/Incoming
+checkpoints together. `workspace/panels.tsx` owns panel exclusivity and focus;
+opening a panel also closes the mobile tools menu. `navigation.ts` owns guarded
+link and browser-history transitions, while `SaveCoordinator` settles save-drain
+waits when its board lifetime ends. Server REST and GraphQL reads share the
+authorization checks in `sources.ts`.

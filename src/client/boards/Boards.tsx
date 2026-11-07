@@ -1,7 +1,6 @@
 import { Icon } from '../Icon';
-import { readCachedBoardMetadata } from '../../shared/cachedMetadata';
-import { BoardMetadataContext, type BoardMetadataBootstrap } from './cachedBoardMetadata';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { BoardMetadataContext, loadCachedBoardMetadata, type BoardMetadataBootstrap } from './cachedBoardMetadata';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { T } from '@tldraw/validate';
 import { boardSummaryValidator, validateBoard, type Board, type BoardSummary } from '../../shared/boards';
 import type { SessionResponse } from '../../shared/session';
@@ -10,7 +9,7 @@ import { requestBoard, type BoardAuthority } from './boardRequest';
 import { IncomingWorkspace } from './IncomingWorkspace';
 import { readRecovery, readRecoveryCopy, recoveryStorageChanged, rememberRecoveryCopy, RecoveryStore, type RecoveryCopyReceipt, type StoredRecovery } from './recovery';
 import './boards.css';
-import { BoardSettingsContext, WorkspacePanelContext, useWorkspacePanel } from '../workspace/panels';
+import { BoardSettingsContext, WorkspacePanelProvider, useWorkspacePanel } from '../workspace/panels';
 import { navigate, setNavigationGuard, usePathname } from '../navigation';
 
 type Session = Extract<SessionResponse, { status: 'signed-in' }>;
@@ -24,7 +23,7 @@ export function Boards({ session, ready, reconcileAccount, theme }: { session: S
   const boardId = /^\/boards\/([^/]+)\/?$/.exec(pathname)?.[1];
   return boardId ? <LoadBoard key={`${authority.session.user.id}:${boardId}`} id={boardId} authority={authority} theme={theme} /> : <BoardList authority={authority} restore={pathname === '/'} />;
 }
-function BoardList({ authority, restore = true, embedded = false, onClose }: { authority: BoardAuthority; restore?: boolean; embedded?: boolean; onClose?: () => void }) {
+function BoardList({ authority, restore = true, embedded = false, onClose, closeRef }: { authority: BoardAuthority; restore?: boolean; embedded?: boolean; onClose?: () => void; closeRef?: RefObject<HTMLButtonElement | null> }) {
   const requestedSource = new URLSearchParams(window.location.search).get('source');
   const sourceQuery = requestedSource ? `?source=${encodeURIComponent(requestedSource.slice(0, 512))}` : '';
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
@@ -83,7 +82,7 @@ function BoardList({ authority, restore = true, embedded = false, onClose }: { a
   </>;
   return <section className="boards-list" aria-labelledby="boards-heading">
     {embedded ? <>
-      <div className="incoming-heading board-switcher-heading"><h2 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h2><button className="board-switcher-close" type="button" aria-label="Close boards" data-native-dismiss onClick={onClose}><Icon name="close" /></button></div>
+      <div className="incoming-heading board-switcher-heading"><h2 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h2><button ref={closeRef} className="board-switcher-close" type="button" aria-label="Close boards" data-native-dismiss onClick={onClose}><Icon name="close" /></button></div>
       <div className="board-switcher-body">{content}</div>
     </> : <><h1 id="boards-heading" tabIndex={-1} ref={heading}>Boards</h1>{content}</>}
   </section>;
@@ -100,16 +99,12 @@ function LoadBoard({ id, authority, theme }: { id: string; authority: BoardAutho
     if (board || !authority.ready) return () => controller.abort();
     const load = async () => {
       try {
-        const [response, cachedResponse] = await Promise.all([
+        const [response, cache] = await Promise.all([
           requestBoard(`/api/boards/${encodeURIComponent(id)}`, authority, 'GET', undefined, controller.signal),
-          authority.session.authorization === 'ready'
-            ? requestBoard(`/api/boards/${encodeURIComponent(id)}/metadata`, authority, 'GET', undefined, controller.signal).catch(() => null)
-            : Promise.resolve(null),
+          loadCachedBoardMetadata(id, authority, controller.signal),
         ]);
         if (!response.ok) throw new Error('Cannot load board');
         const result = validateBoard(await response.json());
-        let cache: ReturnType<typeof readCachedBoardMetadata> = { items: [] };
-        try { if (cachedResponse?.ok) cache = readCachedBoardMetadata(await cachedResponse.json()); } catch { /* Metadata can rebuild without blocking the board. */ }
         if (!controller.signal.aborted) { setBootstrap({ authority, value: cache }); setBoard(result); }
       } catch { if (!controller.signal.aborted) setError('This board could not be opened. Check your connection and Retry opening, or return to Boards. If your session ended, sign in again.'); }
     };
@@ -225,16 +220,16 @@ function BoardEditor({ initialBoard, authority, theme, restored = false, source 
     window.addEventListener('beforeunload', preventLoss);
     return () => { saves.dispose(); controller.abort(); window.removeEventListener('beforeunload', preventLoss); };
   }, [initialBoard, restored, recoveryStore]);
-  return coordinator ? <EditableBoard board={initialBoard} authority={authority} theme={theme} coordinator={coordinator} source={source} /> : <p role="status">Opening canvas…</p>;
+  return coordinator ? <WorkspacePanelProvider><EditableBoard board={initialBoard} authority={authority} theme={theme} coordinator={coordinator} source={source} /></WorkspacePanelProvider> : <p role="status">Opening canvas…</p>;
 }
 function EditableBoard({ board, authority, theme, coordinator, source }: { board: Board; authority: BoardAuthority; theme: 'light' | 'dark'; coordinator: SaveCoordinator; source?: StoredRecovery | undefined }) {
   const [accessNoticeHost, setAccessNoticeHost] = useState<HTMLDivElement | null>(null);
   const save = useSyncExternalStore(coordinator.subscribe, coordinator.getSnapshot);
   const [title, setTitle] = useState(board.title);
-  const panels = useWorkspacePanel();
-  const switcher = panels.active === 'boards';
-  const setSwitcher = (value: boolean) => panels.setActive(value ? 'boards' : null);
   const boardsTrigger = useRef<HTMLButtonElement>(null);
+  const boardsDismiss = useRef<HTMLButtonElement>(null);
+  const boards = useWorkspacePanel('boards', { trigger: boardsTrigger, initialFocus: boardsDismiss });
+  const switcher = boards.isOpen;
   const [name, setName] = useState(board.title);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -318,10 +313,9 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
     if (!coordinator.getSnapshot().retryable && document.activeElement === retryButton.current) saveStatus.current?.focus();
     setRetryInProgress(false);
   }
-  useEffect(() => { if (switcher) document.querySelector<HTMLButtonElement>('.board-switcher-close')?.focus(); }, [switcher]);
-  return <WorkspacePanelContext value={panels}><BoardSettingsContext value={<div className="board-settings"><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></div>}><section className="board-editor" aria-labelledby="board-heading">
-    <div className="board-heading" data-native-ui="board-controls"><h1 id="board-heading" ref={heading} tabIndex={-1} title={title}>{title}</h1><button ref={boardsTrigger} type="button" aria-expanded={switcher} aria-controls={switcher ? 'board-switcher' : undefined} onClick={() => setSwitcher(!switcher)}>Boards ▾</button>
-      {switcher && <div id="board-switcher" className="board-switcher" data-native-ui="board-controls"><BoardList authority={authority} restore={false} embedded onClose={() => { setSwitcher(false); boardsTrigger.current?.focus(); }} /></div>}
+  return <BoardSettingsContext value={<div className="board-settings"><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></div>}><section className="board-editor" aria-labelledby="board-heading">
+    <div className="board-heading" data-native-ui="board-controls"><h1 id="board-heading" ref={heading} tabIndex={-1} title={title}>{title}</h1><button ref={boardsTrigger} type="button" aria-expanded={switcher} aria-controls={switcher ? 'board-switcher' : undefined} onClick={boards.toggle}>Boards ▾</button>
+      {switcher && <div id="board-switcher" className="board-switcher" data-native-ui="board-controls"><BoardList authority={authority} restore={false} embedded closeRef={boardsDismiss} onClose={boards.dismiss} /></div>}
     </div>
     <div className="board-notices" data-native-ui="save"><div className="board-save" data-save-state={save.status} data-save-attention={Boolean(save.retryable || retryInProgress || save.status === 'conflict')}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress || !authority.ready} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{(save.status === 'conflict' || save.retryable) && <div className="board-form-row"><button type="button" aria-disabled={copyBusy || !authority.ready} aria-busy={copyBusy} onClick={() => { void saveCopy(); }}>{copyBusy ? 'Saving copy…' : 'Save as copy'}</button><button className="board-danger" type="button" aria-disabled={copyBusy || !authority.ready} onClick={reloadServer}>Reload server version</button></div>}</div>
     {save.recoveryUnavailable && <p role="alert" className="board-error">Browser recovery storage is unavailable. Keep this tab open until saving succeeds, or save a private copy. Browser recovery is best effort, not a server backup.</p>}
@@ -341,5 +335,5 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
       }
       void remove();
     }}><label htmlFor="delete-board-name">Type the board name to confirm</label><input ref={confirmation} id="delete-board-name" name="confirmation" required autoComplete="off" onChange={(event) => event.currentTarget.setCustomValidity('')} /><div className="board-form-row"><button type="button" aria-disabled={busy} onClick={() => { if (!busy) dialog.current?.close(); }}>Cancel</button><button className="board-danger" type="submit" aria-disabled={busy || !authority.ready}>Delete board permanently</button></div></form></dialog>
-  </section></BoardSettingsContext></WorkspacePanelContext>;
+  </section></BoardSettingsContext>;
 }

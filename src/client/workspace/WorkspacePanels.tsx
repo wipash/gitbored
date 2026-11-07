@@ -7,49 +7,40 @@ import { itemStateLabel, describeItem } from './metadata';
 import { planningRoles, type PlanningSelection } from '../../shared/planning';
 import { ProjectFields } from './planning';
 import { RelatedLinks, relatedTo, type ConnectionMode } from './RelatedLinks';
-import { AccountSettingsContext, BoardSettingsContext, useWorkspacePanel } from './panels';
+import { AccountSettingsContext, BoardSettingsContext, useWorkspacePanel, useWorkspacePanels } from './panels';
 import { useNativeUiKeys } from './useNativeUiKeys';
 import { useCardDetailPosition } from './useCardDetailPosition';
 import { CardColourSettings } from './cardColours';
 import { usePanelClearance } from './usePanelClearance';
 import { useCardDetails } from './cardDetails';
-import { focusPanelTrigger } from './focusPanelTrigger';
 
 export function WorkspacePanels({ children, metadata, planning, onPlanningChange, preferenceKey, hideClosed, onHideClosedChange }: { children?: ReactNode; metadata: WorkspaceMetadata; hideClosed: boolean; onHideClosedChange: (value: boolean) => void; planning?: PlanningSelection | undefined; onPlanningChange?: ((selection: PlanningSelection) => void) | undefined; preferenceKey?: string | undefined }) {
   const editor = useEditor();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const mobileMenuTrigger = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const desktop = window.matchMedia('(min-width: 901px)');
-    const close = () => { if (desktop.matches) setMobileMenuOpen(false); };
-    desktop.addEventListener('change', close);
-    return () => desktop.removeEventListener('change', close);
-  }, []);
+  const { active, open: openPanel, menuTrigger: mobileMenuTrigger } = useWorkspacePanels();
+  const menu = useWorkspacePanel('menu', { trigger: mobileMenuTrigger });
+  const mobileMenuOpen = menu.isOpen;
   useNativeUiKeys();
-  const { active, setActive } = useWorkspacePanel();
   const boardSettings = useContext(BoardSettingsContext);
   const accountSettings = useContext(AccountSettingsContext);
   const registerAccountSettings = accountSettings?.registerWorkspace;
   useLayoutEffect(() => registerAccountSettings?.(), [registerAccountSettings]);
   const accountNeedsAttention = accountSettings?.needsAttention ?? false;
-  useEffect(() => { if (accountNeedsAttention) setActive('settings'); }, [accountNeedsAttention, setActive]);
-  const settingsOpen = active === 'settings';
-  const setSettingsOpen = (value: boolean) => setActive(value ? 'settings' : null);
+  useEffect(() => { if (accountNeedsAttention) openPanel('settings'); }, [accountNeedsAttention, openPanel]);
   const [mode, setMode] = useState<ConnectionMode>(() => {
     try { const value = localStorage.getItem(`gitbored.connections.${preferenceKey}`); return value === 'off' || value === 'all' ? value : 'selected'; } catch { return 'selected'; }
   });
-  const open = active === 'find';
-  const setOpen = (value: boolean) => setActive(value ? 'find' : null);
   const [query, setQuery] = useState('');
   const { detailId, setDetailId } = useCardDetails();
   const viewTrigger = useRef<HTMLButtonElement>(null);
   const settingsPanel = useRef<HTMLElement>(null);
+  const settingsDismiss = useRef<HTMLButtonElement>(null);
+  const settings = useWorkspacePanel('settings', { trigger: viewTrigger, initialFocus: settingsDismiss, focusWhenTriggerHidden: true });
+  const settingsOpen = settings.isOpen;
   usePanelClearance(settingsPanel, settingsOpen);
-  useEffect(() => {
-    if (settingsOpen && viewTrigger.current?.getClientRects().length === 0) settingsPanel.current?.querySelector<HTMLButtonElement>('[data-native-dismiss]')?.focus();
-  }, [settingsOpen]);
   const trigger = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const find = useWorkspacePanel('find', { trigger, initialFocus: search });
+  const open = find.isOpen;
   // Panel content follows membership and card properties; geometry stays in the canvas.
   const cards = useValue(useMemo(() => computed('Board cards', () => editor.getCurrentPageShapes().filter((shape): shape is ItemCardShape => shape.type === ITEM_CARD_TYPE && !editor.isShapeHidden(shape)), {
     isEqual: (a: ItemCardShape[], b: ItemCardShape[]) => a.length === b.length && a.every((shape, index) => shape.id === b[index]?.id && shape.props === b[index]?.props),
@@ -65,7 +56,6 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   const state = selected ? metadata.get(selected.props.referenceId) : undefined;
   const item = state?.status === 'ready' ? state.item : null;
   const url = item ? githubItemUrl(item.kind, item.locator) : null;
-  useEffect(() => { if (open) search.current?.focus(); }, [open]);
   const projects = [...new Map([...metadata.values()].flatMap((value) => value.status === 'ready' ? value.item.context?.projects.map((project) => [project.id, project] as const) ?? [] : [])).values()];
   const project = projects.find((entry) => entry.id === planning?.projectId);
   const related = item ? cards.filter((shape) => {
@@ -75,17 +65,14 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   }) : [];
   return <>
     <RelatedLinks metadata={metadata} mode={mode} />
-    <div className="workspace-tools" data-menu-open={mobileMenuOpen} onClick={(event) => {
-      const button = event.target instanceof Element ? event.target.closest('button') : null;
-      if (button?.matches('.workspace-view > button, .workspace-find > button, .incoming-controls > button')) setMobileMenuOpen(false);
-    }}>
+    <div className="workspace-tools" data-menu-open={mobileMenuOpen}>
       <div className="mobile-menu-control" data-native-ui="mobile-menu" onPointerDown={(event) => event.stopPropagation()}>
-        <button ref={mobileMenuTrigger} className="mobile-workspace-menu" type="button" aria-expanded={mobileMenuOpen} data-mobile-dismiss aria-label="Menu" onClick={() => { setMobileMenuOpen(!mobileMenuOpen); setActive(null); }}><Icon name="menu" /><span>Menu</span></button>
-        {mobileMenuOpen && <div className="mobile-menu-heading"><h2>Board tools</h2><button className="mobile-menu-dismiss" type="button" data-native-dismiss aria-label="Close menu" onClick={() => { setMobileMenuOpen(false); mobileMenuTrigger.current?.focus(); }}><Icon name="close" /></button></div>}
+        <button ref={mobileMenuTrigger} className="mobile-workspace-menu" type="button" aria-expanded={mobileMenuOpen} data-mobile-dismiss aria-label="Menu" onClick={menu.toggle}><Icon name="menu" /><span>Menu</span></button>
+        {mobileMenuOpen && <div className="mobile-menu-heading"><h2>Board tools</h2><button className="mobile-menu-dismiss" type="button" data-native-dismiss aria-label="Close menu" onClick={menu.dismiss}><Icon name="close" /></button></div>}
       </div>
       <div className="workspace-view" data-native-ui="settings" onPointerDown={(event) => event.stopPropagation()}>
-      <button ref={viewTrigger} type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}><Icon name="settings" /> Settings</button>
-      {settingsOpen && <section ref={settingsPanel} className="workspace-floating-panel workspace-settings-panel" aria-label="Settings"><div className="incoming-heading"><h2>Settings</h2><button type="button" data-native-dismiss aria-label="Close Settings" onClick={() => { setSettingsOpen(false); focusPanelTrigger(viewTrigger.current); }}><Icon name="close" /></button></div><div className="workspace-panel-body view-settings">
+      <button ref={viewTrigger} type="button" aria-expanded={settingsOpen} onClick={settings.toggle}><Icon name="settings" /> Settings</button>
+      {settingsOpen && <section ref={settingsPanel} className="workspace-floating-panel workspace-settings-panel" aria-label="Settings"><div className="incoming-heading"><h2>Settings</h2><button ref={settingsDismiss} type="button" data-native-dismiss aria-label="Close Settings" onClick={settings.dismiss}><Icon name="close" /></button></div><div className="workspace-panel-body view-settings">
         {accountSettings?.workspaceMounted && <fieldset className="settings-group"><legend>Account & appearance</legend>{accountSettings.content}</fieldset>}
         {boardSettings && <fieldset className="settings-group"><legend>Board</legend>{boardSettings}</fieldset>}
         <fieldset className="settings-group"><legend>View</legend>
@@ -105,9 +92,9 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
       </div></section>}
     </div>
     <div className="workspace-find" data-native-ui="cards" onPointerDown={(event) => event.stopPropagation()}>
-      <button ref={trigger} type="button" aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="search" /> Find <span>{cards.length}</span></button>
+      <button ref={trigger} type="button" aria-expanded={open} onClick={find.toggle}><Icon name="search" /> Find <span>{cards.length}</span></button>
       {open && <section className="workspace-floating-panel" aria-label="Find cards">
-        <div className="incoming-heading"><h2>Find cards</h2><button data-native-dismiss type="button" aria-label="Close Find" onClick={() => { setOpen(false); focusPanelTrigger(trigger.current); }}><Icon name="close" /></button></div>
+        <div className="incoming-heading"><h2>Find cards</h2><button data-native-dismiss type="button" aria-label="Close Find" onClick={find.dismiss}><Icon name="close" /></button></div>
         <div className="workspace-panel-body"><input ref={search} type="search" aria-label="Find cards" placeholder="Title, number, repository…" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
         <ul className="workspace-find-results">{matchingCards.map((shape) => {
           const value = metadata.get(shape.props.referenceId);
@@ -115,7 +102,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
             editor.complete(); editor.setCurrentTool('select'); editor.select(shape.id);
             const bounds = editor.getShapePageBounds(shape.id);
             if (bounds) editor.centerOnPoint(bounds.center, { animation: { duration: 0 } });
-            setDetailId(null); setOpen(false);
+            setDetailId(null); find.close();
             editor.getContainer().focus({ preventScroll: true }); editor.focus();
           }}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} /><span>{value?.status === 'ready' ? <><small>{value.item.locator.repository} #{value.item.locator.number} · {itemStateLabel(value.item)}</small><span className="find-result-title">{value.item.title}</span></> : 'Unavailable card'}</span></button></li>;
         })}</ul>{!cards.length ? <p className="panel-empty">No cards on this board. Connect a repository, then add cards from Incoming.</p> : !matchingCards.length && <div className="panel-empty"><p>No cards match “{query}”.</p><button type="button" onClick={() => { setQuery(''); search.current?.focus(); }}>Clear search</button></div>}</div>
