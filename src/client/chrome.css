@@ -13,6 +13,7 @@
   box-shadow: var(--chrome-shadow);
 }
 .desktop-app .workspace-tools[data-menu-open='false'] { box-shadow: var(--chrome-shadow); }
+.desktop-app .workspace-tools { flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 6px; max-width: calc(100vw - min(40vw, 420px) - 36px); }
 .desktop-app .board-heading { align-items: center; padding: 4px 4px 4px 12px; min-height: 44px; }
 .desktop-app .board-heading > button { border-color: transparent; }
 .desktop-app :is(.workspace-tools, .standalone-settings) > button,
@@ -50,8 +51,6 @@
 .desktop-app .settings-group :is(select, input) { min-width: 0; max-width: 100%; }
 .desktop-app .settings-group input[type='checkbox'] { justify-self: end; width: 20px; height: 20px; min-height: 20px; accent-color: var(--color-accent-fill); }
 .desktop-app .settings-group > p, .desktop-app .colour-help { color: var(--color-text-secondary); font-size: .75rem; }
-.desktop-app .card-colour-settings details { margin-block-start: 12px; padding: 8px 10px; background: var(--color-bg-subtle); border-radius: var(--chrome-radius-control); }
-.desktop-app .card-colour-settings summary { display: list-item; min-height: 28px; line-height: 1.5; padding-block: 4px; }
 .desktop-app .board-settings { display: grid; gap: 12px; }
 .desktop-app .board-settings label { text-transform: none; }
 .desktop-app .board-settings form > p:empty { display: none; }
@@ -148,6 +147,7 @@
   .desktop-app .board-notices { top: calc(max(8px, env(safe-area-inset-top)) + 48px); }
   .desktop-app .workspace-tools {
     grid-template-columns: minmax(0, 1fr); width: min(288px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
     max-height: calc(100dvh - 180px); overflow-y: auto; overscroll-behavior: contain;
   }
   .desktop-app .workspace-tools[data-menu-open='false'] { box-shadow: none; overflow: visible; }
@@ -162,7 +162,11 @@
   .desktop-app .incoming-heading button { min-height: 44px; min-width: 44px; }
   .desktop-app .settings-group > label, .desktop-app .view-settings .card-colour-settings > label { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .desktop-app .settings-group > label:has(input[type='checkbox']) { grid-template-columns: minmax(0, 1fr) auto; }
-  .desktop-app .card-colour-settings summary { min-height: 44px; padding-block: 10px; }
+  .desktop-app .card-colour-control { grid-column: 1 / -1; }
+  .desktop-app .workspace-tools[data-menu-open='false'] .card-colour-control { display: none; }
+  .desktop-app .card-colour-modes { display: block; }
+  .desktop-app .card-colour-modes legend { float: none; padding: 8px; }
+  .desktop-app .card-colour-segments span { min-block-size: 44px; display: grid; place-items: center; padding-inline: 5px; }
 }
 @media (hover: hover) {
   .desktop-app button.board-primary:not(:disabled):not([aria-disabled='true']):hover {

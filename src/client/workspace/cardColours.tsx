@@ -11,6 +11,11 @@ type Category = 'status' | 'priority' | 'label' | 'type';
 interface ColourPreferences { mode: ColourMode; overrides: Record<string, string> }
 interface ColourContextValue { preferences: ColourPreferences; update: (preferences: ColourPreferences) => void; persistent: boolean }
 const emptyPreferences: ColourPreferences = { mode: 'off', overrides: {} };
+interface ColourModeOption { value: ColourMode; label: string }
+const colourModes: ColourModeOption[] = [
+  { value: 'off', label: 'Off' }, { value: 'status', label: 'Status' },
+  { value: 'priority', label: 'Priority' }, { value: 'labels', label: 'Labels' }, { value: 'type', label: 'Type' },
+];
 const ColourContext = createContext<ColourContextValue>({ preferences: emptyPreferences, update: () => {}, persistent: true });
 const palette = ['#437ed1', '#9561c9', '#168879', '#cd731b', '#bd4f7c', '#597d32'];
 const nativeColours: Record<TLDefaultColorStyle, string> = { black: 'var(--color-border-subtle)', grey: '#87929e', 'light-violet': '#b69ddd', violet: '#9561c9', blue: '#437ed1', 'light-blue': '#68b8db', yellow: '#d4ad21', orange: '#cd731b', green: '#168879', 'light-green': '#8baf53', 'light-red': '#df91a7', red: '#cd5860', white: '#ffffff' };
@@ -80,27 +85,39 @@ export function useCardColours(item: ItemMetadata | null, manual: TLDefaultColor
   const cardStyle: CardStyle = { '--card-accent': accent, '--card-stripes': stripes };
   return { cardStyle, status, type, label, mode: preferences.mode };
 }
+export function CardColourControl() {
+  const { preferences, update, persistent } = useContext(ColourContext);
+  return <div className="card-colour-control" data-native-ui="card-colours" onPointerDown={(event) => event.stopPropagation()}>
+    <fieldset className="card-colour-modes">
+      <legend>Colour by</legend>
+      <div className="card-colour-segments">{colourModes.map(({ value, label }) => <label key={value}>
+        <input type="radio" name="card-colour-mode" value={value} checked={preferences.mode === value} onChange={() => update({ ...preferences, mode: value })} />
+        <span>{label}</span>
+      </label>)}</div>
+    </fieldset>
+    <div role="status">{!persistent && <p className="colour-help">Colours apply for this visit. Allow browser storage to keep these settings.</p>}</div>
+  </div>;
+}
 export function CardColourSettings() {
+  const { preferences } = useContext(ColourContext);
+  // Reset the editor category when the active view changes, including while Settings is open.
+  return <CategoryColourSettings key={preferences.mode} />;
+}
+function CategoryColourSettings() {
   const { preferences, update, persistent } = useContext(ColourContext);
   const metadata = useContext(MetadataContext);
   const planning = useContext(PlanningContext);
-  const [category, setCategory] = useState<Category>('status');
+  const [category, setCategory] = useState<Category>(preferences.mode === 'off' ? 'status' : preferences.mode === 'labels' ? 'label' : preferences.mode);
   const items = [...metadata.values()].flatMap((state) => state.status === 'ready' ? [state.item] : []);
   const values = [...new Set([
     ...(category === 'status' ? ['Open', 'Closed', 'Draft', 'Merged'] : category === 'type' ? ['Issue', 'Pull request', 'Feature', 'Bug'] : []),
     ...items.flatMap((item) => category === 'label' ? [...item.labels] : [categoryValues(item, planning)[category]]),
   ])].sort((a, b) => a.localeCompare(b));
   return <fieldset className="card-colour-settings"><legend>Card colours</legend>
-    <label>Colour by<select aria-label="Colour cards by" value={preferences.mode} onChange={(event) => { if (isMode(event.currentTarget.value)) update({ ...preferences, mode: event.currentTarget.value }); }}>
-      <option value="off">Off — original colours</option><option value="status">Status</option><option value="priority">Priority</option><option value="labels">Labels</option><option value="type">Type</option>
-    </select></label>
-    <p className="colour-help">Select a card to set its original colour with the drawing controls. Label colours split the top edge. Status and priority use the selected project fields.</p>
-    <details><summary>Edit category colours</summary>
-      <label>Category<select aria-label="Colour category" value={category} onChange={(event) => { const value = event.currentTarget.value; if (value === 'status' || value === 'priority' || value === 'type' || value === 'label') setCategory(value); }}><option value="status">Status</option><option value="priority">Priority</option><option value="label">Labels</option><option value="type">Type</option></select></label>
-      <div className="category-colour-list">{values.map((value) => <label key={value}><span>{value}</span><input type="color" aria-label={`${value} colour`} value={colourFor(preferences, category, value)} onChange={(event) => update({ ...preferences, overrides: { ...preferences.overrides, [`${category}:${value.toLowerCase()}`]: event.currentTarget.value } })} /></label>)}</div>
-      {!values.length && <p>No values on these cards yet.</p>}
-      <button type="button" onClick={() => update({ ...preferences, overrides: {} })}>Reset category colours</button>
-    </details>
+    <label>Category<select aria-label="Colour category" value={category} onChange={(event) => { const value = event.currentTarget.value; if (value === 'status' || value === 'priority' || value === 'type' || value === 'label') setCategory(value); }}><option value="status">Status</option><option value="priority">Priority</option><option value="label">Labels</option><option value="type">Type</option></select></label>
+    <div className="category-colour-list">{values.map((value) => <label key={value}><span>{value}</span><input type="color" aria-label={`${value} colour`} value={colourFor(preferences, category, value)} onChange={(event) => update({ ...preferences, overrides: { ...preferences.overrides, [`${category}:${value.toLowerCase()}`]: event.currentTarget.value } })} /></label>)}</div>
+    {!values.length && <p>No values on these cards yet.</p>}
+    <button type="button" onClick={() => update({ ...preferences, overrides: {} })}>Reset category colours</button>
     {!persistent && <p role="status">Colours apply for this visit. Allow browser storage to keep these settings.</p>}
   </fieldset>;
 }
