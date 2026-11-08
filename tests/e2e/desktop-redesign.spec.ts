@@ -85,8 +85,11 @@ test('project mappings preserve zero and remain outside canvas history; related 
   expect(JSON.stringify(mapped.document)).not.toMatch(/Delivery|Sprint 12|In progress/);
   await page.getByRole('button', { name: 'Close Settings', exact: true }).click();
   await page.getByRole('button', { name: /^Find/ }).click();
-  await page.locator('.workspace-find-results button').first().click();
-  await resizeCard(page, page.locator('.workspace-card').first(), 140, 100);
+  // Canvas DOM order can differ from Find order after cards are hidden/shown.
+  // Resize the same card that Find centres so its handle is inside the viewport.
+  await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).click();
+  const issue = page.locator('.workspace-card').filter({ has: page.locator('.workspace-card-heading', { hasText: 'Issue #1' }) });
+  await resizeCard(page, issue, 140, 100);
   await expect.poll(async () => Object.values((await board(page, id)).document.snapshot.store).filter((record) => record.typeName === 'shape' && record.type === 'item-card' && record.props.w === 420 && record.props.h === 300).length).toBe(1);
   const resized = await board(page, id);
   expect(Object.values(resized.document.snapshot.store).filter((record) => record.typeName === 'shape' && record.type === 'item-card' && record.props.w === 420 && record.props.h === 300)).toHaveLength(1);
