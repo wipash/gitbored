@@ -350,8 +350,9 @@ in one batch before mounting the canvas. Entries stay fresh for 15 minutes; olde
 card content remains visible while background requests update it, with only a small
 corner spinner. Temporary failures retain the cached content marked stale. Browser
 reloads and server restarts reuse the cache; **Refresh** bypasses freshness without
-blanking cards. Entries are tied to the current credential, and detected access loss
-evicts them and clears affected content. Permission changes may take up to 15 minutes
+blanking cards. Entries belong to the GitHub user and remain available after token
+renewal or another sign-in to the same account. Detected access loss evicts them,
+prevents earlier requests from restoring them, and clears affected content. Permission changes may take up to 15 minutes
 to appear without Refresh. Proxy/browser HTTP
 responses remain `no-store`; private metadata never enters the canvas document.
 

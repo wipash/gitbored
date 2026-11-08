@@ -12,6 +12,7 @@ import { registerSources } from './sources.js';
 import { registerBoards } from './boards.js';
 import { RepositoryAccessError } from './sourceProvider.js';
 import { requestErrorDetails } from './requestDiagnostics.js';
+import { createGitHubCacheInvalidation } from './cacheInvalidation.js';
 
 function isClientNavigation(request: FastifyRequest): boolean {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -71,8 +72,9 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
     .type('application/javascript; charset=utf-8')
     .send(`window.gitboredConfig = ${JSON.stringify({ tldrawKey: config.tldrawKey })};`));
 
-  app.decorate('authentication', registerAuthentication(app, database, config.auth));
-  registerSources(app, database, config.auth);
+  const cacheInvalidation = createGitHubCacheInvalidation(database);
+  app.decorate('authentication', registerAuthentication(app, database, config.auth, cacheInvalidation));
+  registerSources(app, database, config.auth, cacheInvalidation);
   registerBoards(app, database);
 
   app.setNotFoundHandler((request, reply) => {
