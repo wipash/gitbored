@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { startControlledGitHub } from './controlled-github.js';
 
 const directory = await mkdtemp(join(tmpdir(), 'gitbored-e2e-'));
@@ -58,6 +59,15 @@ async function stopApplication(): Promise<void> {
 }
 
 const provider = await startControlledGitHub(providerPort, (app) => {
+  // Scenarios reuse the fixture identities. Reset their cache explicitly now that
+  // a new sign-in correctly retains it. This hook exists only in the test runner.
+  app.addHook('preHandler', async (request) => {
+    if (request.method !== 'POST' || request.routeOptions.url !== '/__control'
+      || typeof request.body !== 'object' || request.body === null || !('reset' in request.body)) return;
+    const database = new DatabaseSync(join(directory, 'gitbored.sqlite'));
+    try { database.exec('DELETE FROM github_cache'); }
+    finally { database.close(); }
+  });
   // Test-process lifecycle only: no application route, database mutation or authentication bypass.
   app.post('/__runner/restart', async (request, reply) => {
     const body = request.body;

@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { SessionResponse, SessionUser } from '../shared/session.js';
 import { isSessionUser } from '../shared/session.js';
 import type { AuthConfig } from './config.js';
+import type { GitHubCacheInvalidation } from './cacheInvalidation.js';
 
 export class AuthenticationError extends Error {
   constructor(public readonly statusCode: number, public readonly code: string, message: string, public readonly ssoOrganization?: string) {
@@ -112,7 +113,7 @@ function providerIdentity(value: unknown): ProviderIdentity {
   return { githubId: String(value['id']), login: value['login'], name: value['name'] };
 }
 
-export function registerAuthentication(app: FastifyInstance, database: DatabaseSync, config: AuthConfig | null): Authentication {
+export function registerAuthentication(app: FastifyInstance, database: DatabaseSync, config: AuthConfig | null, cacheInvalidation: GitHubCacheInvalidation): Authentication {
   const sessionCookie = config?.secure ? '__Host-gitbored-session' : 'gitbored-session';
   const stateCookie = config?.secure ? '__Host-gitbored-oauth' : 'gitbored-oauth';
   const refreshes = new Map<string, Promise<string>>();
@@ -179,7 +180,7 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
   }
 
   function invalidateAuthorization(userId: string): void {
-    database.prepare('DELETE FROM github_cache WHERE user_id = ?').run(userId);
+    cacheInvalidation.forget(userId);
     database.prepare(`UPDATE users SET reauthorize = 1, access_token = NULL, refresh_token = NULL,
       access_expires = NULL, refresh_expires = NULL WHERE id = ?`).run(userId);
   }

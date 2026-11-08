@@ -37,8 +37,13 @@ async function cachedBoard(page: Page) {
   return { board, items };
 }
 
-test('cached cards load together and remain readable through refresh and transient failure', async ({ page }, testInfo) => {
+test('cached cards survive a new sign-in, load together and remain readable through refresh and transient failure', async ({ page }, testInfo) => {
   const { board, items } = await cachedBoard(page);
+  await page.goto('/api/auth/github');
+  await page.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
+  await expect(page.locator('.desktop-app')).toBeVisible();
+  await page.goto('/boards');
+  expect((await page.request.post(`${providerOrigin}/__source-stats/reset`)).ok()).toBe(true);
   const browserReads: string[] = [];
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
@@ -66,6 +71,12 @@ test('cached cards load together and remain readable through refresh and transie
   expect(browserReads).toEqual([`/api/boards/${board.id}/metadata`]);
   const editor = await page.locator('.tl-container').elementHandle();
   if (!editor) throw new Error('Missing native editor');
+  // Repository discovery may run independently; cached card content needs no item or context reads.
+  const providerStats = await page.request.get(`${providerOrigin}/__source-stats`);
+  expect(providerStats.ok()).toBe(true);
+  const providerReads = await providerStats.text();
+  expect(providerReads).not.toContain('/repos/');
+  expect(providerReads).not.toContain('/graphql');
   expect((await page.request.post(`${providerOrigin}/__source-gate`, { data: { action: 'arm', target: 'issue-detail' } })).ok()).toBe(true);
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect.poll(async () => {
