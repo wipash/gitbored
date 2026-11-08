@@ -105,7 +105,19 @@
 /* SDK corner backplates assume its own canvas colour. Float only the controls. */
 .desktop-app .workspace-navigation { position: absolute; left: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: end; gap: 12px; }
 .desktop-app .tlui-menu-zone { border: 0; background: transparent; }
-.desktop-app .tlui-menu-zone .tlui-toolbar { margin: 0; padding: 4px; background: var(--tl-color-panel); }
+.desktop-app .tlui-menu-zone > .tlui-row { padding: 0; }
+.desktop-app .workspace-navigation > .tlui-menu-zone:has(> .tlui-row:empty) { display: none; }
+.desktop-app .tlui-menu-zone .tlui-toolbar,
+.desktop-app .tlui-main-toolbar--horizontal .tlui-main-toolbar__extras__controls {
+  margin: 0; padding: 0 2px; background: var(--tl-color-panel);
+}
+/* tldraw moves actions above the drawing tools on narrow canvases. */
+.desktop-app .tlui-main-toolbar--horizontal .tlui-main-toolbar__extras:has(.tlui-main-toolbar__extras__controls) {
+  height: auto; top: 0; margin-bottom: 12px;
+}
+.desktop-app .tlui-menu-zone .tlui-button,
+.desktop-app .tlui-main-toolbar__extras__controls .tlui-button { height: 48px; width: 48px; }
+.desktop-app .tlui-layout__mobile .tlui-main-toolbar__extras__controls .tlui-button { width: 43px; }
 .desktop-app .tlui-navigation-panel { position: static; padding: 4px; background: var(--tl-color-panel); }
 .desktop-app .tlui-navigation-panel > .tlui-toolbar { border: 0; border-radius: 0; box-shadow: none; }
 .desktop-app .tlui-navigation-panel::before { display: none; }
@@ -115,10 +127,10 @@
 .desktop-app .tlui-menu-zone .tlui-button,
 .desktop-app .tlui-navigation-panel .tlui-button { min-height: 40px; }
 @media (max-width: 1100px) {
-  .desktop-app .workspace-navigation { bottom: calc(72px + env(safe-area-inset-bottom)); align-items: start; flex-direction: column; }
+  .desktop-app .workspace-navigation { bottom: calc(74px + env(safe-area-inset-bottom)); align-items: start; flex-direction: column; }
 }
 @media (max-width: 1300px) {
-  .desktop-app .workspace-navigation:has(.tlui-minimap) { bottom: calc(72px + env(safe-area-inset-bottom)); align-items: start; flex-direction: column; }
+  .desktop-app .workspace-navigation:has(.tlui-minimap) { bottom: calc(74px + env(safe-area-inset-bottom)); align-items: start; flex-direction: column; }
 }
 .desktop-app .tlui-button { padding: 0 12px; border: 0; background: transparent; }
 .desktop-app .tlui-button__tool { padding: 0; }

@@ -213,6 +213,55 @@ test('canvas controls share floating surfaces without opaque corner backplates',
   }
 });
 
+test('narrow action controls match the drawing toolbar with clear separation', async ({ page }, testInfo) => {
+  const { board } = await seedCards(page);
+  await page.goto(`/boards/${board.id}`);
+  for (const theme of ['light', 'dark']) {
+    await selectTheme(page, theme);
+    for (const width of [640, 390, 320]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const actions = page.getByRole('toolbar', { name: 'Actions', exact: true });
+      const tools = page.getByRole('toolbar', { name: 'Tools', exact: true });
+      await expect(actions).toBeVisible();
+      await expect(actions).toHaveClass(/tlui-main-toolbar__extras__controls/);
+      const surface = await tools.evaluate((element) => getComputedStyle(element).backgroundColor);
+      await expect(actions).toHaveCSS('background-color', surface);
+      const actionBounds = await actions.boundingBox();
+      const toolBounds = await tools.boundingBox();
+      if (!actionBounds || !toolBounds) throw new Error('Missing toolbars');
+      expect(actionBounds.height).toBe(toolBounds.height);
+      expect(actionBounds.x).toBe(toolBounds.x);
+      expect(toolBounds.y - actionBounds.y - actionBounds.height).toBe(12);
+      const navigation = page.locator('.tlui-navigation-panel');
+      if (await navigation.isVisible()) {
+        const navBounds = await navigation.boundingBox();
+        if (!navBounds) throw new Error('Missing navigation bounds');
+        expect(navBounds.y + navBounds.height).toBe(actionBounds.y + actionBounds.height);
+      }
+      const firstAction = await actions.locator('button').first().boundingBox();
+      const firstTool = await tools.locator('button').first().boundingBox();
+      if (!firstAction || !firstTool) throw new Error('Missing toolbar buttons');
+      // Compare icon centres, including each toolbar's outer and button padding.
+      expect(firstAction.x + firstAction.width / 2 - actionBounds.x)
+        .toBe(firstTool.x + firstTool.width / 2 - toolBounds.x);
+      for (const button of await actions.locator('button').all()) {
+        expect(await button.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+          return rect.left >= 0 && rect.right <= innerWidth && (hit === element || element.contains(hit));
+        })).toBe(true);
+      }
+      await page.screenshot({ path: testInfo.outputPath(`canvas-${width}-${theme}.png`) });
+      await actions.getByTestId('actions-menu.button').focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByTestId('actions-menu.content')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('actions-menu.content')).toBeHidden();
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+});
+
 test('opening a board keeps startup focus unobtrusive and keyboard selection shows its focus indicator', async ({ page }, testInfo) => {
   const { board } = await seedCards(page);
   await page.goto(`/boards/${board.id}`);
