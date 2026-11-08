@@ -10,7 +10,7 @@ import { RelatedLinks, relatedTo, type ConnectionMode } from './RelatedLinks';
 import { AccountSettingsContext, BoardSettingsContext, useWorkspacePanel, useWorkspacePanels } from './panels';
 import { useNativeUiKeys } from './useNativeUiKeys';
 import { useCardDetailPosition } from './useCardDetailPosition';
-import { CardColourSettings } from './cardColours';
+import { CardColourControl, CardColourSettings } from './cardColours';
 import { usePanelClearance } from './usePanelClearance';
 import { useCardDetails } from './cardDetails';
 import { CardMarkdown } from './CardMarkdown';
@@ -74,6 +74,7 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
         <button ref={mobileMenuTrigger} className="mobile-workspace-menu" type="button" aria-expanded={mobileMenuOpen} data-mobile-dismiss aria-label="Menu" onClick={menu.toggle}><Icon name="menu" /><span>Menu</span></button>
         {mobileMenuOpen && <div className="mobile-menu-heading"><h2>Board tools</h2><button className="mobile-menu-dismiss" type="button" data-native-dismiss aria-label="Close menu" onClick={menu.dismiss}><Icon name="close" /></button></div>}
       </div>
+      <CardColourControl />
       <div className="workspace-view" data-native-ui="settings" onPointerDown={(event) => event.stopPropagation()}>
       <button ref={viewTrigger} type="button" aria-expanded={settingsOpen} onClick={settings.toggle}><Icon name="settings" /> Settings</button>
       {settingsOpen && <section ref={settingsPanel} className="workspace-floating-panel workspace-settings-panel" aria-label="Settings"><div className="incoming-heading"><h2>Settings</h2><button ref={settingsDismiss} type="button" data-native-dismiss aria-label="Close Settings" onClick={settings.dismiss}><Icon name="close" /></button></div><div className="workspace-panel-body view-settings">
