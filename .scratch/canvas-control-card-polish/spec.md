@@ -16,3 +16,7 @@ React + tldraw and existing semantic CSS tokens. No new dependencies. Applies to
 ## Follow-up: mobile action toolbar
 
 The 320px PR screenshot exposed a missed responsive state: tldraw relocates the action shortcuts from the menu zone to `tlui-main-toolbar__extras__controls`. Match that container to the drawing toolbar too. Both placements use the panel token and native row/button sizing; the mobile rows share a leading edge and icon centre, have equal heights, and have 12px of canvas between them. Preserve native toolbar relocation, keyboard navigation and menu behavior. Replace the PR's mobile evidence with light and dark screenshots of the corrected state.
+
+## Follow-up: selected-card colour panel
+
+Keep the native colour/opacity panel clear of the top application controls. The existing `top: 60px` has no effect on tldraw's static flex container. Measure the visible header/tool controls and reserve a 12px gap below them; update clearance on control resizing and viewport changes without React state or editor remounts. Preserve the native phone style popover. Verify every colour swatch is hit-testable, both themes, enlarged text, keyboard colour selection and mobile opacity adjustment, and attach a selected-card screenshot to the PR.

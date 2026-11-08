@@ -66,3 +66,23 @@ Screenshot evidence uses the dedicated narrow-action regression, which measures 
 Final validation of `811e66b`: `pnpm gate` passed on Node 26.8.1 / pnpm 12.16.1, including lint, type checks, 14 native-document tests, 4 server tests, the production build and **106 browser tests**, with one configuration-specific skip. The browser run also passed native history/interaction continuity and 320px/200% text checks. Log: `/tmp/gitbored-controls-final-gate.log`. `git diff --check` passed.
 
 Follow-up verdict: **Approve** for the inspected toolbar scope. Screenshots and measured surfaces/rectangles agree; no outstanding findings in that scope. The stated unverified accessibility/localization states remain unverified.
+
+## Follow-up: selected-card styles clear the top menu
+
+Scope: the native selected-card colour/opacity panel at 1440, 1000 and 800px in both themes, desktop 200% text, and the native 320px popover with 200% text. Reviewed implementation: `5124c0f` (`fix(canvas): keep selected card styles below workspace controls`).
+
+| Severity | Domain | Location | Before | After | Why |
+| --- | --- | --- | --- | --- | --- |
+| HIGH | Layout / accessibility | `src/client/desktop.css:30` | `top: 60px` did not position the static tldraw flex container, leaving its first colour row behind the application menu. | Native panel clearance follows the measured bottom of visible header controls, with a 12px gap. | Every colour and opacity control remains visible and receives pointer input. |
+
+The clearance hook observes only chrome size and viewport resize, writes a CSS variable, and does not subscribe to document/camera state or update React state. It cleans up observers/listeners on unmount and leaves the native phone popover unchanged.
+
+All six better-interface domains were applied to this flow. Layout and UI polish: inspected actual selected-card screenshots with the full palette below the menu and the right edge aligned on desktop. Accessibility: hit-tested every native button and range input, selected Blue by keyboard, and changed mobile opacity from 100 to 95 with ArrowLeft. Writing, typography and color: native control names, type and theme tokens remain unchanged; inspected both theme renderings and enlarged text. No screen-reader session or RTL/localization run was performed.
+
+The new desktop browser regression failed before implementation because the panel was above the required clearance. Both targeted regressions passed after the fix, covering desktop resizing/enlarged text and the 320px popover. Final production-gate results and screenshot evidence follow below.
+
+While the production gate waited for another worktree's build lock, four additional isolated source-preview checks passed: native held-key/modifier handling, desktop menus, 320px/200% text menus, and save/recovery feedback (`board-keyboard.spec.ts` and `interface-continuity.spec.ts`). Log: `/tmp/gitbored-style-continuity.log`.
+
+Final validation of `5124c0f`: `pnpm gate` passed on Node 26.8.1 / pnpm 12.16.1 with lint, type checks, 14 native-document tests, 4 server tests, the production build and **108 browser tests**; one configuration-specific test was skipped. The gate used `E2E_APP_PORT=3005 E2E_PROVIDER_PORT=3131` to avoid other worktrees' previews and retained the repository's shared build lock. Log: `/tmp/gitbored-style-gate.log`. `git diff --check` passed.
+
+Attached production screenshots: `selected-card-light.png`, `selected-card-dark-large-text.png`, and `selected-card-mobile.png`, all using invented fixtures. Follow-up verdict: **Approve** for selected-card style placement and the tested interactions, with the unverified screen-reader/RTL coverage noted above.
