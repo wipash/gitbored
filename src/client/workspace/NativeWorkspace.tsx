@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ArrowToolbarItem, DefaultToolbar, DrawToolbarItem, EraserToolbarItem, FrameToolbarItem,
+  ArrowToolbarItem, DefaultToolbar, DefaultNavigationPanel, DefaultMenuPanel, DrawToolbarItem, EraserToolbarItem, FrameToolbarItem,
   RectangleToolbarItem, HandToolbarItem, HighlightToolbarItem, NoteToolbarItem, SelectToolbarItem,
   TextToolbarItem, Tldraw, atom, computed, createTLStore, defaultHandleExternalTldrawContent,
   DefaultStylePanel, StylePanelColorPicker, StylePanelFillPicker, StylePanelDashPicker,
@@ -21,6 +21,7 @@ import { PlanningContext } from './planning';
 import { WorkspacePanels } from './WorkspacePanels';
 import { CardColourProvider } from './cardColours';
 import { CardDetailsProvider } from './cardDetails';
+import { useStylePanelClearance } from './useStylePanelClearance';
 
 export interface NativeWorkspaceProps {
   planning?: PlanningSelection | undefined;
@@ -53,6 +54,9 @@ const workspaceUsers: TLUserStore = {
 function WorkspaceToolbar() {
   return <DefaultToolbar><SelectToolbarItem /><HandToolbarItem /><DrawToolbarItem /><EraserToolbarItem /><ArrowToolbarItem /><TextToolbarItem /><NoteToolbarItem /><RectangleToolbarItem /><FrameToolbarItem /><HighlightToolbarItem /></DefaultToolbar>;
 }
+function WorkspaceNavigationPanel() {
+  return <div className="workspace-navigation"><DefaultNavigationPanel /><DefaultMenuPanel /></div>;
+}
 function WorkspaceOpacity() {
   const editor = useEditor();
   const stylePanel = useStylePanelContext();
@@ -67,6 +71,7 @@ function WorkspaceOpacity() {
 }
 function WorkspaceStylePanel(props: TLUiStylePanelProps) {
   const editor = useEditor();
+  useStylePanelClearance(props.isMobile ?? false);
   const visible = useValue('Drawing styles visible', () => editor.getCurrentToolId() !== 'select' || editor.getSelectedShapes().length > 0, [editor]);
   if (!visible) return null;
   return <DefaultStylePanel {...props}><StylePanelColorPicker /><WorkspaceOpacity /><StylePanelFillPicker /><StylePanelDashPicker /><StylePanelSizePicker /><StylePanelFontPicker /><StylePanelTextAlignPicker /><StylePanelLabelAlignPicker /><StylePanelGeoShapePicker /><StylePanelArrowKindPicker /><StylePanelArrowheadPicker /><StylePanelSplinePicker /></DefaultStylePanel>;
@@ -78,7 +83,7 @@ function WorkspaceBackground() {
   const spacing = step * Math.max(1, 2 ** Math.ceil(Math.log2(16 / step)));
   return <div className="tl-background" style={{ backgroundImage: 'radial-gradient(var(--color-border-subtle) .8px, transparent .8px)', backgroundSize: `${spacing}px ${spacing}px`, backgroundPosition: `${camera.x * camera.z}px ${camera.y * camera.z}px` }} />;
 }
-const components: TLComponents = { Background: WorkspaceBackground, Toolbar: WorkspaceToolbar, StylePanel: WorkspaceStylePanel, MainMenu: null, SharePanel: null };
+const components: TLComponents = { Background: WorkspaceBackground, Toolbar: WorkspaceToolbar, NavigationPanel: WorkspaceNavigationPanel, MenuPanel: null, StylePanel: WorkspaceStylePanel, MainMenu: null, SharePanel: null };
 const shapeUtils = [ItemCardShapeUtil];
 const overrides: TLUiOverrides = {
   tools(_editor, tools) {

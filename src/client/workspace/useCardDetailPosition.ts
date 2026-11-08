@@ -11,8 +11,8 @@ export function useCardDetailPosition(detailId: TLShapeId | null) {
   useLayoutEffect(() => {
     const root = editor.getContainer().closest('.desktop-app');
     if (!open || !root) return;
-    const topControls = [...root.querySelectorAll('.board-heading, .workspace-tools, .board-notices')];
-    const bottomControls = [...root.querySelectorAll('.tlui-layout__bottom .tlui-toolbar, .tlui-navigation-panel, .tlui-layout__top__left')];
+    const topControls = [...root.querySelectorAll('.board-heading, .workspace-tools, .board-notices, .tlui-helper-buttons:not(:empty)')];
+    const bottomControls = [...root.querySelectorAll('.tlui-layout__bottom .tlui-toolbar, .tlui-navigation-panel')];
     const measure = () => {
       const viewport = editor.getContainer().getBoundingClientRect();
       const bottom = bottomControls.map((element) => element.getBoundingClientRect()).filter((box) => box.height && box.width);
