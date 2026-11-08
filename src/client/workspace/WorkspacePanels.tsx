@@ -1,4 +1,4 @@
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { computed, useEditor, useValue } from 'tldraw';
 import { githubItemUrl, type WorkspaceMetadata } from '../../shared/items';
 import { ITEM_CARD_TYPE, type ItemCardShape } from '../../shared/nativeDocument';
@@ -13,6 +13,8 @@ import { useCardDetailPosition } from './useCardDetailPosition';
 import { CardColourSettings } from './cardColours';
 import { usePanelClearance } from './usePanelClearance';
 import { useCardDetails } from './cardDetails';
+import { CardMarkdown } from './CardMarkdown';
+import { useCardDetailDismiss } from './useCardDetailDismiss';
 
 export function WorkspacePanels({ children, metadata, planning, onPlanningChange, preferenceKey, hideClosed, onHideClosedChange }: { children?: ReactNode; metadata: WorkspaceMetadata; hideClosed: boolean; onHideClosedChange: (value: boolean) => void; planning?: PlanningSelection | undefined; onPlanningChange?: ((selection: PlanningSelection) => void) | undefined; preferenceKey?: string | undefined }) {
   const editor = useEditor();
@@ -52,6 +54,8 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
   }, { isEqual: (a: ItemCardShape | null, b: ItemCardShape | null) => a?.id === b?.id && a?.props === b?.props }), [editor, detailId]));
   const detailsOpen = !mobileMenuOpen && !!selected && active !== 'settings' && active !== 'boards';
   const { ref: detailRef, position: detailPosition } = useCardDetailPosition(detailsOpen ? selected?.id ?? null : null);
+  const dismissDetails = useCallback(() => setDetailId(null), [setDetailId]);
+  useCardDetailDismiss(detailsOpen, detailRef, dismissDetails);
   useEffect(() => { if (detailsOpen) detailRef.current?.querySelector<HTMLButtonElement>('[data-native-dismiss]')?.focus({ preventScroll: true }); }, [detailsOpen, detailId, detailRef]);
   const state = selected ? metadata.get(selected.props.referenceId) : undefined;
   const item = state?.status === 'ready' ? state.item : null;
@@ -114,9 +118,8 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
       <div className="workspace-panel-body">{item ? <>
         <p className="detail-locator">{item.locator.owner}/{item.locator.repository} #{item.locator.number}</p>
         <h3>{item.title}</h3>
-        <div className="card-detail-body">{item.body?.trim() ? item.body : 'No description provided.'}</div>
+        <div className="card-detail-body">{item.body?.trim() ? <CardMarkdown body={item.body} /> : 'No description provided.'}</div>
         <ProjectFields item={item} />
-        <label className="card-size">Card size<select aria-label="Card size" value={selected.props.w === 280 && selected.props.h === 200 ? 'compact' : selected.props.w === 420 && selected.props.h === 300 ? 'expanded' : 'custom'} onChange={(event) => { const size = event.currentTarget.value; if (size === 'custom') return; editor.markHistoryStoppingPoint('resize-card'); editor.updateShape({ id: selected.id, type: selected.type, props: size === 'compact' ? { w: 280, h: 200 } : { w: 420, h: 300 } }); }}><option value="compact">Compact</option><option value="expanded">Expanded</option><option value="custom" disabled>Custom</option></select></label>
         <dl className="detail-values"><div><dt>State</dt><dd>{itemStateLabel(item)}</dd></div><div><dt>Labels</dt><dd>{item.labels.join(', ') || '—'}</dd></div><div><dt>Assignees</dt><dd>{item.assignees.map((login) => `@${login}`).join(', ') || '—'}</dd></div></dl>
         <h4>Related <span>{related.length}</span></h4>
         <ul className="workspace-find-results">{related.map((shape) => {

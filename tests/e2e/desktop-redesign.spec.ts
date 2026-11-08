@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { validateBoard } from '../../src/shared/boards.js';
+import { resizeCard } from './board-gestures.js';
 import { applicationOrigin, controlProvider, currentSession, providerOrigin, signIn, openSettings, selectTheme, openWorkspaceMenu } from './auth-support.js';
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -85,8 +86,7 @@ test('project mappings preserve zero and remain outside canvas history; related 
   await page.getByRole('button', { name: 'Close Settings', exact: true }).click();
   await page.getByRole('button', { name: /^Find/ }).click();
   await page.locator('.workspace-find-results button').first().click();
-  await page.locator('.workspace-card').first().getByRole('button', { name: 'Card details', exact: true }).click();
-  await page.getByLabel('Card size').selectOption('expanded');
+  await resizeCard(page, page.locator('.workspace-card').first(), 140, 100);
   await expect.poll(async () => Object.values((await board(page, id)).document.snapshot.store).filter((record) => record.typeName === 'shape' && record.type === 'item-card' && record.props.w === 420 && record.props.h === 300).length).toBe(1);
   const resized = await board(page, id);
   expect(Object.values(resized.document.snapshot.store).filter((record) => record.typeName === 'shape' && record.type === 'item-card' && record.props.w === 420 && record.props.h === 300)).toHaveLength(1);

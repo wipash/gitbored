@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { controlProvider, signIn, selectTheme, openWorkspaceMenu } from './auth-support.js';
-import { expectNativePoint } from './board-gestures.js';
+import { expectNativePoint, resizeCard } from './board-gestures.js';
 
 test.use({ viewport: { width: 1440, height: 900 } });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires GitHub fixture.');
@@ -36,7 +36,7 @@ async function openBoardWithCards(page: Page) {
   await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).click();
 }
 
-test('details open explicitly, show escaped body, follow zoom and pan, and return focus', async ({ page }, testInfo) => {
+test('details render markdown safely, follow zoom and pan, and return focus', async ({ page }, testInfo) => {
   await openBoardWithCards(page);
   const firstCard = page.locator('.workspace-card').filter({ hasText: 'Issue #1' });
   const secondCard = page.locator('.workspace-card').filter({ has: page.locator('.workspace-card-heading').filter({ hasText: '#2' }) });
@@ -46,6 +46,16 @@ test('details open explicitly, show escaped body, follow zoom and pan, and retur
   await expect(details).toHaveCount(0);
   await firstCard.getByRole('button', { name: 'Card details', exact: true }).focus();
   await page.keyboard.press('Enter');
+  await expect(details.getByRole('heading', { name: 'Issue description', exact: true })).toBeVisible();
+  await expect(details.getByRole('checkbox')).toHaveCount(2);
+  await expect(details.getByRole('checkbox').first()).not.toBeChecked();
+  await expect(details.getByRole('checkbox').last()).toBeChecked();
+  await expect(details.locator('strong')).toHaveText('Expected result:');
+  await expect(details.locator('code').first()).toHaveText('cached_body');
+  await expect(details.getByRole('table').getByRole('cell', { name: 'Ready' })).toBeVisible();
+  await expect(details.getByRole('link', { name: 'issue guide' })).toHaveAttribute('href', 'https://example.com/guide');
+  await expect(details.getByRole('link', { name: 'Unsafe link' })).toHaveCount(0);
+  await expect(details.locator('.card-detail-body')).toContainText('Unsafe link');
   await expect(details.locator('.card-detail-body')).toContainText('Investigate the board loading behaviour.');
   await expect(details.locator('.card-detail-body')).toContainText('<script>window.fixtureBodyExecuted = true</script>');
   await expect(details.locator('.card-detail-body script, .card-detail-body img')).toHaveCount(0);
@@ -84,8 +94,8 @@ test('details open explicitly, show escaped body, follow zoom and pan, and retur
   await expect(secondCard.getByRole('button', { name: 'Card details', exact: true })).toBeFocused();
   await page.getByRole('button', { name: /^Find/ }).click();
   await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).click();
-  await firstCard.getByRole('button', { name: 'Card details', exact: true }).click();
   await selectTheme(page, 'dark');
+  await firstCard.getByRole('button', { name: 'Card details', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('anchored-details-dark.png') });
   await page.setViewportSize({ width: 320, height: 800 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
@@ -93,10 +103,11 @@ test('details open explicitly, show escaped body, follow zoom and pan, and retur
     const narrow = await page.getByRole('region', { name: 'Card details', exact: true }).boundingBox();
     return narrow && narrow.x >= 0 && narrow.x + narrow.width <= 320;
   }).toBe(true);
+  await details.locator('pre').scrollIntoViewIfNeeded();
+  expect(await details.locator('.workspace-panel-body').evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('anchored-details-narrow.png') });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
-  await details.getByRole('combobox', { name: 'Card size', exact: true }).selectOption('expanded');
-  await details.getByRole('combobox', { name: 'Card size', exact: true }).selectOption('compact');
+  await expect(details.getByRole('combobox', { name: 'Card size', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Close details', exact: true }).click();
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: /^Find/ }).click();
@@ -110,14 +121,14 @@ test('details open explicitly, show escaped body, follow zoom and pan, and retur
 
 test('mobile details follow zoom in both directions and pan with an expanded card', async ({ page }, testInfo) => {
   await openBoardWithCards(page);
+  const card = page.locator('.workspace-card').filter({ hasText: 'Issue #1' });
+  await resizeCard(page, card, 140, 100);
   await page.setViewportSize({ width: 390, height: 844 });
   await openWorkspaceMenu(page);
   await page.getByRole('button', { name: /^Find/ }).click();
   await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).click();
-  const card = page.locator('.workspace-card').filter({ hasText: 'Issue #1' });
   await card.getByRole('button', { name: 'Card details', exact: true }).click();
   const details = page.getByRole('region', { name: 'Card details', exact: true });
-  await details.getByRole('combobox', { name: 'Card size', exact: true }).selectOption('expanded');
   const initial = await selectedBounds(page);
   const panelScale = () => details.evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
   const initialScale = await panelScale();
@@ -168,7 +179,6 @@ test('mobile details follow zoom in both directions and pan with an expanded car
     const box = await details.boundingBox();
     return box !== null && box.x >= 0 && box.x + box.width <= 320 && box.y >= 60 && box.y + box.height <= 730;
   }).toBe(true);
-  await details.getByRole('combobox', { name: 'Card size', exact: true }).selectOption('compact');
   await page.screenshot({ path: testInfo.outputPath('mobile-details-enlarged-text.png') });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   await page.getByRole('button', { name: 'Close details', exact: true }).click();

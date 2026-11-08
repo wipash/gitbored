@@ -225,8 +225,10 @@ Incoming is a non-modal region: Escape/Close returns to its trigger and canvas
 interaction leaves it open. **Find** selects a card without changing zoom; selected
 cards keep their details closed until you use their **Card details** button. Details
 follow the card as you pan, scale modestly with desktop zoom, and show the issue or
-PR description as plain text. Cards resize with native handles or the **Card size**
-control in details. **Settings → Hide closed** hides closed/merged cards without changing
+PR description as GitHub-flavoured Markdown. Clicking outside details dismisses the
+pane; dragging and panning keep it anchored. Cards resize with native handles.
+At 260px tall, cards show a body preview that fills the available space and fades
+at the bottom when it overflows. **Settings → Hide closed** hides closed/merged cards without changing
 the saved document.
 
 **Settings → Project** selects one project and maps Status, Weight, Priority and Sprint
