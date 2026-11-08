@@ -5,6 +5,18 @@ test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'This suite exercises
 
 test.beforeEach(async ({ request }) => { await controlProvider(request, { reset: true }); });
 
+test('initial heading focus announces the page without a selection-like border', async ({ page }, testInfo) => {
+  await page.goto('/');
+  const heading = page.getByRole('heading', { name: 'GitBored', exact: true });
+  await expect(heading).toBeFocused();
+  await expect(heading).toHaveCSS('outline-style', 'none');
+  await page.screenshot({ path: testInfo.outputPath('initial-heading-focus.png') });
+  await page.keyboard.press('Tab');
+  const signInLink = page.getByRole('link', { name: 'Sign in with GitHub', exact: true });
+  await expect(signInLink).toBeFocused();
+  await expect(signInLink).toHaveCSS('outline-style', 'solid');
+});
+
 test('two identities remain distinct and a renamed GitHub login retains the application identity', async ({ page, browser }) => {
   await signIn(page);
   const alice = await currentSession(page.request);

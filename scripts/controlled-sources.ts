@@ -73,7 +73,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     body: `## ${pull ? 'Pull request summary' : 'Issue description'}\n\nInvestigate the board loading behaviour.\n\n- [ ] Preserve cached content\n- [x] Keep the canvas usable\n\n<script>window.fixtureBodyExecuted = true</script>\n<img src=x onerror="window.fixtureBodyExecuted = true">`,
     state: pull ? 'closed' : 'open', state_reason: pull ? null : 'reopened',
     ...(pull ? { pull_request: { url: `http://127.0.0.1:${port}/repos/${owner}/${name}/pulls/${number}` } } : {}),
-    labels: Array.from({ length: 8 }, (_, index) => ({ name: settings().sourceCardLayout && index === 0 && (number === 1 || number === 5) ? number === 1 ? 'bug' : 'enhancement' : `Label ${index + 1} ${'extended '.repeat(4)}` })),
+    labels: settings().sourceCardLayout && number === 2 ? [] : Array.from({ length: 8 }, (_, index) => ({ name: settings().sourceCardLayout && index === 0 && (number === 1 || number === 5) ? number === 1 ? 'bug' : 'enhancement' : `Label ${index + 1} ${'extended '.repeat(4)}` })),
     assignees: [{ login: owner }, { login: 'another-contributor' }], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', closed_at: pull ? '2026-11-01T00:00:00Z' : null });
   const raw = (reply: FastifyReply, value: unknown) => reply.type('application/json').send(JSON.stringify(value).replace(/"raw:([0-9]+)"/g, '$1'));
   function authorize(request: FastifyRequest, reply: FastifyReply, checkDenial = true): number | null {
@@ -105,7 +105,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     const field = (id: string, name: string) => ({ id, name, dataType: id === 'F_weight' ? 'NUMBER' : id === 'F_sprint' ? 'ITERATION' : 'SINGLE_SELECT' });
     return { data: { node: {
       projectItems: connection([{ project: { id: `P_${owner}`, title: 'Delivery', fields: connection([field('F_status', 'Status'), field('F_weight', 'Estimate'), field('F_priority', 'Priority'), field('F_sprint', 'Iteration')]) },
-        fieldValues: connection([{ field: { id: 'F_status' }, name: number === 1 ? 'In progress' : 'Ready' }, { field: { id: 'F_weight' }, number: number === 1 ? 0 : 3 }, { field: { id: 'F_priority' }, name: 'High' }, { field: { id: 'F_sprint' }, title: 'Sprint 12' }]) }]),
+        fieldValues: connection(settings().sourceCardLayout && number === 2 ? [] : [{ field: { id: 'F_status' }, name: number === 1 ? 'In progress' : 'Ready' }, { field: { id: 'F_weight' }, number: number === 1 ? 0 : 3 }, { field: { id: 'F_priority' }, name: 'High' }, { field: { id: 'F_sprint' }, title: 'Sprint 12' }]) }]),
       timelineItems: connection(number === 1 ? [{ source: { url: `https://github.com/${owner}/${name}/pull/2` } }] : []),
       ...(match[1] === 'PR' ? { closingIssuesReferences: connection([{ url: `https://github.com/${owner}/${name}/issues/1` }]) } : {}),
     } } };

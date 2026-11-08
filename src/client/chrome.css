@@ -102,6 +102,24 @@
 .desktop-app :is(.tlui-toolbar, .tlui-navigation-panel, .tlui-style-panel, .tlui-menu, .tlui-popover__content) {
   border-radius: var(--chrome-radius-panel); border: 1px solid var(--color-border-subtle); box-shadow: var(--chrome-shadow);
 }
+/* SDK corner backplates assume its own canvas colour. Float only the controls. */
+.desktop-app .workspace-navigation { position: absolute; left: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: end; gap: 12px; }
+.desktop-app .tlui-menu-zone { border: 0; background: transparent; }
+.desktop-app .tlui-menu-zone .tlui-toolbar { margin: 0; padding: 4px; background: var(--tl-color-panel); }
+.desktop-app .tlui-navigation-panel { position: static; padding: 4px; background: var(--tl-color-panel); }
+.desktop-app .tlui-navigation-panel > .tlui-toolbar { border: 0; border-radius: 0; box-shadow: none; }
+.desktop-app .tlui-navigation-panel::before { display: none; }
+.desktop-app .tlui-navigation-panel .tlui-zoom-menu__button { margin: 0; }
+.desktop-app .tlui-main-toolbar--horizontal { padding-bottom: 12px; }
+.desktop-app .tlui-layout__bottom__main { padding-bottom: 0; }
+.desktop-app .tlui-menu-zone .tlui-button,
+.desktop-app .tlui-navigation-panel .tlui-button { min-height: 40px; }
+@media (max-width: 1100px) {
+  .desktop-app .workspace-navigation { bottom: calc(72px + env(safe-area-inset-bottom)); align-items: start; flex-direction: column; }
+}
+@media (max-width: 1300px) {
+  .desktop-app .workspace-navigation:has(.tlui-minimap) { bottom: calc(72px + env(safe-area-inset-bottom)); align-items: start; flex-direction: column; }
+}
 .desktop-app .tlui-button { padding: 0 12px; border: 0; background: transparent; }
 .desktop-app .tlui-button__tool { padding: 0; }
 .desktop-app .tlui-button__tool::after { border-radius: var(--chrome-radius-control); }

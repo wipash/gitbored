@@ -13,7 +13,9 @@ export function ProjectFields({ item }: { item: ItemMetadata }) {
   const project = context?.projects.find((entry) => entry.id === selection.projectId);
   return <dl className="card-project-fields">{planningRoles.map((role) => {
     const field = project?.fields.find((entry) => entry.id === selection[role]);
-    const value = !context ? '…' : context.status === 'unavailable' ? 'Unavailable' : field?.value ?? '—';
-    return <div key={role}><dt>{role}</dt><dd title={`${role}: ${value}`} className={role === 'status' || role === 'priority' ? 'card-category' : undefined} style={role === 'status' || role === 'priority' ? badgeStyle(categoryColour(role, value)) : undefined}>{value}</dd></div>;
+    const value = !selection[role] ? 'Not mapped' : !context ? 'Loading…' : context.status === 'unavailable' ? 'Unavailable' : field?.value ?? (context.status === 'partial' ? 'Unavailable' : 'Not set');
+    const hasValue = !!selection[role] && context?.status !== 'unavailable' && field?.value != null;
+    const category = hasValue && (role === 'status' || role === 'priority');
+    return <div key={role}><dt>{role}</dt><dd title={`${role}: ${value}`} data-empty={!hasValue} className={category ? 'card-category' : undefined} style={category ? badgeStyle(categoryColour(role, value)) : undefined}>{value}</dd></div>;
   })}</dl>;
 }

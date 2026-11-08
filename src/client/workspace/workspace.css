@@ -54,7 +54,10 @@
 .native-workspace a { color: var(--workspace-focus); text-underline-offset: 0.15em; }
 .workspace-card small { color: var(--workspace-muted); }
 .native-workspace :focus-visible { outline: 2px solid var(--workspace-focus); outline-offset: 3px; }
-.native-workspace:has(.tl-container:focus-visible)::after { content: ''; position: absolute; inset: 2px; border: 2px solid var(--workspace-focus); pointer-events: none; z-index: 1000; }
+/* Native autofocus must keep working for canvas shortcuts without painting a
+   viewport-sized ring until the user actually interacts with the keyboard. */
+:root:not([data-input-modality='keyboard']) .native-workspace .tl-container { outline: none; }
+:root[data-input-modality='keyboard'] .native-workspace:has(.tl-container:focus-visible)::after { content: ''; position: absolute; inset: 2px; border: 2px solid var(--workspace-focus); pointer-events: none; z-index: 1000; }
 .workspace-cards { position: absolute; z-index: 300; inset-block-start: 12px; inset-inline-start: 200px; max-inline-size: calc(100% - 216px); color: var(--workspace-text); background: var(--workspace-surface); border: 1px solid var(--workspace-border); border-radius: 9px; font-size: 0.875rem; line-height: 1.5; }
 .workspace-cards summary { padding: 10px 14px; cursor: pointer; }
 .workspace-cards summary span { font-variant-numeric: tabular-nums; }
@@ -103,7 +106,7 @@
 .detail-values dt { color: var(--color-text-secondary); }
 .detail-values dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 700px) { .workspace-find { top: 84px; left: 160px; right: auto; } .workspace-find .workspace-floating-panel { right: auto; left: -148px; } }
-.card-project-fields { display: grid; grid-template-columns: 1.3fr .65fr 1fr 1fr; gap: 6px; margin: 2px 0; flex-shrink: 0; }
+.card-project-fields { display: grid; grid-template-columns: 1.3fr .9fr 1fr 1fr; gap: 6px; margin: 2px 0; flex-shrink: 0; }
 .card-project-fields > div { min-width: 0; }
 .card-project-fields dt { color: var(--color-text-secondary); font-size: 0.6875rem; text-transform: capitalize; }
 .card-project-fields dd { margin: 1px 0 0; font-size: 0.6875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -154,15 +157,14 @@
   flex: none; min-block-size: 0; margin: 2px 0; display: -webkit-box; -webkit-box-orient: vertical;
   overflow: hidden; line-height: 1.5; pointer-events: auto;
 }
-.workspace-card-labels:empty { display: none; }
+.workspace-card-labels { margin-block-start: auto; }
 .workspace-card-labels > span { min-inline-size: 0; max-inline-size: 60%; }
 .workspace-card-labels > span:not(.card-category) { flex: none; max-inline-size: none; }
 .workspace-card .card-project-fields { margin: 0; gap: 3px; }
-.workspace-card[data-card-density='compact'] .card-project-fields dt {
-  position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
-}
 .workspace-card .card-project-fields dd { margin: 0; }
-.workspace-card footer { padding: 0; min-height: 24px; align-items: center; gap: 6px; }
+.card-project-fields dd[data-empty='true'] { color: var(--workspace-muted); }
+.card-project-fields dd { font-variant-numeric: tabular-nums; }
+.workspace-card footer { margin-block-start: 0; padding: 0; min-height: 24px; align-items: center; gap: 6px; }
 .workspace-card footer > span { flex: 1; min-width: 0; }
 .workspace-card footer a, .workspace-card .card-related-count { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 24px; min-height: 24px; }
 

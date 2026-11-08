@@ -11,7 +11,7 @@ function ItemCard({ shape }: { shape: ItemCardShape }) {
   const editor = useEditor();
   const compact = shape.props.h < 260;
   // Geometry alone sets the title budget: loading metadata never resizes a card.
-  const titleLines = Math.max(1, Math.floor((shape.props.h - (compact ? 134 : 154)) / 21));
+  const titleLines = Math.max(1, Math.floor((shape.props.h - 154) / 21));
   const { detailId, setDetailId } = useCardDetails();
   const showDetails = () => { editor.select(shape.id); setDetailId(shape.id); };
   const state = useItemMetadata(shape.props.referenceId);

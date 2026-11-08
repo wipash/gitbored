@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { createEmptyBoardDocument, validateBoard } from '../../src/shared/boards.js';
 import { readSourceItem, type SourceItem } from '../../src/shared/sources.js';
-import { applicationOrigin, controlProvider, currentSession, openWorkspaceMenu, selectTheme, signIn } from './auth-support.js';
+import { applicationOrigin, controlProvider, currentSession, openSettings, openWorkspaceMenu, selectTheme, signIn } from './auth-support.js';
 
 test.use({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires controlled GitHub authorization.');
@@ -80,7 +80,7 @@ test('compact titles keep whole lines and full details without growing hydrated 
       const card = page.locator(`[data-shape-id="shape:${size}-${index}"] .workspace-card`);
       await expect(card.locator('.workspace-card-title')).toHaveText(item.metadata.title);
       await expect(card.locator('.card-project-fields dd')).toHaveCount(4);
-      await expectWholeTitle(card, 3);
+      await expectWholeTitle(card, size === 'compact' ? 2 : 3);
       const bounds = await card.boundingBox();
       expect(bounds?.width).toBe(size === 'compact' ? 280 : 420);
       expect(bounds?.height).toBe(size === 'compact' ? 200 : 300);
@@ -95,7 +95,7 @@ test('compact titles keep whole lines and full details without growing hydrated 
     }
   }
   const minimum = page.locator('[data-shape-id="shape:minimum"] .workspace-card');
-  await expectWholeTitle(minimum, 2);
+  await expectWholeTitle(minimum, 1);
   await expectCardControls(minimum);
   const first = page.locator('[data-shape-id="shape:compact-0"] .workspace-card');
   const bugLabel = first.locator('.workspace-card-labels bdi').first();
@@ -134,7 +134,7 @@ test('compact card controls and complete titles remain available on narrow canva
     await page.getByRole('button', { name: /^Find/ }).click();
     await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).first().click();
     const card = page.locator('[data-shape-id="shape:compact-0"] .workspace-card');
-    await expectWholeTitle(card, textSize === '200%' ? 2 : 3);
+    await expectWholeTitle(card, 2);
     expect(await card.locator('.workspace-card-title').evaluate((element) => getComputedStyle(element).fontSize)).toBe(textSize === '200%' ? '28px' : '14px');
     await page.screenshot({ path: testInfo.outputPath(`cards-${width}-${theme}-before-hit.png`) });
     await expectCardControls(card);
@@ -145,4 +145,94 @@ test('compact card controls and complete titles remain available on narrow canva
     await details.getByRole('button', { name: 'Close details', exact: true }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   }
+});
+
+test('planning fields identify values and align with or without labels', async ({ page }, testInfo) => {
+  const { board } = await seedCards(page);
+  await page.goto(`/boards/${board.id}`);
+  for (const size of ['compact', 'expanded']) {
+    const populated = page.locator(`[data-shape-id="shape:${size}-0"] .workspace-card`);
+    const empty = page.locator(`[data-shape-id="shape:${size}-2"] .workspace-card`);
+    await expect(populated.locator('.card-project-fields dd').nth(1)).toHaveText('0');
+    await expect(empty.locator('.workspace-card-labels')).toBeEmpty();
+    await expect(empty.locator('.card-project-fields dd')).toHaveText(['Not set', 'Not set', 'Not set', 'Not set']);
+    for (const card of [populated, empty]) {
+      for (const label of await card.locator('.card-project-fields dt').all()) {
+        await expect(label).toBeVisible();
+        expect(await label.evaluate((element) => getComputedStyle(element).clipPath)).toBe('none');
+      }
+      await expectCardControls(card);
+    }
+    const populatedBounds = await populated.locator('.card-project-fields').boundingBox();
+    const emptyBounds = await empty.locator('.card-project-fields').boundingBox();
+    expect(emptyBounds?.y).toBe(populatedBounds?.y);
+  }
+  await page.screenshot({ path: testInfo.outputPath('planning-fields.png') });
+  await openSettings(page);
+  await page.getByLabel('weight field', { exact: true }).selectOption('');
+  await page.getByRole('button', { name: 'Close Settings', exact: true }).click();
+  await expect(page.locator('[data-shape-id="shape:compact-0"] .card-project-fields dd').nth(1)).toHaveText('Not mapped');
+});
+
+test('canvas controls share floating surfaces without opaque corner backplates', async ({ page }, testInfo) => {
+  const { board } = await seedCards(page);
+  await page.goto(`/boards/${board.id}`);
+  for (const theme of ['light', 'dark']) {
+    await selectTheme(page, theme);
+    const navigation = page.locator('.tlui-navigation-panel');
+    const menu = page.locator('.tlui-menu-zone');
+    const toolbar = page.locator('.tlui-main-toolbar__tools');
+    await expect(navigation).toBeVisible();
+    const navBounds = await navigation.boundingBox();
+    const menuBounds = await menu.boundingBox();
+    const toolbarBounds = await toolbar.boundingBox();
+    if (!navBounds || !menuBounds || !toolbarBounds) throw new Error('Missing canvas controls');
+    expect(navBounds.x).toBeGreaterThanOrEqual(8);
+    expect(Math.abs(navBounds.y + navBounds.height - menuBounds.y - menuBounds.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(navBounds.y + navBounds.height - toolbarBounds.y - toolbarBounds.height)).toBeLessThanOrEqual(1);
+    expect(await navigation.evaluate((element) => getComputedStyle(element, '::before').display)).toBe('none');
+    const surface = await toolbar.evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(await navigation.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(surface);
+    expect(await menu.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+    await page.screenshot({ path: testInfo.outputPath(`canvas-controls-${theme}.png`) });
+  }
+  const minimap = page.getByTestId('minimap.toggle-button');
+  await minimap.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.tlui-minimap')).toBeVisible();
+  for (const width of [1440, 1200, 1000, 640, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    // Resizing changes which native tools live in the overflow menu. Read the
+    // current set on each poll instead of retaining indices from the old width.
+    await expect.poll(async () => page.locator('.workspace-navigation button:visible:not(:disabled), .tlui-main-toolbar__tools button:visible:not(:disabled)').evaluateAll((controls) => controls.length > 0 && controls.every((element) => {
+        const rect = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight && (hit === element || element.contains(hit));
+      })), { message: `Canvas controls must receive input at ${width}px` }).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`canvas-controls-${width}-minimap.png`) });
+  }
+});
+
+test('opening a board keeps startup focus unobtrusive and keyboard selection shows its focus indicator', async ({ page }, testInfo) => {
+  const { board } = await seedCards(page);
+  await page.goto(`/boards/${board.id}`);
+  const canvas = page.locator('.tl-container');
+  await expect(page.locator('.workspace-card')).toHaveCount(7);
+  await expect(page.locator('#board-heading')).toHaveCSS('outline-style', 'none');
+  await expect(canvas).toHaveCSS('outline-style', 'none');
+  const canvasOutline = () => page.locator('.native-workspace').evaluate((element) => getComputedStyle(element, '::after').content);
+  expect(await canvasOutline()).toBe('none');
+  await page.screenshot({ path: testInfo.outputPath('initial-canvas-focus.png') });
+  await page.mouse.click(500, 800);
+  await expect(canvas).toBeFocused();
+  expect(await canvasOutline()).toBe('none');
+  const find = page.getByRole('button', { name: /^Find/ });
+  await find.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.workspace-find-results button').first()).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(canvas).toBeFocused();
+  expect(await canvasOutline()).not.toBe('none');
+  await page.screenshot({ path: testInfo.outputPath('keyboard-canvas-focus.png') });
 });

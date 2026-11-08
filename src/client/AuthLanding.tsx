@@ -21,6 +21,18 @@ const signInErrors: Record<string, string> = {
 };
 
 export function AuthLanding() {
+  useEffect(() => {
+    // Native canvas keyboard handlers can stop events before React sees them.
+    const keyboard = () => { document.documentElement.dataset.inputModality = 'keyboard'; };
+    const pointer = () => { document.documentElement.dataset.inputModality = 'pointer'; };
+    window.addEventListener('keydown', keyboard, true);
+    window.addEventListener('pointerdown', pointer, true);
+    return () => {
+      window.removeEventListener('keydown', keyboard, true);
+      window.removeEventListener('pointerdown', pointer, true);
+      delete document.documentElement.dataset.inputModality;
+    };
+  }, []);
   const theme = useTheme();
   const pathname = usePathname();
   const [view, setView] = useState<View>({ status: 'loading' });
