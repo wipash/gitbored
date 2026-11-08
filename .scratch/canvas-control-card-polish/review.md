@@ -24,7 +24,7 @@ Reviewed the bottom-left native controls, compact/minimum-size/expanded issue an
 | LOW | Layout | `src/client/workspace/NativeWorkspace.tsx:56` | Independently positioned navigation and action controls, with helper margins affecting alignment | Shared layout using existing tldraw components | Common baseline, room for an expanded minimap, stacked controls at narrow widths |
 | LOW | UI polish | `src/client/desktop.css:19`, `src/client/AuthLanding.tsx:24`, `src/client/workspace/workspace.css:57` | Programmatic heading focus draws a selection-like outline; tldraw autofocus can draw a viewport-sized border | Suppress only the noninteractive route-heading outline and gate canvas outlines on keyboard input, captured before native event handlers | Preserve native autofocus, heading announcements and actual keyboard focus indicators without startup borders |
 
-No actionable interface findings remain in the inspected scope.
+The initial review missed the narrow action strip: tldraw relocates it to a different container on mobile. The follow-up below supersedes the original control-polish assessment.
 
 ## Verification
 
@@ -45,4 +45,24 @@ Not verified: a screen-reader session, RTL/pseudo-localization, browser page zoo
 
 ## Verdict
 
-Approve for the inspected interface scope. The final integration gate passed. The compact title tradeoff is recorded in `spec.md`: two whole lines at the default size, one at the minimum size, with full titles available through details.
+Original verdict: approve for the inspected interface scope. That gate passed, but its surface assertions missed the relocated mobile action strip; see the follow-up below. The compact title tradeoff is recorded in `spec.md`: two whole lines at the default size, one at the minimum size, with full titles available through details.
+
+## Follow-up: relocated mobile actions
+
+Scope: bottom action and drawing toolbars at 640, 390 and 320px in both themes, with desktop/minimap regression coverage. The user's 320px screenshot showed a real inconsistency that the earlier review overlooked.
+
+| Severity | Domain | Location | Before | After | Why |
+| --- | --- | --- | --- | --- | --- |
+| MEDIUM | UI polish / layout | `src/client/chrome.css:108` | At narrow widths, tldraw relocates actions outside the menu zone. The relocated strip retained its low-surface background, 40px buttons, an 8px left inset and native offsets that made it touch the drawing toolbar. | Style both action placements with the panel surface and native drawing-button dimensions. Remove the extra inset and offset; reserve 12px between mobile rows, hide the empty menu spacer and align zoom with Actions. | Matching surface, 50px outer height, shared leading edge and first icon centre, and clear separation. |
+
+All six owning better-interface skills were applied to this bounded follow-up. Accessibility: native controls retained; keyboard opening/dismissal of Actions and pointer hit testing at each narrow width. Layout: compare actual toolbar rectangles and icon centres; retain the existing desktop/minimap and enlarged-text checks. Writing and typography: native labels/tooltips and font styles retained. Color: actual action/drawing surface equality in both themes. UI polish: inspect generated light/dark narrow and desktop screenshots, in addition to the measurements.
+
+The new regression failed against the original implementation: the action background was `rgb(237, 240, 242)` while the drawing toolbar was `rgb(255, 255, 255)`. After the correction, all six focused card/chrome browser tests passed. Reviewed implementation commit: `811e66b` (`fix(canvas): match mobile actions to native toolbar chrome`). The production gate result is recorded below.
+
+The earlier limitations (screen-reader session, RTL/pseudo-localization and actual browser page zoom) still apply; this follow-up does not claim those checks.
+
+Screenshot evidence uses the dedicated narrow-action regression, which measures and hit-tests Actions itself after native responsive relocation. The 320px light and dark images retain the keyboard focus ring on Actions after testing menu dismissal; that ring is intentional. The 640px light image shows the zoom and action baseline. Desktop light/dark images were refreshed from the production run as well.
+
+Final validation of `811e66b`: `pnpm gate` passed on Node 26.8.1 / pnpm 12.16.1, including lint, type checks, 14 native-document tests, 4 server tests, the production build and **106 browser tests**, with one configuration-specific skip. The browser run also passed native history/interaction continuity and 320px/200% text checks. Log: `/tmp/gitbored-controls-final-gate.log`. `git diff --check` passed.
+
+Follow-up verdict: **Approve** for the inspected toolbar scope. Screenshots and measured surfaces/rectangles agree; no outstanding findings in that scope. The stated unverified accessibility/localization states remain unverified.

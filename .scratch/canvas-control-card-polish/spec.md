@@ -12,3 +12,7 @@
 ## Scope
 
 React + tldraw and existing semantic CSS tokens. No new dependencies. Applies to bottom-left canvas controls, card metadata and its existing details presentation.
+
+## Follow-up: mobile action toolbar
+
+The 320px PR screenshot exposed a missed responsive state: tldraw relocates the action shortcuts from the menu zone to `tlui-main-toolbar__extras__controls`. Match that container to the drawing toolbar too. Both placements use the panel token and native row/button sizing; the mobile rows share a leading edge and icon centre, have equal heights, and have 12px of canvas between them. Preserve native toolbar relocation, keyboard navigation and menu behavior. Replace the PR's mobile evidence with light and dark screenshots of the corrected state.
