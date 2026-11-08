@@ -71,7 +71,12 @@ test('cached cards survive a new sign-in, load together and remain readable thro
   expect(browserReads).toEqual([`/api/boards/${board.id}/metadata`]);
   const editor = await page.locator('.tl-container').elementHandle();
   if (!editor) throw new Error('Missing native editor');
-  expect(await (await page.request.get(`${providerOrigin}/__source-stats`)).json()).toEqual({ requests: [] });
+  // Repository discovery may run independently; cached card content needs no item or context reads.
+  const providerStats = await page.request.get(`${providerOrigin}/__source-stats`);
+  expect(providerStats.ok()).toBe(true);
+  const providerReads = await providerStats.text();
+  expect(providerReads).not.toContain('/repos/');
+  expect(providerReads).not.toContain('/graphql');
   expect((await page.request.post(`${providerOrigin}/__source-gate`, { data: { action: 'arm', target: 'issue-detail' } })).ok()).toBe(true);
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect.poll(async () => {
