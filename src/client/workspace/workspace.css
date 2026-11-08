@@ -128,7 +128,6 @@
 .workspace-tools .incoming-controls { gap: 2px; }
 .workspace-tools .incoming-panel, .workspace-tools .workspace-floating-panel { position: absolute; top: 100%; right: 0; left: auto; margin: 6px 0 0; }
 .workspace-tools .incoming-controls > button, .workspace-tools .workspace-view > button, .workspace-tools .workspace-find > button { border-color: transparent; }
-.card-size { display: flex; align-items: center; justify-content: space-between; margin: 12px 0; }
 @media (max-width: 700px) {
  .workspace-tools { top: 64px; left: 12px; right: 12px; flex-wrap: wrap; }
  .workspace-tools .incoming-shell { flex-basis: 100%; }
@@ -142,7 +141,29 @@
 .workspace-card .card-details-trigger[aria-expanded="true"] { outline: 2px solid var(--workspace-focus); outline-offset: 1px; }
 .card-refresh-indicator { flex: none; display: inline-flex; color: var(--workspace-muted); }
 .card-refresh-indicator .app-icon { width: 14px; height: 14px; animation: card-refresh 1s linear infinite; }
-.card-detail-body { margin-block: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; user-select: text; }
+.card-detail-body { margin-block: 12px; overflow-wrap: anywhere; line-height: 1.6; user-select: text; }
+.card-markdown { min-inline-size: 0; max-inline-size: 75ch; overflow-wrap: anywhere; line-height: 1.6; }
+.card-markdown > :first-child { margin-block-start: 0; }
+.card-markdown > :last-child { margin-block-end: 0; }
+.card-markdown :is(p, ul, ol, pre, blockquote, table) { margin-block: .75em; }
+.card-markdown :is(h1, h2, h3, h4, h5, h6) { margin-block: 1em .5em; line-height: 1.3; font-weight: 600; }
+.card-markdown h1 { font-size: 1.25em; }
+.card-markdown h2 { font-size: 1.125em; }
+.card-markdown :is(h3, h4, h5, h6) { font-size: 1em; }
+.card-markdown :is(ul, ol) { padding-inline-start: 1.5em; }
+.card-markdown .contains-task-list { padding-inline-start: 0; list-style: none; }
+.card-markdown input[type="checkbox"] { inline-size: 1em; block-size: 1em; min-block-size: 0; margin-inline: 0 .4em; vertical-align: baseline; }
+.card-markdown blockquote { margin-inline: 0; padding-inline-start: 1em; border-inline-start: 3px solid var(--workspace-border); }
+.card-markdown code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--workspace-subtle); padding: .1em .25em; border-radius: 3px; }
+.card-markdown pre { padding: .75em; background: var(--workspace-subtle); white-space: pre-wrap; overflow-wrap: anywhere; }
+.card-markdown pre code { padding: 0; }
+.card-markdown table { inline-size: 100%; border-collapse: collapse; table-layout: fixed; }
+.card-markdown :is(th, td) { padding: .4em; border: 1px solid var(--workspace-border); text-align: start; }
+.card-markdown img { max-inline-size: 100%; block-size: auto; }
+.card-markdown hr { border: 0; border-block-start: 1px solid var(--workspace-border); }
+.workspace-card-body { flex: 1; min-block-size: 0; overflow: hidden; margin-block: 4px; }
+.workspace-card-body[data-overflow="true"] { mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
+.workspace-card-body, .workspace-card-body * { pointer-events: none; }
 @keyframes card-refresh { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .card-refresh-indicator .app-icon { animation: none; } }
 
@@ -172,6 +193,7 @@
    The visible details button keeps every omitted field available. */
 .workspace-card-container { container-type: size; }
 @container (max-height: 10rem) {
+  .workspace-card-body { display: none; }
   .workspace-card-labels, .workspace-card .card-project-fields, .workspace-card footer > span, .workspace-card-heading .card-type { display: none; }
   .workspace-card-title { -webkit-line-clamp: 2 !important; block-size: 3em !important; }
   .workspace-card footer { margin-block-start: auto; line-height: 1; }

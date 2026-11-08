@@ -2,11 +2,12 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { createEmptyBoardDocument, validateBoard } from '../../src/shared/boards.js';
 import { readSourceItem, type SourceItem } from '../../src/shared/sources.js';
 import { applicationOrigin, controlProvider, currentSession, openSettings, openWorkspaceMenu, selectTheme, signIn } from './auth-support.js';
+import { resizeCard } from './board-gestures.js';
 
 test.use({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires controlled GitHub authorization.');
 
-async function seedCards(page: Page) {
+async function seedCards(page: Page, includeExpanded = true) {
   await controlProvider(page.request, { reset: true, sourceCardLayout: true });
   await signIn(page);
   const session = await currentSession(page.request);
@@ -23,7 +24,7 @@ async function seedCards(page: Page) {
   const created = await page.request.post('/api/boards', { headers, data: { title: 'Compact and expanded card titles' } });
   const board = validateBoard(await created.json());
   const document = createEmptyBoardDocument();
-  const cards = ['compact', 'expanded'].flatMap((size, row) => items.map((item, column) => ({
+  const cards = (includeExpanded ? ['compact', 'expanded'] : ['compact']).flatMap((size, row) => items.map((item, column) => ({
     id: `shape:${size}-${column}`, typeName: 'shape', type: 'item-card', parentId: 'page:page', index: `a${row * 3 + column + 1}`,
     x: 30 + column * (size === 'compact' ? 310 : 460), y: size === 'compact' ? 150 : 400, rotation: 0, opacity: 1, isLocked: false, meta: {},
     props: { version: 1, color: 'black', referenceId: item.reference.id, kind: item.reference.kind, w: size === 'compact' ? 280 : 420, h: size === 'compact' ? 200 : 300 },
@@ -58,8 +59,47 @@ async function expectWholeTitle(card: Locator, minimumLines: number) {
   expect(metrics.partialLines).toBe(0);
 }
 
+test('outside clicks dismiss details, card actions switch directly, and previews grow with native resizing', async ({ page }, testInfo) => {
+  const { board } = await seedCards(page, false);
+  await page.goto(`/boards/${board.id}`);
+  const card = page.locator('[data-shape-id="shape:compact-0"] .workspace-card');
+  const other = page.locator('[data-shape-id="shape:compact-2"] .workspace-card');
+  const trigger = card.getByRole('button', { name: 'Card details', exact: true });
+  const details = page.getByRole('region', { name: 'Card details', exact: true });
+  await trigger.click();
+  await details.getByText('Investigate the board loading behaviour.', { exact: true }).click();
+  await expect(details).toBeVisible();
+  await other.locator('.workspace-card-title').click();
+  await expect(details).toHaveCount(0);
+  await expect(page.locator('.tl-container')).toBeFocused();
+  await trigger.click();
+  await other.getByRole('button', { name: 'Card details', exact: true }).click();
+  await expect(details.locator('.detail-locator')).toHaveText('alice/project #2');
+  await other.getByRole('button', { name: 'Card details', exact: true }).click();
+  await expect(details).toHaveCount(0);
+  await trigger.click();
+  await page.mouse.click(1300, 800);
+  await expect(details).toHaveCount(0);
+  await expect(page.locator('.tl-container')).toBeFocused();
+  await expect(card.locator('.workspace-card-body')).toHaveCount(0);
+  await resizeCard(page, card, 0, 60);
+  const preview = card.locator('.workspace-card-body');
+  await expect(preview).toHaveAttribute('inert', '');
+  await expect(preview).toContainText('Investigate the board loading behaviour.');
+  await expect(preview).toHaveAttribute('data-overflow', 'true');
+  expect(await preview.evaluate((element) => element.clientHeight)).toBeGreaterThan(30);
+  await expectCardControls(card);
+  await page.screenshot({ path: testInfo.outputPath('card-preview-faded.png') });
+  await resizeCard(page, card, 140, 440);
+  await expect(preview).toHaveAttribute('data-overflow', 'false');
+  await expectCardControls(card);
+  await page.screenshot({ path: testInfo.outputPath('card-preview-expanded.png') });
+  await resizeCard(page, card, -140, -500);
+  await expect(preview).toHaveCount(0);
+});
+
 async function expectCardControls(card: Locator) {
-  for (const control of await card.locator('button, a').all()) {
+  for (const control of await card.locator(':is(button, a):not([inert] *)').all()) {
     await expect(control).toBeVisible();
     await expect.poll(async () => control.evaluate((element) => {
       const rect = element.getBoundingClientRect();
@@ -90,6 +130,10 @@ test('compact titles keep whole lines and full details without growing hydrated 
       await page.keyboard.press('Enter');
       const details = page.getByRole('region', { name: 'Card details', exact: true });
       await expect(details.locator('h3')).toHaveText(item.metadata.title);
+      if (item.metadata.locator.number === 5) {
+        await expect(details.locator('.card-detail-body')).toHaveText('No description provided.');
+        await expect(card.locator('.workspace-card-body')).toHaveCount(0);
+      }
       await details.getByRole('button', { name: 'Close details', exact: true }).click();
       await expect(trigger).toBeFocused();
     }

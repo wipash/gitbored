@@ -1,5 +1,16 @@
 import { expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+
+export async function resizeCard(page: Page, card: Locator, dx: number, dy: number) {
+  await card.locator('.workspace-card-title').click();
+  const bounds = await card.boundingBox();
+  if (!bounds) throw new Error('Missing card to resize');
+  await page.mouse.move(bounds.x + bounds.width, bounds.y + bounds.height);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width + dx, bounds.y + bounds.height + dy, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await card.boundingBox())?.height).toBeCloseTo(bounds.height + dy, 0);
+}
 
 /** Pointer coordinates are viewport coordinates; clipping and physical UI placement matter. */
 export async function expectNativePoint(page: Page, point: { x: number; y: number }, shapeId?: string) {

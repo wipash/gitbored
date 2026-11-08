@@ -6,12 +6,13 @@ import { Icon } from '../Icon';
 import { itemStateLabel, describeItem, useItemMetadata } from './metadata';
 import { useCardDetails } from './cardDetails';
 import { badgeStyle, itemType, useCardColours } from './cardColours';
+import { CardBodyPreview } from './CardMarkdown';
 
 function ItemCard({ shape }: { shape: ItemCardShape }) {
   const editor = useEditor();
   const compact = shape.props.h < 260;
   // Geometry alone sets the title budget: loading metadata never resizes a card.
-  const titleLines = Math.max(1, Math.floor((shape.props.h - 154) / 21));
+  const titleLines = Math.min(3, Math.max(1, Math.floor((shape.props.h - 154) / 21)));
   const { detailId, setDetailId } = useCardDetails();
   const showDetails = () => { editor.select(shape.id); setDetailId(shape.id); };
   const state = useItemMetadata(shape.props.referenceId);
@@ -32,6 +33,7 @@ function ItemCard({ shape }: { shape: ItemCardShape }) {
       </div>
       <div className="workspace-card-heading"><strong className="card-category" style={badgeStyle(colours.type)}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} />{shape.props.kind === 'issue' ? 'Issue' : 'Pull request'}{item ? ` #${item.locator.number}` : ''}</strong>{item && itemType(item) !== 'Issue' && itemType(item) !== 'Pull request' && <span className="card-category card-type" style={badgeStyle(colours.type)}>{itemType(item)}</span>}<span className="card-category" style={badgeStyle(colours.status)}>{item ? itemStateLabel(item) : state.status === 'loading' ? 'Loading…' : state.status === 'sso-required' ? 'SSO required' : 'Unavailable'}</span></div>
       <p className="workspace-card-title" style={{ WebkitLineClamp: titleLines, blockSize: `${titleLines * 1.5}em` }}>{item?.title ?? anonymousMessage}</p>
+      {!compact && item?.body?.trim() && <CardBodyPreview body={item.body} />}
       <div className="workspace-card-labels">{item?.labels.slice(0, 2).map((label, index) => <span className="card-category" style={badgeStyle(colours.label(label))} title={label} key={index}><bdi>{label}</bdi></span>)}{item && item.labels.length > 2 && <span>+{item.labels.length - 2}</span>}</div>
       {item && <ProjectFields item={item} />}
       <footer><span>{item?.freshness === 'stale' && !(state.status === 'ready' && state.refreshing) ? 'Stale metadata' : item?.assignees.slice(0, 2).map((name) => `@${name}`).join(', ') || 'Unassigned'}</span>{!!item?.context?.related.length && <button type="button" className="card-related-count" data-native-ui="card-action" aria-label={`${item.context.related.length} related items`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); showDetails(); }}><Icon name="link" />{item.context.related.length}</button>}{url && <a href={url} target="_blank" rel="noreferrer" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} aria-label="Open in GitHub"><Icon name="external" /></a>}</footer>
