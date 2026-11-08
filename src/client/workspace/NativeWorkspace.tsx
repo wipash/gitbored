@@ -21,6 +21,7 @@ import { PlanningContext } from './planning';
 import { WorkspacePanels } from './WorkspacePanels';
 import { CardColourProvider } from './cardColours';
 import { CardDetailsProvider } from './cardDetails';
+import { useStylePanelClearance } from './useStylePanelClearance';
 
 export interface NativeWorkspaceProps {
   planning?: PlanningSelection | undefined;
@@ -70,6 +71,7 @@ function WorkspaceOpacity() {
 }
 function WorkspaceStylePanel(props: TLUiStylePanelProps) {
   const editor = useEditor();
+  useStylePanelClearance(props.isMobile ?? false);
   const visible = useValue('Drawing styles visible', () => editor.getCurrentToolId() !== 'select' || editor.getSelectedShapes().length > 0, [editor]);
   if (!visible) return null;
   return <DefaultStylePanel {...props}><StylePanelColorPicker /><WorkspaceOpacity /><StylePanelFillPicker /><StylePanelDashPicker /><StylePanelSizePicker /><StylePanelFontPicker /><StylePanelTextAlignPicker /><StylePanelLabelAlignPicker /><StylePanelGeoShapePicker /><StylePanelArrowKindPicker /><StylePanelArrowheadPicker /><StylePanelSplinePicker /></DefaultStylePanel>;

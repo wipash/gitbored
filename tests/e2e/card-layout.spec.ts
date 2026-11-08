@@ -285,3 +285,73 @@ test('opening a board keeps startup focus unobtrusive and keyboard selection sho
   expect(await canvasOutline()).not.toBe('none');
   await page.screenshot({ path: testInfo.outputPath('keyboard-canvas-focus.png') });
 });
+
+
+test('selected card styles stay below the top controls and remain reachable', async ({ page }, testInfo) => {
+  const { board } = await seedCards(page);
+  await page.goto(`/boards/${board.id}`);
+  for (const theme of ['light', 'dark']) {
+    await selectTheme(page, theme);
+    for (const [width, textSize] of [[1440, '100%'], [1440, '200%'], [1000, '100%'], [800, '100%']] as const) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, textSize);
+      await openWorkspaceMenu(page);
+      await page.getByRole('button', { name: /^Find/ }).click();
+      await page.locator('.workspace-find-results button').first().click();
+      const panel = page.getByTestId('style.panel');
+      await expect(panel).toBeVisible();
+      await expect.poll(() => panel.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const headers = document.querySelectorAll('.workspace-tools, .board-heading, .mobile-workspace-menu');
+        return [...headers].every((header) => {
+          const rect = header.getBoundingClientRect();
+          return !rect.width || !rect.height || bounds.top >= rect.bottom + 12;
+        });
+      })).toBe(true);
+      for (const control of await panel.locator('button, input').all()) {
+        await control.scrollIntoViewIfNeeded();
+        expect(await control.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+          return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight && (hit === element || element.contains(hit));
+        })).toBe(true);
+      }
+      await panel.getByTestId('style.color.blue').focus();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('.workspace-card[data-card-colour="blue"]')).toHaveCount(1);
+      await page.screenshot({ path: testInfo.outputPath(`selected-card-${width}-${textSize}-${theme}.png`) });
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+});
+
+test('selected card styles remain usable in the native mobile popover at enlarged text', async ({ page }, testInfo) => {
+  const { board } = await seedCards(page);
+  await page.goto(`/boards/${board.id}`);
+  await selectTheme(page, 'dark');
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await openWorkspaceMenu(page);
+  await page.getByRole('button', { name: /^Find/ }).click();
+  await page.locator('.workspace-find-results button').first().click();
+  await page.getByTestId('mobile-styles.button').focus();
+  await page.keyboard.press('Enter');
+  const panel = page.getByTestId('style.panel');
+  await expect(panel).toBeVisible();
+  for (const control of await panel.locator('button, input').all()) {
+    await control.scrollIntoViewIfNeeded();
+    expect(await control.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight && (hit === element || element.contains(hit));
+    })).toBe(true);
+  }
+  await panel.getByTestId('style.color.blue').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.workspace-card[data-card-colour="blue"]')).toHaveCount(1);
+  await panel.getByLabel('Opacity', { exact: true }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(panel.getByLabel('Opacity', { exact: true })).toHaveValue('95');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await page.screenshot({ path: testInfo.outputPath('selected-card-mobile-dark.png') });
+});

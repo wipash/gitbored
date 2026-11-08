@@ -27,7 +27,8 @@
 .desktop-app .board-entries span { font-size: 0.6875rem; }
 .board-switcher { position: fixed; z-index: 600; top: 56px; left: 12px; width: min(390px, calc(100vw - 24px)); padding: 10px; background: var(--color-bg-surface); border: 1px solid var(--color-border-control); border-radius: 4px; }
 .desktop-app .board-switcher .boards-list { margin: 8px 0 0; width: 100%; padding: 0; border: 0; max-height: calc(100dvh - 160px); }
-.desktop-app .tlui-layout__top__right { top: 60px; }
+.desktop-app .tlui-layout__top__right { padding-block-start: var(--workspace-style-top, 68px); padding-inline-end: 4px; }
+.desktop-app .tlui-style-panel__wrapper { margin-block-start: 0; }
 .desktop-app .tlui-style-panel { border-radius: 3px; }
 .desktop-app .tlui-button { min-height: 30px; }
 .desktop-app .tlui-toolbar, .desktop-app .tlui-navigation-panel { border-radius: 4px; }
