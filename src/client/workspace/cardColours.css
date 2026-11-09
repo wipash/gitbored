@@ -10,15 +10,12 @@
   background: var(--workspace-surface);
 }
 .workspace-card .card-type { align-self: start; font-size: .6875rem; }
-.card-colour-control { min-inline-size: 0; }
+.card-colour-control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-inline-size: 0; }
 .card-colour-control > button { border-color: transparent; text-align: start; }
-.card-colour-control > button span { overflow-wrap: anywhere; }
 .card-colour-control > button .app-icon { flex-shrink: 0; }
 .desktop-app .workspace-tools .card-colour-panel { inset-inline-start: 0; inset-inline-end: auto; }
 .card-colour-panel { display: flex; flex-direction: column; max-block-size: var(--workspace-panel-height, calc(100dvh - 160px)); overflow: hidden; }
 .card-colour-panel > .workspace-panel-body { min-block-size: 0; max-block-size: none; overflow: auto; overscroll-behavior: contain; }
-.colour-mode-field { display: grid; gap: 8px; margin-block-end: 24px; }
-.colour-mode-field select { min-inline-size: 0; inline-size: 100%; }
 .card-colour-settings { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 .card-colour-settings legend { font-weight: 650; }
 .category-colour-list { display: grid; gap: 8px; }
@@ -27,8 +24,30 @@
 .category-colour-list input[type="color"] { inline-size: 44px; block-size: 36px; padding: 3px; border: 1px solid var(--color-border-control); border-radius: var(--chrome-radius-control); background: var(--color-bg-surface); cursor: pointer; }
 .card-colour-control .colour-help { margin-block: 0 16px; color: var(--color-text-secondary); font-size: .75rem; line-height: 1.5; }
 .category-colour-list + .colour-help { margin-block-start: 12px; }
+.colour-storage-status { flex-basis: 100%; }
+.colour-storage-status:empty { display: none; }
+.card-colour-modes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.card-colour-modes legend { float: inline-start; padding: 8px; color: var(--color-text-secondary); font-size: .8125rem; line-height: 1.5; }
+.card-colour-segments { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--color-bg-subtle); border-radius: var(--chrome-radius-panel); }
+.card-colour-segments label { position: relative; flex: 1; cursor: pointer; }
+.card-colour-segments input { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.card-colour-segments span { display: block; padding: 6px 10px; min-block-size: 30px; border: 1px solid transparent; border-radius: var(--chrome-radius-control); color: var(--color-text-secondary); font-size: .8125rem; line-height: 1.5; text-align: center; }
+.card-colour-segments input:checked + span { background: var(--color-bg-surface); color: var(--color-text-primary); border-color: var(--color-border-control); text-decoration: underline; text-underline-offset: 4px; }
+.card-colour-segments input:focus-visible + span { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+@media (hover: hover) {
+  .card-colour-segments label:hover input:not(:checked) + span { background: var(--color-bg-hover); color: var(--color-text-primary); }
+}
 @media (max-width: 900px) {
+  .card-colour-control { display: block; }
+  .card-colour-modes { display: block; }
+  .card-colour-modes legend { float: none; }
+  .card-colour-segments span { min-block-size: 44px; display: grid; place-items: center; padding-inline: 5px; }
   .card-colour-control > button { inline-size: 100%; }
   .desktop-app .workspace-tools .card-colour-panel { inset-inline: 8px; }
   .category-colour-list input[type="color"] { block-size: 44px; }
+}
+
+@media (min-width: 901px) and (max-width: 1050px) {
+  /* Preserve the group's accessible name while keeping Colours beside the switcher. */
+  .card-colour-modes legend { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }

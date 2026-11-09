@@ -162,7 +162,7 @@
   .desktop-app .settings-group > label { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .desktop-app .settings-group > label:has(input[type='checkbox']) { grid-template-columns: minmax(0, 1fr) auto; }
   .desktop-app .card-colour-control { grid-column: 1 / -1; }
-  .desktop-app .workspace-tools[data-menu-open='false'] .card-colour-control > button { display: none; }
+  .desktop-app .workspace-tools[data-menu-open='false'] .card-colour-control > :is(button, fieldset, .colour-storage-status) { display: none; }
 }
 @media (hover: hover) {
   .desktop-app button.board-primary:not(:disabled):not([aria-disabled='true']):hover {

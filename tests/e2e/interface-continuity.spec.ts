@@ -72,15 +72,17 @@ for (const viewport of [{ width: 1440, height: 1000, text: '100%' }, { width: 32
       await selectTheme(page, theme);
       const screenshot = async (name: string) => { await page.screenshot({ path: testInfo.outputPath(`${viewport.width}-${theme}-${name}.png`) }); };
       await openWorkspaceMenu(page);
-      const colourTrigger = page.getByRole('button', { name: /^Colour by:/ });
+      const modes = page.getByRole('group', { name: 'Colour by', exact: true });
+      for (const radio of await modes.getByRole('radio').all()) {
+        await reachable(radio);
+        const colours = await renderedColours(radio.locator('+ span'));
+        expect(contrast(colours.foreground, colours.background)).toBeGreaterThanOrEqual(4.5);
+      }
+      await modes.getByRole('radio', { name: 'Assignee', exact: true }).check();
+      const colourTrigger = page.getByRole('button', { name: 'Colours', exact: true });
       await reachable(colourTrigger);
       await screenshot('menu');
       await colourTrigger.click();
-      const mode = page.getByRole('combobox', { name: 'Colour by', exact: true });
-      await reachable(mode);
-      const colours = await renderedColours(mode);
-      expect(contrast(colours.foreground, colours.background)).toBeGreaterThanOrEqual(4.5);
-      await mode.selectOption('assignee');
       await reachable(page.getByLabel('Unassigned colour'));
       await screenshot('colours');
       await page.getByRole('button', { name: 'Close Card colours' }).click();

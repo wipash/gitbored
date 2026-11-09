@@ -9,8 +9,8 @@ import { useWorkspacePanel } from './panels';
 import { usePanelClearance } from './usePanelClearance';
 import './cardColours.css';
 
-type ColourMode = 'off' | 'status' | 'priority' | 'labels' | 'type' | 'assignment' | 'assignee';
-type Category = 'status' | 'priority' | 'label' | 'type' | 'assignment' | 'assignee';
+type ColourMode = 'off' | 'status' | 'priority' | 'labels' | 'type' | 'assignee';
+type Category = 'status' | 'priority' | 'label' | 'type' | 'assignee';
 interface ColourPreferences { mode: ColourMode; overrides: Record<string, string> }
 interface ColourContextValue { preferences: ColourPreferences; update: (preferences: ColourPreferences) => void; persistent: boolean }
 const emptyPreferences: ColourPreferences = { mode: 'off', overrides: {} };
@@ -18,20 +18,22 @@ interface ColourModeOption { value: ColourMode; label: string }
 const colourModes: ColourModeOption[] = [
   { value: 'off', label: 'Off' }, { value: 'status', label: 'Status' },
   { value: 'priority', label: 'Priority' }, { value: 'labels', label: 'Labels' }, { value: 'type', label: 'Type' },
-  { value: 'assignment', label: 'Assigned / unassigned' }, { value: 'assignee', label: 'Assignee' },
+  { value: 'assignee', label: 'Assignee' },
 ];
 const ColourContext = createContext<ColourContextValue>({ preferences: emptyPreferences, update: () => {}, persistent: true });
 const palette = ['#437ed1', '#9561c9', '#168879', '#cd731b', '#bd4f7c', '#597d32'];
 const nativeColours: Record<TLDefaultColorStyle, string> = { black: 'var(--color-border-subtle)', grey: '#87929e', 'light-violet': '#b69ddd', violet: '#9561c9', blue: '#437ed1', 'light-blue': '#68b8db', yellow: '#d4ad21', orange: '#cd731b', green: '#168879', 'light-green': '#8baf53', 'light-red': '#df91a7', red: '#cd5860', white: '#ffffff' };
-const defaults: Record<string, string> = { 'status:cancelled': '#87929e', 'assignment:assigned': '#437ed1', 'assignment:unassigned': '#ffffff', 'assignee:unassigned': '#ffffff', 'status:open': '#168879', 'status:closed': '#9561c9', 'status:merged': '#9561c9', 'status:draft': '#87929e', 'status:in progress': '#437ed1', 'status:ready': '#168879', 'priority:high': '#cd731b', 'priority:urgent': '#cd5860', 'priority:low': '#597d32', 'type:issue': '#168879', 'type:pull request': '#9561c9', 'type:bug': '#cd5860', 'type:feature': '#437ed1' };
-function isMode(value: unknown): value is ColourMode { return value === 'off' || value === 'status' || value === 'priority' || value === 'labels' || value === 'type' || value === 'assignment' || value === 'assignee'; }
+const defaults: Record<string, string> = { 'status:cancelled': '#87929e', 'assignee:unassigned': '#ffffff', 'status:open': '#168879', 'status:closed': '#9561c9', 'status:merged': '#9561c9', 'status:draft': '#87929e', 'status:in progress': '#437ed1', 'status:ready': '#168879', 'priority:no priority': '#87929e', 'priority:high': '#cd731b', 'priority:urgent': '#cd5860', 'priority:low': '#597d32', 'type:issue': '#168879', 'type:pull request': '#9561c9', 'type:bug': '#cd5860', 'type:feature': '#437ed1' };
+function isMode(value: unknown): value is ColourMode { return value === 'off' || value === 'status' || value === 'priority' || value === 'labels' || value === 'type' || value === 'assignee'; }
 function readPreferences(key: string): ColourPreferences {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
-    if (!value || typeof value !== 'object' || !('mode' in value) || !isMode(value.mode) || !('overrides' in value) || !value.overrides || typeof value.overrides !== 'object') return emptyPreferences;
+    if (!value || typeof value !== 'object' || !('mode' in value) || !('overrides' in value) || !value.overrides || typeof value.overrides !== 'object') return emptyPreferences;
+    const mode = value.mode === 'assignment' ? 'assignee' : value.mode;
+    if (!isMode(mode)) return emptyPreferences;
     const overrides: Record<string, string> = {};
     for (const [name, colour] of Object.entries(value.overrides)) if (typeof colour === 'string' && /^#[0-9a-f]{6}$/i.test(colour)) overrides[name] = colour;
-    return { mode: value.mode, overrides };
+    return { mode, overrides };
   } catch { return emptyPreferences; }
 }
 export function CardColourProvider({ children, preferenceKey }: { children: ReactNode; preferenceKey: string | undefined }) {
@@ -68,14 +70,14 @@ function projectValue(item: ItemMetadata, planning: PlanningSelection | undefine
   return item.context?.projects.find((project) => project.id === planning?.projectId)?.fields.find((field) => field.id === planning?.[role])?.value;
 }
 function categoryValues(item: ItemMetadata, planning: PlanningSelection | undefined) {
-  return { assignment: item.assignees.length ? 'Assigned' : 'Unassigned', status: projectValue(item, planning, 'status') || itemStateLabel(item), priority: projectValue(item, planning, 'priority') || 'No priority', type: itemType(item) };
+  return { status: projectValue(item, planning, 'status') || itemStateLabel(item), priority: projectValue(item, planning, 'priority') || 'No priority', type: itemType(item) };
 }
 interface CardStyle extends CSSProperties { '--card-accent'?: string; '--card-stripes'?: string; '--badge-accent'?: string }
 export function badgeStyle(colour: string): CardStyle { return { '--badge-accent': colour }; }
 export function useCardColours(item: ItemMetadata | null, manual: TLDefaultColorStyle) {
   const { preferences } = useContext(ColourContext);
   const planning = useContext(PlanningContext);
-  const values = item ? categoryValues(item, planning) : { assignment: 'Unavailable', status: 'Unavailable', priority: 'No priority', type: 'Issue' };
+  const values = item ? categoryValues(item, planning) : { status: 'Unavailable', priority: 'No priority', type: 'Issue' };
   const label = (value: string) => colourFor(preferences, 'label', value);
   const status = colourFor(preferences, 'status', item ? itemStateLabel(item) : 'Unavailable');
   const type = colourFor(preferences, 'type', values.type);
@@ -98,10 +100,10 @@ function modeCategory(mode: Exclude<ColourMode, 'off'>): Category { return mode 
 export function CardColourControl() {
   const { preferences, update, persistent } = useContext(ColourContext);
   const trigger = useRef<HTMLButtonElement>(null);
-  const select = useRef<HTMLSelectElement>(null);
+  const dismissButton = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
   const control = useRef<HTMLDivElement>(null);
-  const { isOpen, toggle, close, dismiss } = useWorkspacePanel('colours', { trigger, initialFocus: select });
+  const { isOpen, toggle, close, dismiss } = useWorkspacePanel('colours', { trigger, initialFocus: dismissButton });
   usePanelClearance(panel, isOpen);
   useEffect(() => {
     if (!isOpen) return;
@@ -113,11 +115,18 @@ export function CardColourControl() {
   }, [isOpen, close]);
   const selected = colourModes.find(({ value }) => value === preferences.mode);
   return <div ref={control} className="card-colour-control" data-native-ui="card-colours" onPointerDown={(event) => event.stopPropagation()}>
-    <button ref={trigger} type="button" aria-expanded={isOpen} aria-controls="card-colour-panel" onClick={toggle}><span>Colour by: {selected?.label}</span><Icon name="chevronDown" /></button>
+    <fieldset className="card-colour-modes">
+      <legend>Colour by</legend>
+      <div className="card-colour-segments">{colourModes.map(({ value, label }) => <label key={value}>
+        <input type="radio" name="card-colour-mode" value={value} checked={preferences.mode === value} onChange={() => update({ ...preferences, mode: value })} />
+        <span>{label}</span>
+      </label>)}</div>
+    </fieldset>
+    <button ref={trigger} type="button" aria-expanded={isOpen} aria-controls="card-colour-panel" onClick={toggle}>Colours<Icon name="chevronDown" /></button>
+    <div className="colour-storage-status" role="status">{!persistent && !isOpen && <p className="colour-help">Colours apply for this visit. Allow browser storage to keep these settings.</p>}</div>
     {isOpen && <section ref={panel} id="card-colour-panel" className="workspace-floating-panel card-colour-panel" aria-label="Card colours">
-      <div className="incoming-heading"><h2>Card colours</h2><button type="button" data-native-dismiss aria-label="Close Card colours" onClick={dismiss}><Icon name="close" /></button></div>
+      <div className="incoming-heading"><h2>{preferences.mode === 'off' ? 'Card colours' : `${selected?.label} colours`}</h2><button ref={dismissButton} type="button" data-native-dismiss aria-label="Close Card colours" onClick={dismiss}><Icon name="close" /></button></div>
       <div className="workspace-panel-body">
-        <label className="colour-mode-field">Colour by<select ref={select} value={preferences.mode} onChange={(event) => { const mode = event.currentTarget.value; if (isMode(mode)) update({ ...preferences, mode }); }}>{colourModes.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
         {preferences.mode === 'off' ? <p className="colour-help">Cards use their saved colours. Choose a mode to colour them by their GitHub data.</p> : <CategoryColourSettings category={modeCategory(preferences.mode)} />}
         <div role="status">{!persistent && <p className="colour-help">Colours apply for this visit. Allow browser storage to keep these settings.</p>}</div>
       </div>
@@ -131,15 +140,15 @@ function CategoryColourSettings({ category }: { category: Category }) {
   const items = [...metadata.values()].flatMap((state) => state.status === 'ready' ? [state.item] : []);
   const standardValues: Partial<Record<Category, string[]>> = {
     status: ['Open', 'Closed', 'Merged', 'Cancelled', 'Draft'],
-    assignment: ['Assigned', 'Unassigned'], assignee: ['Unassigned'], type: ['Issue', 'Pull request', 'Feature', 'Bug'],
+    assignee: ['Unassigned'], type: ['Issue', 'Pull request', 'Feature', 'Bug'],
   };
   const values = [...new Set([
     ...(standardValues[category] ?? []),
     ...items.flatMap((item) => category === 'label' ? [...item.labels] : category === 'assignee' ? assigneeValues(item) : [categoryValues(item, planning)[category]]),
   ])].sort((a, b) => a.localeCompare(b));
   const help = category === 'status' ? 'Uses project status when set, otherwise Open, Closed, Merged or Draft. Issues closed as not planned show as Cancelled.'
-      : category === 'assignee' ? 'Each person has a consistent colour. Multiple assignees share a split strip. Unassigned defaults to white.'
-        : category === 'assignment' ? 'Unassigned cards default to white.'
+      : category === 'priority' ? 'Uses the project priority field chosen in Settings. Cards without one show as No priority.'
+        : category === 'assignee' ? 'Each person has a consistent colour. Multiple assignees share a split strip. Unassigned defaults to white.'
           : category === 'label' ? 'Cards with multiple labels use a split strip.' : null;
   return <fieldset className="card-colour-settings"><legend>Colour key</legend>
     {help && <p className="colour-help">{help}</p>}

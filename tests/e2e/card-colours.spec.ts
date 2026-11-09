@@ -34,23 +34,22 @@ test('saved card colours return after temporary status, priority and split-label
   await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Delivery' });
   await page.getByRole('button', { name: 'Close Settings' }).click();
   await openColours(page);
-  const colourModes = page.getByRole('combobox', { name: 'Colour by', exact: true });
-  await colourModes.selectOption('status');
+  await selectColourMode(page, 'Status');
   await page.getByLabel('In progress colour', { exact: true }).fill('#abcdef');
   await expect(card).toHaveAttribute('data-colour-by', 'status');
   await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).backgroundImage)).not.toBe(original);
-  await colourModes.selectOption('priority');
+  await selectColourMode(page, 'Priority');
   await expect(card).toHaveAttribute('data-colour-by', 'priority');
   await expect(page.getByLabel('High colour')).toBeVisible();
-  await colourModes.selectOption('labels');
+  await selectColourMode(page, 'Labels');
   await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).getPropertyValue('--card-stripes'))).toContain('12.5%');
-  await colourModes.selectOption('status');
+  await selectColourMode(page, 'Status');
   await page.getByLabel('Open colour', { exact: true }).fill('#123456');
   await expect(page.locator('.workspace-card-heading .card-category').filter({ hasText: /^Open$/ }).first()).toHaveCSS('border-inline-start-color', 'rgb(18, 52, 86)');
-  await colourModes.selectOption('type');
+  await selectColourMode(page, 'Type');
   await expect(page.getByLabel('Feature colour')).toBeVisible();
   await expect(page.getByLabel('Bug colour')).toBeVisible();
-  await colourModes.selectOption('off');
+  await selectColourMode(page, 'Off');
   await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).backgroundImage)).toBe(original);
   await page.getByRole('button', { name: 'Close Card colours' }).click();
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
@@ -66,19 +65,19 @@ test('saved card colours return after temporary status, priority and split-label
   for (const theme of ['light', 'dark']) {
     await selectTheme(page, theme);
     await openColours(page);
-    await colourModes.selectOption('status');
+    await selectColourMode(page, 'Status');
     await page.screenshot({ path: testInfo.outputPath(`card-colours-${theme}.png`) });
     await page.getByRole('button', { name: 'Close Card colours' }).click();
   }
   await page.setViewportSize({ width: 320, height: 740 });
   await openColours(page);
-  await colourModes.selectOption('labels');
+  await selectColourMode(page, 'Labels');
   await page.locator('.category-colour-list input').first().focus();
   await expect(page.locator('.category-colour-list input').first()).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('card-colours-narrow.png') });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-  await colourModes.selectOption('status');
+  await selectColourMode(page, 'Status');
   await page.getByLabel('Open colour', { exact: true }).focus();
   await page.screenshot({ path: testInfo.outputPath('colour-menu-enlarged.png') });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
@@ -87,31 +86,34 @@ test('saved card colours return after temporary status, priority and split-label
 
 });
 
-test('colour controls open beside Colour by, persist and return keyboard focus', async ({ page }) => {
+test('the switcher supports arrow keys and persists, while Colours returns keyboard focus', async ({ page }) => {
   await signIn(page);
   await page.getByLabel('Board name', { exact: true }).fill('Keyboard colours');
   await page.getByRole('button', { name: 'Create board', exact: true }).click();
-  const trigger = page.getByRole('button', { name: /^Colour by:/ });
-  await trigger.focus();
+  const modes = page.getByRole('group', { name: 'Colour by', exact: true });
+  await modes.getByRole('radio', { name: 'Off', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(modes.getByRole('radio', { name: 'Status', exact: true })).toBeChecked();
+  await page.keyboard.press('ArrowRight');
+  await expect(modes.getByRole('radio', { name: 'Priority', exact: true })).toBeChecked();
+  await page.keyboard.press('Tab');
+  const trigger = page.getByRole('button', { name: 'Colours', exact: true });
+  await expect(trigger).toBeFocused();
   await page.keyboard.press('Enter');
-  const mode = page.getByRole('combobox', { name: 'Colour by', exact: true });
-  await expect(mode).toBeFocused();
-  await mode.selectOption('priority');
+  await expect(page.getByRole('button', { name: 'Close Card colours' })).toBeFocused();
   await expect(page.getByText('No values on these cards yet.')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(trigger).toBeFocused();
   await expect(page.getByRole('region', { name: 'Card colours', exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(trigger).toHaveText('Colour by: Priority');
+  await expect(modes.getByRole('radio', { name: 'Priority', exact: true })).toBeChecked();
   await trigger.click();
-  await expect(mode).toHaveValue('priority');
-  await mode.selectOption('status');
+  await selectColourMode(page, 'Status');
   await expect(page.getByLabel('Cancelled colour')).toBeVisible();
   await openSettings(page);
   await expect(page.getByRole('region', { name: 'Card colours', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Cancelled colour')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close Settings' }).click();
-  await trigger.click();
   await page.evaluate(() => {
     // Keep the receiver of each storage call when simulating a colour-preference quota failure.
     // oxlint-disable-next-line typescript/unbound-method
@@ -121,15 +123,22 @@ test('colour controls open beside Colour by, persist and return keyboard focus',
       original.call(this, key, value);
     };
   });
-  await mode.selectOption('assignment');
-  await expect(trigger).toHaveText('Colour by: Assigned / unassigned');
-  await expect(page.getByRole('region', { name: 'Card colours', exact: true }).getByRole('status')).toContainText('Allow browser storage');
+  await selectColourMode(page, 'Assignee');
+  await expect(page.getByRole('status').filter({ hasText: 'Colours apply for this visit.' })).toContainText('Allow browser storage');
 });
 
 async function openColours(page: Page) {
   if (await page.getByRole('region', { name: 'Card colours', exact: true }).isVisible()) return;
   await openWorkspaceMenu(page);
-  await page.getByRole('button', { name: /^Colour by:/ }).click();
+  await page.getByRole('button', { name: 'Colours', exact: true }).click();
+}
+
+async function selectColourMode(page: Page, name: string) {
+  const radio = page.getByRole('radio', { name, exact: true });
+  const paletteWasOpen = await page.getByRole('region', { name: 'Card colours', exact: true }).isVisible();
+  if (!await radio.isVisible()) await openWorkspaceMenu(page);
+  await radio.check();
+  if (paletteWasOpen) await openColours(page);
 }
 
 test('assignment colours distinguish people, keep unassigned white, and reset only the active category', async ({ page }) => {
@@ -149,12 +158,11 @@ test('assignment colours distinguish people, keep unassigned white, and reset on
   const card = (number: number) => page.locator('.workspace-card').filter({ has: page.locator('.workspace-card-heading strong').filter({ hasText: new RegExp(`#${number}$`) }) });
   const accent = (number: number) => card(number).evaluate((element) => element.style.getPropertyValue('--card-accent'));
   await openColours(page);
-  const mode = page.getByRole('combobox', { name: 'Colour by', exact: true });
-  await mode.selectOption('assignment');
-  await expect.poll(() => accent(5)).toBe('#ffffff');
+  await selectColourMode(page, 'Priority');
+  await expect(page.getByText('Uses the project priority field chosen in Settings. Cards without one show as No priority.')).toBeVisible();
+  await expect.poll(() => accent(1)).toBe('#87929e');
+  await selectColourMode(page, 'Assignee');
   await expect(card(5).locator('footer')).toContainText('Unassigned');
-  await expect.poll(() => accent(1)).toBe(await accent(2));
-  await mode.selectOption('assignee');
   await expect.poll(() => accent(5)).toBe('#ffffff');
   await expect.poll(() => accent(2)).not.toBe(await accent(3));
   await expect.poll(() => card(1).evaluate((element) => element.style.getPropertyValue('--card-stripes'))).toContain('50%');
@@ -162,17 +170,17 @@ test('assignment colours distinguish people, keep unassigned white, and reset on
   await expect.poll(() => accent(1)).toBe('#123456');
   await expect.poll(() => accent(2)).toBe('#123456');
   await page.getByLabel('Unassigned colour').fill('#eeeeee');
-  await mode.selectOption('status');
+  await selectColourMode(page, 'Status');
   await page.getByLabel('Open colour', { exact: true }).fill('#345678');
   await expect.poll(() => accent(1)).toBe('#345678');
   await expect(card(5).locator('.workspace-card-heading')).toContainText('Cancelled');
   await page.getByLabel('Cancelled colour').fill('#234567');
   await expect.poll(() => accent(5)).toBe('#234567');
-  await mode.selectOption('assignee');
+  await selectColourMode(page, 'Assignee');
   await page.getByRole('button', { name: 'Reset these colours' }).click();
   await expect.poll(() => accent(5)).toBe('#ffffff');
   await expect.poll(() => accent(2)).not.toBe('#123456');
-  await mode.selectOption('status');
+  await selectColourMode(page, 'Status');
   await expect.poll(() => accent(1)).toBe('#345678');
   await page.getByRole('button', { name: 'Close Card colours' }).click();
   await openSettings(page);
@@ -184,15 +192,43 @@ test('assignment colours distinguish people, keep unassigned white, and reset on
   await expect.poll(() => accent(1)).toBe('#345678');
   await page.getByRole('button', { name: 'Close Settings' }).click();
   await openColours(page);
-  await mode.selectOption('assignee');
+  await selectColourMode(page, 'Assignee');
   await page.getByLabel('@alice colour', { exact: true }).fill('#123456');
   await expect(page.locator('.board-save')).toHaveAttribute('data-save-state', 'saved');
   await page.reload();
-  await expect(page.getByRole('button', { name: /^Colour by:/ })).toHaveText('Colour by: Assignee');
+  await expect(page.getByRole('radio', { name: 'Assignee', exact: true })).toBeChecked();
   await expect.poll(() => accent(2)).toBe('#123456');
   await expect.poll(() => accent(5)).toBe('#ffffff');
   await openColours(page);
   await card(1).getByRole('button', { name: 'Card details', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Card colours', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Card details', exact: true })).toBeVisible();
+});
+
+test('colour modes change with one click while palette editing stays optional', async ({ page }) => {
+  await signIn(page);
+  await page.getByLabel('Board name', { exact: true }).fill('One-click colours');
+  await page.getByRole('button', { name: 'Create board', exact: true }).click();
+  const modes = page.getByRole('group', { name: 'Colour by', exact: true });
+  const palette = page.getByRole('region', { name: 'Card colours', exact: true });
+  await expect(modes.getByRole('radio')).toHaveCount(6);
+  const trigger = page.getByRole('button', { name: 'Colours', exact: true });
+  const initialX = await trigger.evaluate((element) => element.getBoundingClientRect().x);
+  for (const name of ['Status', 'Priority', 'Labels', 'Type', 'Assignee', 'Off']) {
+    await modes.getByRole('radio', { name, exact: true }).click();
+    await expect(modes.getByRole('radio', { name, exact: true })).toBeChecked();
+    await expect(palette).toHaveCount(0);
+    expect(await trigger.evaluate((element) => element.getBoundingClientRect().x)).toBe(initialX);
+  }
+  await modes.getByRole('radio', { name: 'Status', exact: true }).click();
+  await page.getByRole('button', { name: 'Colours', exact: true }).click();
+  await expect(page.getByLabel('Open colour', { exact: true })).toBeVisible();
+  await modes.getByRole('radio', { name: 'Assignee', exact: true }).click();
+  await expect(palette).toBeVisible();
+  await expect(page.getByLabel('Unassigned colour', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Open colour', { exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 960, height: 800 });
+  const switcherTop = await modes.evaluate((element) => element.getBoundingClientRect().top);
+  const triggerTop = await trigger.evaluate((element) => element.getBoundingClientRect().top);
+  expect(Math.abs(switcherTop - triggerTop)).toBeLessThan(8);
 });
