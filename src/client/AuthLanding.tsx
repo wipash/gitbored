@@ -96,7 +96,7 @@ export function AuthLanding() {
   }, []);
   const [signInError] = useState(() => {
     const error = new URLSearchParams(window.location.search).get('authError');
-    if (error) window.history.replaceState(null, '', '/');
+    if (error) window.history.replaceState(null, '', window.location.pathname);
     return error ? signInErrors[error] ?? signInErrors['provider'] : '';
   });
 
@@ -141,8 +141,9 @@ export function AuthLanding() {
   }
 
   const signedIn = view.status === 'signed-in';
+  const sharedViewing = /^\/share\/[A-Za-z0-9_-]{43}$/.test(pathname);
   useEffect(() => {
-    if (signedIn && !/^\/boards(?:\/|$)/.test(pathname) && pathname !== '/') {
+    if (signedIn && !/^\/boards(?:\/|$)/.test(pathname) && !/^\/share\/[A-Za-z0-9_-]{43}$/.test(pathname) && pathname !== '/') {
       void navigate('/boards', true);
     }
   }, [pathname, signedIn]);
@@ -155,7 +156,7 @@ export function AuthLanding() {
   if (view.status === 'loading') return <main className="app-loading" aria-label="GitBored" aria-busy="true"><p role="status">Loading…</p></main>;
 
   const accountFeedback = <div className="account-feedback">
-        {view.status === 'signed-in' && view.authorization === 'reauthorize' && <p className="auth-error" role="alert">Your GitHub authorization ended. <a href="/api/auth/github">Reconnect GitHub</a> to resume GitHub access.</p>}
+        {view.status === 'signed-in' && view.authorization === 'reauthorize' && !sharedViewing && <p className="auth-error" role="alert">Your GitHub authorization ended. <a href="/api/auth/github">Reconnect GitHub</a> to resume GitHub access.</p>}
         {busy && <p role="status">Signing out…</p>}
         {actionError && <p className="auth-error" role="alert">{actionError}</p>}
         {view.status === 'signed-in' && <p className="auth-status account-context-status" ref={accountStatus} tabIndex={-1} role="status">{accountCheck.message}</p>}
@@ -166,7 +167,7 @@ export function AuthLanding() {
         </section>}
   </div>;
 
-  const needsAttention = view.status === 'signed-in' && (accountCheck.status === 'blocked' || view.authorization === 'reauthorize' || !!actionError);
+  const needsAttention = view.status === 'signed-in' && (accountCheck.status === 'blocked' || !sharedViewing && view.authorization === 'reauthorize' || !!actionError);
   const accountSettings = <div className="account-settings">
     {accountFeedback}
     <div className="theme-control"><label htmlFor="theme">Theme</label>
@@ -212,7 +213,7 @@ export function AuthLanding() {
           </>}
           {view.status === 'signed-out' && <>
             <p>{view.reason === 'expired' ? 'Your session ended. Sign in again to continue.' : 'Sign in with your GitHub account to get started.'}</p>
-            <a className="auth-primary" href="/api/auth/github">Sign in with GitHub</a>
+            <a className="auth-primary" href={/^\/share\/[A-Za-z0-9_-]{43}$/.test(pathname) ? `/api/auth/github?returnTo=${encodeURIComponent(pathname)}` : "/api/auth/github"}>Sign in with GitHub</a>
           </>}
         </section>
         </section>}

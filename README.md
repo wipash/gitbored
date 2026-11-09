@@ -5,7 +5,7 @@ A local-first issue-board application in development. Product scope lives in
 
 The runnable application provides GitHub App user sign-in, encrypted server-side
 credentials, private sessions, authorized GitHub source browsing, owner-only durable
-boards and persistent light/dark/system theme selection. Boards mount the native
+boards, optional read-only sharing with live viewing, and persistent light/dark/system theme selection. Boards mount the native
 canvas for notes, drawings, frames, groups and deliberately placed references.
 Each board has a durable **Incoming** tray for selected sources and unplaced work.
 The separate `/runtime` diagnostic checks Fastify and real SQLite.
@@ -72,7 +72,8 @@ the current editor open with retry/copy controls. Sign-out, theme and account re
 opens workspace actions and panels sit above the drawing toolbar. Retired page
 URLs return to Boards.
 
-Each board is private to its creator. Deletion requires the exact board name and
+Each board is private to its creator by default. Owners can enable read-only
+sharing using **Share**, as described below. Deletion requires the exact board name and
 does not change GitHub. The desktop workspace has light/dark themes, a faint dot
 grid, compact floating controls, and independently scrollable non-modal panels.
 
@@ -168,6 +169,55 @@ SQLite remains authoritative across browser reloads and real server restarts.
 Use the consistent database backup and separate key recovery procedure below;
 never copy just the live main SQLite file or replace an active data directory.
 
+
+## Read-only sharing and live viewing
+
+**Share** gives each board one stable link with three access settings:
+**Private**, **Anyone with the link**, or **Specific people**. Everyone signs in
+with GitHub. For specific people, enter GitHub usernames of people who have
+already signed in to this GitBored deployment; permissions bind to their account
+identity, not a changeable username. Save sharing before copying the link.
+The owner can preview a private link. Link visitors do not gain permanent
+membership: changing the setting immediately changes their access.
+
+Sharing deliberately publishes the saved board's issue details, including private
+repository details, to its permitted viewers. Viewers do not need repository
+access. The publication contains only placed cards, their displayed details and
+project context, and the board's saved annotations and planning selection.
+Credentials, unrelated caches and the Incoming tray are not shared. The ordinary
+owner-only board/source/reference APIs remain private.
+
+Published details are durable board content, separate from the expiring GitHub
+cache. They update when the owner fetches fresh details or saves the board and
+survive cache eviction and provider authorization loss. Removing the last
+placement removes that card's published details. Disabling sharing stops access;
+it cannot recall content someone has already viewed. The viewer shows publication
+time, not a claim that GitHub was checked at that instant.
+
+Viewers can pan, zoom, Find and inspect cards. **Live saved changes** delivers
+successful owner saves after the normal save delay, including title and issue
+metadata updates. **Pause live updates** freezes the current view; permission
+checks continue while paused. Resume catches up with the latest saved board.
+Unsaved or conflicting owner edits are not broadcast. Viewers have no edit,
+Incoming, recovery, copy or administration controls and publish no cursors.
+
+The existing SQLite canvas/Incoming save remains the sole durable authority.
+`@tldraw/sync` and `@tldraw/sync-core` (both pinned to the canvas SDK version)
+provide the read-only WebSocket projection; `@fastify/websocket` supplies the
+transport. Rooms rebuild from SQLite after restart and are released when unused.
+There is no second persistent document writer or asset-storage service.
+Single-use, short-lived connection tickets require a valid application session
+and CSRF verification. Socket reads and writes check access; policy changes,
+board deletion, logout and session expiry disconnect viewers. Shared pages send
+`Referrer-Policy: no-referrer`; deployment access logs should omit share tokens
+and WebSocket query strings.
+
+The HTTPS reverse proxy must forward WebSocket upgrades for
+`/api/shared/:token/connect` on the same application origin. For nginx, the
+application location needs `proxy_http_version 1.1`, `proxy_set_header Upgrade
+$http_upgrade` and the corresponding `Connection` upgrade mapping. Keep one
+application process per data directory. Existing database backups include sharing
+settings, grants and publications. The development Vite proxy supports WebSockets.
 
 ## Incoming discovery and placement
 

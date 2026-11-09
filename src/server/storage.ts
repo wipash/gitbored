@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { emptyIncoming } from '../shared/incoming.js';
 import { initializeSources } from './sources.js';
+import { initializeSharing } from './sharing.js';
 
 export async function openStorage(directory: string): Promise<DatabaseSync> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -38,9 +39,13 @@ export async function openStorage(directory: string): Promise<DatabaseSync> {
       CREATE INDEX IF NOT EXISTS boards_owner_updated ON boards(owner_id, updated_at DESC);
     `);
     initializeSources(database);
+    initializeSharing(database);
     // SQLite retains this canonical default for existing rows and future inserts.
     if (!database.prepare('PRAGMA table_info(boards)').all().some((column) => column['name'] === 'incoming')) {
       database.exec(`ALTER TABLE boards ADD COLUMN incoming TEXT NOT NULL DEFAULT '${JSON.stringify(emptyIncoming())}'`);
+    }
+    if (!database.prepare('PRAGMA table_info(oauth_states)').all().some((column) => column['name'] === 'return_to')) {
+      database.exec("ALTER TABLE oauth_states ADD COLUMN return_to TEXT NOT NULL DEFAULT '/'");
     }
     return database;
   } catch (cause) {

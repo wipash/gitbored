@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { SessionResponse, SessionUser } from '../shared/session.js';
 import { isSessionUser } from '../shared/session.js';
+import { shareReturnPathPattern } from '../shared/sharing.js';
 import type { AuthConfig } from './config.js';
 import type { GitHubCacheInvalidation } from './cacheInvalidation.js';
 
@@ -369,8 +370,10 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
     const state = secret();
     const binding = secret();
     const verifier = secret();
-    database.prepare('INSERT INTO oauth_states VALUES (?, ?, ?, ?)').run(hash(state), hash(binding),
-      encrypt(verifier, hash(state)), Date.now() + 600_000);
+    const requestedReturn = new URL(request.url, config.origin).searchParams.get('returnTo');
+    const returnTo = requestedReturn && shareReturnPathPattern.test(requestedReturn) ? requestedReturn : '/';
+    database.prepare('INSERT INTO oauth_states (state_hash,binding_hash,verifier,expires,return_to) VALUES (?, ?, ?, ?, ?)').run(hash(state), hash(binding),
+      encrypt(verifier, hash(state)), Date.now() + 600_000, returnTo);
     setCookie(reply, config, stateCookie, binding, 600);
     const url = new URL('/login/oauth/authorize', config.providerOrigin);
     url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: `${config.origin}/api/auth/callback`,
@@ -385,11 +388,13 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
     const binding = cookie(request, stateCookie);
     setCookie(reply, config, stateCookie, '', 0);
     const row = state && binding ? database.prepare(`DELETE FROM oauth_states
-      WHERE state_hash = ? AND binding_hash = ? AND expires > ? RETURNING verifier`).get(hash(state), hash(binding), Date.now()) : undefined;
+      WHERE state_hash = ? AND binding_hash = ? AND expires > ? RETURNING verifier,return_to`).get(hash(state), hash(binding), Date.now()) : undefined;
     if (!row || typeof row['verifier'] !== 'string' || !state) return reply.redirect('/?authError=state');
-    if (query.has('error')) return reply.redirect('/?authError=denied');
+    const returnTo = typeof row['return_to'] === 'string' && shareReturnPathPattern.test(row['return_to']) ? row['return_to'] : '/';
+    const failurePath = (code: string) => `${returnTo}?authError=${code}`;
+    if (query.has('error')) return reply.redirect(failurePath('denied'));
     const code = query.get('code');
-    if (!code || code.length > 2048) return reply.redirect('/?authError=state');
+    if (!code || code.length > 2048) return reply.redirect(failurePath('state'));
     try {
       const tokens = await exchange(new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret,
         code, redirect_uri: `${config.origin}/api/auth/callback`, code_verifier: decrypt(row['verifier'], hash(state)) }));
@@ -411,13 +416,13 @@ export function registerAuthentication(app: FastifyInstance, database: DatabaseS
       // Keep the state-cookie deletion alongside the new session cookie.
       reply.header('Set-Cookie', [ `${stateCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${config.secure ? '; Secure' : ''}`,
         `${sessionCookie}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${config.sessionSeconds}${config.secure ? '; Secure' : ''}` ]);
-      return reply.redirect('/');
+      return reply.redirect(returnTo);
     } catch (error) {
       if (error instanceof ProviderAuthenticationError) {
         // Log once at the callback boundary, never the request, provider payload or raw exception.
         console.warn(JSON.stringify({ event: 'github_oauth_callback_failed', ...error.diagnostic }));
       }
-      if (error instanceof AuthenticationError) return reply.redirect(`/?authError=${error.code === 'reauthorize' ? 'denied' : 'provider'}`);
+      if (error instanceof AuthenticationError) return reply.redirect(failurePath(error.code === 'reauthorize' ? 'denied' : 'provider'));
       throw error;
     }
   });

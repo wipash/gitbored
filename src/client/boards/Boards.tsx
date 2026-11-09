@@ -1,4 +1,6 @@
 import { Icon } from '../Icon';
+import { SharePanel } from './SharePanel';
+import { SharedBoardViewer } from './SharedBoardViewer';
 import { BoardMetadataContext, loadCachedBoardMetadata, type BoardMetadataBootstrap } from './cachedBoardMetadata';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { T } from '@tldraw/validate';
@@ -20,6 +22,8 @@ function copyTitle(title: string): string {
 export function Boards({ session, ready, reconcileAccount, theme }: { session: Session; ready: boolean; reconcileAccount: (expectedUserId: string) => Promise<void>; theme: 'light' | 'dark' }) {
   const authority = useMemo(() => ({ session, ready, reconcile: () => reconcileAccount(session.user.id) }), [session, ready, reconcileAccount]);
   const pathname = usePathname();
+  const sharedToken = /^\/share\/([A-Za-z0-9_-]{43})$/.exec(pathname)?.[1];
+  if (sharedToken) return <SharedBoardViewer key={`${authority.session.user.id}:${sharedToken}`} token={sharedToken} authority={authority} theme={theme} />;
   const boardId = /^\/boards\/([^/]+)\/?$/.exec(pathname)?.[1];
   return boardId ? <LoadBoard key={`${authority.session.user.id}:${boardId}`} id={boardId} authority={authority} theme={theme} /> : <BoardList authority={authority} restore={pathname === '/'} />;
 }
@@ -315,6 +319,7 @@ function EditableBoard({ board, authority, theme, coordinator, source }: { board
   }
   return <BoardSettingsContext value={<div className="board-settings"><form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void rename(); }}><label htmlFor="board-name">Board name</label><div className="board-form-row"><input id="board-name" name="title" required maxLength={160} value={name} onChange={(event) => setName(event.currentTarget.value)} /><button aria-disabled={busy || !authority.ready} type="submit">Rename board</button></div><p role="status">{busy ? 'Updating board…' : ''}</p></form><button className="board-danger" type="button" aria-disabled={busy || !authority.ready} onClick={() => { if (!busy && authority.ready) dialog.current?.showModal(); }}>Delete board</button></div>}><section className="board-editor" aria-labelledby="board-heading">
     <div className="board-heading" data-native-ui="board-controls"><h1 id="board-heading" ref={heading} tabIndex={-1} title={title}>{title}</h1><button ref={boardsTrigger} type="button" aria-expanded={switcher} aria-controls={switcher ? 'board-switcher' : undefined} onClick={boards.toggle}>Boards ▾</button>
+      <SharePanel boardId={board.id} authority={authority} />
       {switcher && <div id="board-switcher" className="board-switcher" data-native-ui="board-controls"><BoardList authority={authority} restore={false} embedded closeRef={boardsDismiss} onClose={boards.dismiss} /></div>}
     </div>
     <div className="board-notices" data-native-ui="save"><div className="board-save" data-save-state={save.status} data-save-attention={Boolean(save.retryable || retryInProgress || save.status === 'conflict')}><p ref={saveStatus} role="status" tabIndex={-1}>{save.message}</p>{(save.retryable || retryInProgress) && <button ref={retryButton} type="button" aria-disabled={retryInProgress || !authority.ready} aria-busy={retryInProgress} onClick={() => { void retrySave(); }}>Retry save</button>}{(save.status === 'conflict' || save.retryable) && <div className="board-form-row"><button type="button" aria-disabled={copyBusy || !authority.ready} aria-busy={copyBusy} onClick={() => { void saveCopy(); }}>{copyBusy ? 'Saving copy…' : 'Save as copy'}</button><button className="board-danger" type="button" aria-disabled={copyBusy || !authority.ready} onClick={reloadServer}>Reload server version</button></div>}</div>

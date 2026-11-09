@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { extname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import fastifyStatic from '@fastify/static';
+import fastifyWebsocket from '@fastify/websocket';
 import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { RuntimeConfig } from './config.js';
@@ -13,6 +14,8 @@ import { registerBoards } from './boards.js';
 import { RepositoryAccessError } from './sourceProvider.js';
 import { requestErrorDetails } from './requestDiagnostics.js';
 import { createGitHubCacheInvalidation } from './cacheInvalidation.js';
+import { registerSharing } from './sharing.js';
+import { registerSharedSync } from './sharedSync.js';
 
 function isClientNavigation(request: FastifyRequest): boolean {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -40,6 +43,12 @@ function isClientNavigation(request: FastifyRequest): boolean {
 
 export async function createApp(config: RuntimeConfig, database: DatabaseSync): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, requestIdHeader: false, genReqId: () => randomUUID() });
+  await app.register(fastifyWebsocket, { options: { maxPayload: 1024 * 1024 },
+    errorHandler: (_error, socket) => { socket.close(1011, 'Connection failed'); } });
+  app.addHook('onRequest', (_request, reply, done) => {
+    reply.header('Referrer-Policy', 'no-referrer');
+    done();
+  });
   let draining = false;
   app.addHook('preClose', (done) => { draining = true; done(); });
   app.addHook('onResponse', (_request, _reply, done) => {
@@ -82,8 +91,10 @@ export async function createApp(config: RuntimeConfig, database: DatabaseSync): 
 
   const cacheInvalidation = createGitHubCacheInvalidation(database);
   app.decorate('authentication', registerAuthentication(app, database, config.auth, cacheInvalidation));
-  registerSources(app, database, config.auth, cacheInvalidation);
-  registerBoards(app, database);
+  const sharing = registerSharing(app, database);
+  registerSources(app, database, config.auth, cacheInvalidation, sharing);
+  registerBoards(app, database, sharing);
+  registerSharedSync(app, config.auth, sharing);
 
   app.setNotFoundHandler((request, reply) => {
     if (config.serveClient && isClientNavigation(request)) {

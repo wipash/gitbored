@@ -1,0 +1,20 @@
+.share-panel { position: fixed; z-index: 700; inset-block-start: 62px; inset-inline-start: 12px; inline-size: min(400px, calc(100vw - 24px)); max-block-size: calc(100dvh - 150px); overflow: auto; overscroll-behavior: contain; scroll-padding-block-start: 5rem; padding: 12px; border: 1px solid var(--color-border-control); border-radius: 4px; background: var(--color-bg-surface); color: var(--color-text-primary); text-align: start; }
+.share-body, .share-body form, .share-link { display: grid; gap: 8px; min-inline-size: 0; }
+.share-body { gap: 16px; }
+.share-body p { margin: 0; max-inline-size: 65ch; line-height: 1.5; overflow-wrap: anywhere; }
+.share-body p:empty { display: none; }
+.share-body button { justify-self: start; }
+.share-body input, .share-body select { inline-size: 100%; min-inline-size: 0; }
+.share-panel h2 { font-size: 1rem; }
+.share-panel > .incoming-heading { position: sticky; inset-block-start: -12px; z-index: 1; margin-block-start: -12px; padding-block: 12px; background: var(--color-bg-surface); }
+.desktop-app .shared-viewer .shared-heading { max-inline-size: min(40vw, 460px); flex-wrap: wrap; }
+.desktop-app .shared-viewer .shared-heading h1 { flex-basis: 100%; max-inline-size: none; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.shared-heading a { padding: 4px; }
+.shared-status { position: fixed; z-index: 500; inset-inline-start: 12px; inset-block-end: 70px; max-inline-size: min(460px, calc(100vw - 24px)); padding: 8px 12px; border: 1px solid var(--color-border-subtle); border-radius: 4px; background: var(--color-bg-surface); display: grid; gap: 6px; font-variant-numeric: tabular-nums; }
+.shared-status p { margin: 0; overflow-wrap: anywhere; }
+.shared-status button { justify-self: start; }
+@media (max-width: 900px) {
+  .desktop-app .shared-viewer .shared-heading { max-inline-size: calc(100vw - 24px); }
+  .desktop-app .share-body input, .desktop-app .share-body select { font-size: 1rem; }
+  .share-panel { inset-block-start: 98px; max-block-size: calc(100dvh - 180px); }
+}
