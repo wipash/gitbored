@@ -1,0 +1,58 @@
+name: Browser checks (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Production browser tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:ee15712262f017b8157421b212b12099146645f44b1bc5c0514cbbe6a229b1d0
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Verify runtime and install locked dependencies
+        run: |
+          test "$(node --version)" = "v$(cat .node-version)"
+          test "$(pnpm exec node --version)" = "v$(cat .node-version)"
+          pnpm install --frozen-lockfile
+      - name: Build and test production application
+        env:
+          CONTROLLED_SESSION_SECONDS: '900'
+        run: pnpm test:e2e
+      # This runner has one checkout and no concurrent builds. Reuse its build;
+      # each Playwright invocation still starts a fresh server and database.
+      - name: Verify session expiry
+        env:
+          CONTROLLED_SESSION_SECONDS: '10'
+        run: pnpm exec playwright test tests/e2e/auth.spec.ts --grep 'an expired server session'
+      - name: Verify missing GitHub configuration
+        env:
+          E2E_AUTH_MODE: unconfigured
+        run: pnpm exec playwright test tests/e2e/auth-unconfigured.spec.ts
+      - name: Preserve failure traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-test-failures
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

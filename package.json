@@ -17,7 +17,8 @@
     "test:e2e": "tsx scripts/locked.ts e2e",
     "test:workspace": "tsx --test tests/nativeDocument.test.ts",
     "test:server": "tsx --test tests/oauthDiagnostics.test.ts tests/serverLogging.test.ts tests/runtimeConfig.test.ts tests/cachedBoardMetadata.test.ts",
-    "gate": "pnpm lint && pnpm type-check && pnpm test:workspace && pnpm test:server && pnpm test:e2e"
+    "check": "pnpm lint && pnpm type-check && pnpm test:workspace && pnpm test:server",
+    "gate": "pnpm check && pnpm test:e2e"
   },
   "dependencies": {
     "@fastify/static": "10.1.10",
