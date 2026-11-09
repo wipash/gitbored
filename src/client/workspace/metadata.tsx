@@ -17,5 +17,6 @@ export function describeItem(kind: 'issue' | 'pull-request', state: ItemMetadata
 
 export function itemStateLabel(item: ItemMetadata): string {
   const state = item.state === 'unknown' ? item.sourceState : item.state;
+  if (item.kind === 'issue' && state === 'closed' && item.stateReason?.toLowerCase() === 'not_planned') return 'Cancelled';
   return state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Status unavailable';
 }

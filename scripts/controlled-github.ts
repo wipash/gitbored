@@ -19,7 +19,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
   const tokens = new Map<string, { id: number; revoked: boolean; expires: number }>();
   const refreshTokens = new Map<string, number>();
   const defaults = (): ProviderSettings => ({ login: 'alice', expiresIn: 28800, refreshExpiresIn: 15897600,
-    fail: false, deny: false, rateLimit: false, sourceCardLayout: false, sourceMode: 'normal', sourceFailurePage: 0, sourceDetailFailure: false, pullUnavailable: false, sourceDelayMs: 0, sourceDenied: false, sourceSsoRequired: false, sourceSsoPath: '', sourceDenialStatus: 403, sourceThrottlePage: 0, sourceRepositoryRenamed: false });
+    fail: false, deny: false, rateLimit: false, sourceCardLayout: false, sourceColourCases: false, sourceMode: 'normal', sourceFailurePage: 0, sourceDetailFailure: false, pullUnavailable: false, sourceDelayMs: 0, sourceDenied: false, sourceSsoRequired: false, sourceSsoPath: '', sourceDenialStatus: 403, sourceThrottlePage: 0, sourceRepositoryRenamed: false });
   let settings = defaults();
   let refreshCount = 0;
   let exchangeCount = 0;
@@ -41,6 +41,7 @@ export async function startControlledGitHub(port = 3101, configure?: (app: Fasti
     if ('rateLimit' in value && typeof value.rateLimit === 'boolean') settings.rateLimit = value.rateLimit;
     if ('revoke' in value) for (const token of tokens.values()) token.revoked = true;
     if ('revokeRefresh' in value) refreshTokens.clear();
+    if ('sourceColourCases' in value && typeof value.sourceColourCases === 'boolean') settings.sourceColourCases = value.sourceColourCases;
     if ('sourceCardLayout' in value && typeof value.sourceCardLayout === 'boolean') settings.sourceCardLayout = value.sourceCardLayout;
     if ('sourceMode' in value && (value.sourceMode === 'normal' || value.sourceMode === 'empty' || value.sourceMode === 'malformed' || value.sourceMode === 'untrusted-link')) settings.sourceMode = value.sourceMode;
     if ('sourceDetailFailure' in value && typeof value.sourceDetailFailure === 'boolean') settings.sourceDetailFailure = value.sourceDetailFailure;

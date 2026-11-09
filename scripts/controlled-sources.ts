@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 export interface ControlledSourceSettings {
   sourceCardLayout: boolean;
+  sourceColourCases: boolean;
   sourceMode: 'normal' | 'empty' | 'malformed' | 'untrusted-link';
   sourceFailurePage: number;
   sourceDetailFailure: boolean;
@@ -71,10 +72,10 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     node_id: `${pull ? 'PR' : 'I'}_${owner}_${canonicalName(owner, name)}_${number}`, number, title: settings().sourceCardLayout && number === 2 ? 'Tighten card spacing' : settings().sourceCardLayout && number === 5 ? 'Keep board titles readable with project fields and labels visible' : number === 1
       ? `${owner} ${name === 'outside' ? 'public' : 'private'} issue — ${'Long complete title, with accessible full details. '.repeat(8)}` : `${pull ? 'Pull request' : 'Issue'} ${number}`,
     body: settings().sourceCardLayout && number === 5 ? '' : `## ${pull ? 'Pull request summary' : 'Issue description'}\n\nInvestigate the board loading behaviour.\n\n- [ ] Preserve cached content\n- [x] Keep the canvas usable\n\n**Expected result:** preserve \`cached_body\`. Read the [issue guide](https://example.com/guide). [Unsafe link](javascript:alert(1))\n\n| Field | Value |\n| --- | --- |\n| State | Ready |\n\n\`\`\`text\n${'long_identifier_'.repeat(12)}\n\`\`\`\n\n<script>window.fixtureBodyExecuted = true</script>\n<img src=x onerror="window.fixtureBodyExecuted = true">`,
-    state: pull ? 'closed' : 'open', state_reason: pull ? null : 'reopened',
+    state: pull || (settings().sourceColourCases && number === 5) ? 'closed' : 'open', state_reason: settings().sourceColourCases && number === 5 ? 'not_planned' : pull ? null : 'reopened',
     ...(pull ? { pull_request: { url: `http://127.0.0.1:${port}/repos/${owner}/${name}/pulls/${number}` } } : {}),
     labels: settings().sourceCardLayout && number === 2 ? [] : Array.from({ length: 8 }, (_, index) => ({ name: settings().sourceCardLayout && index === 0 && (number === 1 || number === 5) ? number === 1 ? 'bug' : 'enhancement' : `Label ${index + 1} ${'extended '.repeat(4)}` })),
-    assignees: [{ login: owner }, { login: 'another-contributor' }], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', closed_at: pull ? '2026-11-01T00:00:00Z' : null });
+    assignees: settings().sourceColourCases && number === 5 ? [] : settings().sourceColourCases && number === 2 ? [{ login: owner }] : settings().sourceColourCases && number === 3 ? [{ login: 'another-contributor' }] : [{ login: owner }, { login: 'another-contributor' }], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', closed_at: pull ? '2026-11-01T00:00:00Z' : null });
   const raw = (reply: FastifyReply, value: unknown) => reply.type('application/json').send(JSON.stringify(value).replace(/"raw:([0-9]+)"/g, '$1'));
   function authorize(request: FastifyRequest, reply: FastifyReply, checkDenial = true): number | null {
     const user = identity(request);
@@ -105,7 +106,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     const field = (id: string, name: string) => ({ id, name, dataType: id === 'F_weight' ? 'NUMBER' : id === 'F_sprint' ? 'ITERATION' : 'SINGLE_SELECT' });
     return { data: { node: {
       projectItems: connection([{ project: { id: `P_${owner}`, title: 'Delivery', fields: connection([field('F_status', 'Status'), field('F_weight', 'Estimate'), field('F_priority', 'Priority'), field('F_sprint', 'Iteration')]) },
-        fieldValues: connection(settings().sourceCardLayout && number === 2 ? [] : [{ field: { id: 'F_status' }, name: number === 1 ? 'In progress' : 'Ready' }, { field: { id: 'F_weight' }, number: number === 1 ? 0 : 3 }, { field: { id: 'F_priority' }, name: 'High' }, { field: { id: 'F_sprint' }, title: 'Sprint 12' }]) }]),
+        fieldValues: connection((settings().sourceCardLayout && number === 2) || (settings().sourceColourCases && number === 5) ? [] : [{ field: { id: 'F_status' }, name: number === 1 ? 'In progress' : 'Ready' }, { field: { id: 'F_weight' }, number: number === 1 ? 0 : 3 }, { field: { id: 'F_priority' }, name: 'High' }, { field: { id: 'F_sprint' }, title: 'Sprint 12' }]) }]),
       timelineItems: connection(number === 1 ? [{ source: { url: `https://github.com/${owner}/${name}/pull/2` } }] : []),
       ...(match[1] === 'PR' ? { closingIssuesReferences: connection([{ url: `https://github.com/${owner}/${name}/issues/1` }]) } : {}),
     } } };

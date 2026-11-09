@@ -10,7 +10,7 @@ import { RelatedLinks, relatedTo, type ConnectionMode } from './RelatedLinks';
 import { AccountSettingsContext, BoardSettingsContext, useWorkspacePanel, useWorkspacePanels } from './panels';
 import { useNativeUiKeys } from './useNativeUiKeys';
 import { useCardDetailPosition } from './useCardDetailPosition';
-import { CardColourControl, CardColourSettings } from './cardColours';
+import { CardColourControl } from './cardColours';
 import { usePanelClearance } from './usePanelClearance';
 import { useCardDetails } from './cardDetails';
 import { CardMarkdown } from './CardMarkdown';
@@ -84,7 +84,6 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
         <label>Hide closed<input type="checkbox" checked={hideClosed} onChange={(event) => { onHideClosedChange(event.currentTarget.checked); editor.selectNone(); }} /></label>
         <label>Connections<select aria-label="Connections" value={mode} onChange={(event) => { const value = event.currentTarget.value; if (value !== 'off' && value !== 'selected' && value !== 'all') return; setMode(value); try { localStorage.setItem(`gitbored.connections.${preferenceKey}`, value); } catch { /* Session preference still applies. */ } }}><option value="off">Off</option><option value="selected">Selected</option><option value="all">All</option></select></label>
         </fieldset>
-        <CardColourSettings />
         <fieldset className="settings-group"><legend>Project fields</legend>
         <label>Project<select aria-label="Project" value={planning?.projectId ?? ''} onChange={(event) => {
           const selected = projects.find((entry) => entry.id === event.currentTarget.value);
