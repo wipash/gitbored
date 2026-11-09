@@ -88,10 +88,10 @@ jobs:
       - name: Verify HTTP, non-root runtime, persistence and backup
         run: bash scripts/smoke-container.sh gitbored:ci
       - name: Export tested image
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')
         run: docker save gitbored:ci | gzip > image.tar.gz
       - name: Pass tested image to publisher
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: container-image
@@ -102,7 +102,7 @@ jobs:
   publish:
     name: Publish to GHCR
     needs: container
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -125,6 +125,8 @@ jobs:
           image="ghcr.io/${REPOSITORY,,}"
           gzip -dc image.tar.gz | docker load
           docker tag gitbored:ci "$image:sha-$REVISION"
-          docker tag gitbored:ci "$image:latest"
           docker push "$image:sha-$REVISION"
-          docker push "$image:latest"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            docker tag gitbored:ci "$image:latest"
+            docker push "$image:latest"
+          fi
