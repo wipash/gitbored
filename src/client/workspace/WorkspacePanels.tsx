@@ -105,7 +105,11 @@ export function WorkspacePanels({ children, metadata, planning, onPlanningChange
           return <li key={shape.id}><button type="button" onClick={() => {
             editor.complete(); editor.setCurrentTool('select'); editor.select(shape.id);
             const bounds = editor.getShapePageBounds(shape.id);
-            if (bounds) editor.centerOnPoint(bounds.center, { animation: { duration: 0 } });
+            if (bounds) {
+              // Resize observation is throttled; Find must use the current canvas dimensions.
+              editor.updateViewportScreenBounds(editor.getContainer());
+              editor.centerOnPoint(bounds.center, { animation: { duration: 0 } });
+            }
             setDetailId(null); find.close();
             editor.getContainer().focus({ preventScroll: true }); editor.focus();
           }}><Icon name={shape.props.kind === 'issue' ? 'issue' : 'pr'} /><span>{value?.status === 'ready' ? <><small>{value.item.locator.repository} #{value.item.locator.number} · {itemStateLabel(value.item)}</small><span className="find-result-title">{value.item.title}</span></> : 'Unavailable card'}</span></button></li>;

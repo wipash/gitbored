@@ -36,6 +36,29 @@ async function openBoardWithCards(page: Page) {
   await page.locator('.workspace-find-results button').filter({ hasText: 'project #1' }).click();
 }
 
+test('Find uses the current canvas size when selection coincides with a resize', async ({ page }) => {
+  await openBoardWithCards(page);
+  await page.getByRole('button', { name: /^Find/ }).click();
+  const result = page.locator('.workspace-find-results button').filter({ hasText: 'project #1' });
+  // Reproduce selection in the same browser turn as a layout change, before resize observers run.
+  await result.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) throw new Error('Missing Find result button');
+    const canvas = document.querySelector<HTMLElement>('.tl-container');
+    if (!canvas) throw new Error('Missing canvas');
+    canvas.style.width = '390px';
+    button.click();
+  });
+  const card = page.locator('.workspace-card').filter({ hasText: 'Issue #1' });
+  await expect.poll(async () => {
+    const canvas = await page.locator('.tl-container').boundingBox();
+    const bounds = await card.boundingBox();
+    if (!canvas || !bounds) throw new Error('Missing visible canvas or card');
+    return Math.abs(bounds.x + bounds.width / 2 - canvas.x - canvas.width / 2);
+  }).toBeLessThan(2);
+  await card.getByRole('button', { name: 'Card details', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Card details', exact: true })).toBeVisible();
+});
+
 test('details render markdown safely, follow zoom and pan, and return focus', async ({ page }, testInfo) => {
   await openBoardWithCards(page);
   const firstCard = page.locator('.workspace-card').filter({ hasText: 'Issue #1' });
