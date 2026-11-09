@@ -22,6 +22,7 @@ Apply these rules when implementing or reviewing GitBored. This is a small local
 - **Review:** authenticate early, validate untrusted route/body data, and authorize the specific resource before protected reads or writes. Validate GitHub responses and imported documents rather than trusting a TypeScript assertion. Construct supported requests; do not proxy arbitrary URLs.
 - **Review:** degraded, stale, unavailable, empty, and successful states are different. Optional data may fail without destroying the page, but an authorization failure must never become a successful-looking fallback or expose another account's cache. Ignore stale in-flight results after account changes.
 - **Review:** scope private board operations, references, caches, and recovery state to the current user. Keep ordinary ownership checks and safe persistence; avoid speculative security platforms, HA machinery, or layers intended for an imagined large deployment.
+- **Review:** explicit read-only sharing may publish the owner's displayed issue details, including private-repository details, as durable board content. Limit publication to placed references and authorize it through the board's sharing policy. This exception never opens ordinary user-scoped caches, credentials, reference endpoints or owner mutations. Keep publication metadata outside the native document and broadcast only committed saves.
 
 ## Interface work
 

@@ -10,6 +10,7 @@ import { validateIncoming } from '../shared/incoming.js';
 import { AuthenticationError, type AuthenticatedUser } from './auth.js';
 import type { AuthConfig } from './config.js';
 import type { GitHubCacheInvalidation } from './cacheInvalidation.js';
+import type { SharingService } from './sharing.js';
 import { boolean, id, installation, invalidProvider, list, number, object, opaque, owner, parseItemUrl, providerRead, repository, text } from './sourceProvider.js';
 
 import { itemContextQuery, normalizeContext } from './itemContext.js';
@@ -97,7 +98,7 @@ function normalize(value: unknown, repo: RepositorySource, detail?: unknown): No
     closedAt: row['closed_at'] === null ? null : timestamp(row['closed_at']) };
   return { item: { metadata }, nodeId, issueId, pullId, kind };
 }
-export function registerSources(app: FastifyInstance, database: DatabaseSync, config: AuthConfig | null, cacheInvalidation: GitHubCacheInvalidation): void {
+export function registerSources(app: FastifyInstance, database: DatabaseSync, config: AuthConfig | null, cacheInvalidation: GitHubCacheInvalidation, sharing: SharingService): void {
   // A short freshness window avoids repeated GitHub reads without treating cached
   // authorization as permanent. Explicit Refresh bypasses this cache.
   const cacheLifetime = 15 * 60 * 1000;
@@ -113,11 +114,14 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       return undefined;
     }
   }
-  function cache(ctx: SourceContext, key: string, value: unknown): void {
-    if (ctx.cacheGeneration !== cacheInvalidation.generation(ctx.user.id)) return;
+  function cache(ctx: SourceContext, key: string, value: unknown, broadcast = true): string[] {
+    if (ctx.cacheGeneration !== cacheInvalidation.generation(ctx.user.id)) return [];
     database.prepare(`INSERT INTO github_cache (user_id, cache_key, payload, fetched_at) VALUES (?, ?, ?, ?)
       ON CONFLICT(user_id, cache_key) DO UPDATE SET payload=excluded.payload, fetched_at=excluded.fetched_at`)
       .run(ctx.user.id, key, JSON.stringify(value), Date.now());
+    const changed = sharing.cacheUpdated(ctx.user.id, key);
+    if (broadcast) for (const boardId of changed) sharing.notify(boardId);
+    return changed;
   }
   function rememberRepository(userId: string, repo: RepositorySource): void {
     database.prepare(`INSERT INTO recent_repositories VALUES (?, ?, ?)
@@ -261,12 +265,13 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     database.exec('BEGIN IMMEDIATE');
     try {
       const items = normalized.map((item) => persistItem(ctx.user.id, repo, item));
-      for (const item of items) cache(ctx, `reference:${item.reference.id}`, item);
+      const changed = new Set(items.flatMap((item) => cache(ctx, `reference:${item.reference.id}`, item, false)));
       persistRepository(ctx.user.id, repo, result.nextPage);
       rememberRepository(ctx.user.id, repo);
       const response = { items, repository: repo, page, nextPage: result.nextPage };
       cache(ctx, cacheKey, response);
       database.exec('COMMIT');
+      for (const boardId of changed) sharing.notify(boardId);
       return response;
     } catch (error) { database.exec('ROLLBACK'); throw error; }
   });

@@ -5,10 +5,11 @@ import { boardCopyValidator, boardNameValidator, boardSaveValidator, boardSummar
 import { emptyIncoming, validateIncoming } from '../shared/incoming.js';
 import { getDocumentReferenceIds, MAX_NATIVE_DOCUMENT_BYTES, validateNativeDocument, type NativeDocument } from '../shared/nativeDocument.js';
 import { AuthenticationError } from './auth.js';
+import type { SharingService } from './sharing.js';
 
 const columns = 'id, title, revision, created_at AS createdAt, updated_at AS updatedAt';
 const MAX_INCOMING_BYTES = 12 * 1024 * 1024;
-export function registerBoards(app: FastifyInstance, database: DatabaseSync): void {
+export function registerBoards(app: FastifyInstance, database: DatabaseSync, sharing: SharingService): void {
   function ownedRevision(id: string, owner: string): number {
     const row = database.prepare('SELECT revision FROM boards WHERE id = ? AND owner_id = ?').get(id, owner);
     if (!row) throw new AuthenticationError(404, 'board_not_found', 'This board is unavailable. Return to Boards.');
@@ -88,7 +89,13 @@ export function registerBoards(app: FastifyInstance, database: DatabaseSync): vo
     ownedRevision(request.params.id, user.id);
     let title: string;
     try { title = boardNameValidator.validate(request.body).title.trim(); } catch { return invalid(); }
-    database.prepare('UPDATE boards SET title = ?, updated_at = ? WHERE id = ? AND owner_id = ?').run(title, Date.now(), request.params.id, user.id);
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      database.prepare('UPDATE boards SET title = ?, updated_at = ? WHERE id = ? AND owner_id = ?').run(title, Date.now(), request.params.id, user.id);
+      sharing.publish(request.params.id);
+      database.exec('COMMIT');
+    } catch (error) { database.exec('ROLLBACK'); throw error; }
+    sharing.notify(request.params.id);
     return load(request.params.id, user.id);
   });
   app.put<{ Params: { id: string } }>('/api/boards/:id', { bodyLimit: MAX_NATIVE_DOCUMENT_BYTES + MAX_INCOMING_BYTES + 1024 }, (request, reply) => {
@@ -104,15 +111,24 @@ export function registerBoards(app: FastifyInstance, database: DatabaseSync): vo
       incoming = incomingState(save.incoming, user.id, document);
     } catch { return invalid(); }
     // One conditional SQLite UPDATE is the compare-and-swap, including across processes.
-    const result = database.prepare(`UPDATE boards SET document = ?, incoming = ?, revision = revision + 1, updated_at = ?
-      WHERE id = ? AND owner_id = ? AND revision = ?`).run(JSON.stringify(document), JSON.stringify(incoming), Date.now(), request.params.id, user.id, save.expectedRevision);
-    if (result.changes === 0) return reply.code(409).send({ error: 'revision_conflict', revision: ownedRevision(request.params.id, user.id) });
+    database.exec('BEGIN IMMEDIATE');
+    let saved = false;
+    try {
+      const result = database.prepare(`UPDATE boards SET document = ?, incoming = ?, revision = revision + 1, updated_at = ?
+        WHERE id = ? AND owner_id = ? AND revision = ?`).run(JSON.stringify(document), JSON.stringify(incoming), Date.now(), request.params.id, user.id, save.expectedRevision);
+      saved = result.changes !== 0;
+      if (saved) sharing.publish(request.params.id);
+      database.exec('COMMIT');
+    } catch (error) { database.exec('ROLLBACK'); throw error; }
+    if (!saved) return reply.code(409).send({ error: 'revision_conflict', revision: ownedRevision(request.params.id, user.id) });
+    sharing.notify(request.params.id);
     return { revision: save.expectedRevision + 1 };
   });
   app.delete<{ Params: { id: string } }>('/api/boards/:id', (request, reply) => {
     const user = app.authentication.requireUserContext(request);
     const result = database.prepare('DELETE FROM boards WHERE id = ? AND owner_id = ?').run(request.params.id, user.id);
     if (result.changes === 0) throw new AuthenticationError(404, 'board_not_found', 'This board is unavailable. Return to Boards.');
+    sharing.notify(request.params.id);
     return reply.code(204).send();
   });
 }

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
-type Panel = 'incoming' | 'repositories' | 'find' | 'settings' | 'boards' | 'menu' | 'colours';
+type Panel = 'incoming' | 'repositories' | 'find' | 'settings' | 'boards' | 'menu' | 'colours' | 'share';
 interface WorkspacePanels {
   active: Panel | null;
   open: (panel: Panel) => void;

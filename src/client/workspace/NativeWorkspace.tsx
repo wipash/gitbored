@@ -7,7 +7,7 @@ import {
   StylePanelSizePicker, StylePanelFontPicker, StylePanelTextAlignPicker, StylePanelLabelAlignPicker,
   StylePanelGeoShapePicker, StylePanelArrowKindPicker, StylePanelArrowheadPicker, StylePanelSplinePicker,
   useStylePanelContext, type TLUiStylePanelProps,
-  useEditor, useValue, type Editor, type TLShape, type TLComponents, type TLUiOverrides, type TLUiEventHandler, type TLUserStore,
+  useEditor, useValue, type Editor, type TLShape, type TLComponents, type TLUiOverrides, type TLUiEventHandler, type TLUserStore, type TLStore,
 } from 'tldraw';
 import type { WorkspaceMetadata } from '../../shared/items';
 import { ITEM_CARD_TYPE, nativeSchema, validateNativeDocument, validateNativeShape, type NativeDocument } from '../../shared/nativeDocument';
@@ -24,6 +24,8 @@ import { CardDetailsProvider } from './cardDetails';
 import { useStylePanelClearance } from './useStylePanelClearance';
 
 export interface NativeWorkspaceProps {
+  store?: TLStore;
+  readOnly?: boolean;
   planning?: PlanningSelection | undefined;
   preferenceKey?: string;
   onPlanningChange?: (selection: PlanningSelection) => void;
@@ -52,6 +54,9 @@ const workspaceUsers: TLUserStore = {
   currentUser: computed('workspace annotation attribution', () => null),
 };
 function WorkspaceToolbar() {
+  const editor = useEditor();
+  const readonly = useValue('Read only tools', () => editor.getIsReadonly(), [editor]);
+  if (readonly) return <DefaultToolbar><SelectToolbarItem /><HandToolbarItem /></DefaultToolbar>;
   return <DefaultToolbar><SelectToolbarItem /><HandToolbarItem /><DrawToolbarItem /><EraserToolbarItem /><ArrowToolbarItem /><TextToolbarItem /><NoteToolbarItem /><RectangleToolbarItem /><FrameToolbarItem /><HighlightToolbarItem /></DefaultToolbar>;
 }
 function WorkspaceNavigationPanel() {
@@ -72,7 +77,7 @@ function WorkspaceOpacity() {
 function WorkspaceStylePanel(props: TLUiStylePanelProps) {
   const editor = useEditor();
   useStylePanelClearance(props.isMobile ?? false);
-  const visible = useValue('Drawing styles visible', () => editor.getCurrentToolId() !== 'select' || editor.getSelectedShapes().length > 0, [editor]);
+  const visible = useValue('Drawing styles visible', () => !editor.getIsReadonly() && (editor.getCurrentToolId() !== 'select' || editor.getSelectedShapes().length > 0), [editor]);
   if (!visible) return null;
   return <DefaultStylePanel {...props}><StylePanelColorPicker /><WorkspaceOpacity /><StylePanelFillPicker /><StylePanelDashPicker /><StylePanelSizePicker /><StylePanelFontPicker /><StylePanelTextAlignPicker /><StylePanelLabelAlignPicker /><StylePanelGeoShapePicker /><StylePanelArrowKindPicker /><StylePanelArrowheadPicker /><StylePanelSplinePicker /></DefaultStylePanel>;
 }
@@ -111,7 +116,7 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   const latest = useRef(props);
   useLayoutEffect(() => { latest.current = props; });
   const editorRef = useRef<Editor | null>(null);
-  const [store] = useState(() => createTLStore({ schema: nativeSchema, users: workspaceUsers,
+  const [localStore] = useState(() => createTLStore({ schema: nativeSchema, users: workspaceUsers,
     ...(props.initialDocument ? { snapshot: validateNativeDocument(props.initialDocument).snapshot } : {}),
   }));
   useEffect(() => { editorRef.current?.user.updateUserPreferences({ colorScheme: props.theme }); }, [props.theme]);
@@ -125,6 +130,7 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   }, []);
   const mount = useCallback((editor: Editor) => {
     editorRef.current = editor;
+    editor.updateInstanceState({ isReadonly: latest.current.readOnly ?? false });
     editor.user.updateUserPreferences({ colorScheme: latest.current.theme });
     editor.registerExternalAssetHandler('file', null);
     editor.registerExternalAssetHandler('url', null);
@@ -149,6 +155,7 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
       });
     });
     const stop = editor.store.listen(({ changes }) => {
+      if (latest.current.readOnly) return;
       const records = [...Object.values(changes.added), ...Object.values(changes.removed), ...Object.values(changes.updated).map((pair) => pair[1])];
       if (records.some((record) => ['document', 'page', 'shape', 'binding'].includes(record.typeName))) {
         latest.current.onDocumentChange(captureNativeDocument(editor));
@@ -159,8 +166,8 @@ export function NativeWorkspace(props: NativeWorkspaceProps) {
   }, []);
   return <section className="native-workspace" data-theme={props.theme} aria-label="Issue canvas">
     <MetadataContext value={props.metadata}><PlanningContext value={props.planning}><CardColourProvider preferenceKey={props.preferenceKey}>
-      <CardDetailsProvider><Tldraw {...(licenseKey ? { licenseKey } : {})} getShapeVisibility={getShapeVisibility} store={store} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
-        <WorkspacePanels hideClosed={hideClosed} onHideClosedChange={setHideClosed} metadata={props.metadata} planning={props.planning} onPlanningChange={props.onPlanningChange} preferenceKey={props.preferenceKey}>{props.children}</WorkspacePanels>
+      <CardDetailsProvider><Tldraw {...(licenseKey ? { licenseKey } : {})} getShapeVisibility={getShapeVisibility} store={props.store ?? localStore} shapeUtils={shapeUtils} components={components} overrides={overrides} onMount={mount} options={workspaceOptions} onUiEvent={handleUiEvent}>
+        <WorkspacePanels readOnly={props.readOnly ?? false} hideClosed={hideClosed} onHideClosedChange={setHideClosed} metadata={props.metadata} planning={props.planning} onPlanningChange={props.onPlanningChange} preferenceKey={props.preferenceKey}>{props.children}</WorkspacePanels>
         <div className="workspace-status" role="status">{pasteError}</div>
       </Tldraw></CardDetailsProvider>
     </CardColourProvider></PlanningContext></MetadataContext>
