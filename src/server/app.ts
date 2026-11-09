@@ -40,6 +40,14 @@ function isClientNavigation(request: FastifyRequest): boolean {
 
 export async function createApp(config: RuntimeConfig, database: DatabaseSync): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, requestIdHeader: false, genReqId: () => randomUUID() });
+  let draining = false;
+  app.addHook('preClose', (done) => { draining = true; done(); });
+  app.addHook('onResponse', (_request, _reply, done) => {
+    // server.close() only reaps connections already idle when shutdown starts.
+    // Reap again after active responses finish, without cutting those responses short.
+    if (draining) app.server.closeIdleConnections();
+    done();
+  });
 
   app.setErrorHandler((error: unknown, request, reply) => {
     const status = error instanceof AuthenticationError ? error.statusCode
