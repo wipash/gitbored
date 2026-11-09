@@ -17,11 +17,11 @@
 .desktop-app .board-heading { align-items: center; padding: 4px 4px 4px 12px; min-height: 44px; }
 .desktop-app .board-heading > button { border-color: transparent; }
 .desktop-app :is(.workspace-tools, .standalone-settings) > button,
-.desktop-app :is(.workspace-view, .workspace-find, .incoming-controls) > button {
+.desktop-app :is(.workspace-view, .workspace-find, .incoming-controls, .card-colour-control) > button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 36px; padding: 6px 10px; font-size: .8125rem;
 }
-.desktop-app :is(.workspace-view, .workspace-find, .incoming-controls, .board-heading, .standalone-settings) > button[aria-expanded='true'],
+.desktop-app :is(.workspace-view, .workspace-find, .incoming-controls, .card-colour-control, .board-heading, .standalone-settings) > button[aria-expanded='true'],
 .desktop-app .mobile-workspace-menu[aria-expanded='true'] {
   background: var(--color-bg-subtle); box-shadow: inset 0 0 0 1px var(--color-border-control);
 }
@@ -43,8 +43,7 @@
 .desktop-app :is(.settings-group, .card-colour-settings) > legend {
   padding: 0; margin-block-end: 12px; font-size: .875rem; font-weight: 650;
 }
-.desktop-app .settings-group > label,
-.desktop-app .view-settings .card-colour-settings > label {
+.desktop-app .settings-group > label {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); align-items: center; gap: 12px;
   margin-block: 8px; text-transform: none;
 }
@@ -154,19 +153,16 @@
   .desktop-app .mobile-menu-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-inline-start: 8px; }
   .desktop-app .mobile-menu-heading h2 { font-size: .875rem; }
   .desktop-app .mobile-menu-dismiss { border-color: transparent; }
-  .desktop-app .workspace-tools :is(.workspace-view, .workspace-find, .incoming-controls) > button { justify-content: start; min-height: 44px; padding: 10px 12px; font-size: .875rem; }
+  .desktop-app .workspace-tools :is(.workspace-view, .workspace-find, .incoming-controls, .card-colour-control) > button { justify-content: start; min-height: 44px; padding: 10px 12px; font-size: .875rem; }
   .desktop-app :is(.workspace-floating-panel, .incoming-panel, .board-source-panel, .board-switcher) { font-size: .875rem; }
   .desktop-app .workspace-tools .workspace-settings-panel { width: auto; }
   .desktop-app :is(.workspace-panel-body, .repository-connector, .board-switcher) :is(button, select, input:not([type='checkbox']):not([type='range']):not([type='color'])) { min-height: 44px; }
   .desktop-app :is(.workspace-panel-body, .repository-connector, .board-switcher) :is(input:not([type='checkbox']):not([type='color']), select) { font-size: max(1rem, 16px); }
   .desktop-app .incoming-heading button { min-height: 44px; min-width: 44px; }
-  .desktop-app .settings-group > label, .desktop-app .view-settings .card-colour-settings > label { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .desktop-app .settings-group > label { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .desktop-app .settings-group > label:has(input[type='checkbox']) { grid-template-columns: minmax(0, 1fr) auto; }
   .desktop-app .card-colour-control { grid-column: 1 / -1; }
-  .desktop-app .workspace-tools[data-menu-open='false'] .card-colour-control { display: none; }
-  .desktop-app .card-colour-modes { display: block; }
-  .desktop-app .card-colour-modes legend { float: none; padding: 8px; }
-  .desktop-app .card-colour-segments span { min-block-size: 44px; display: grid; place-items: center; padding-inline: 5px; }
+  .desktop-app .workspace-tools[data-menu-open='false'] .card-colour-control > button { display: none; }
 }
 @media (hover: hover) {
   .desktop-app button.board-primary:not(:disabled):not([aria-disabled='true']):hover {

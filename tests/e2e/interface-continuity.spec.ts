@@ -72,13 +72,19 @@ for (const viewport of [{ width: 1440, height: 1000, text: '100%' }, { width: 32
       await selectTheme(page, theme);
       const screenshot = async (name: string) => { await page.screenshot({ path: testInfo.outputPath(`${viewport.width}-${theme}-${name}.png`) }); };
       await openWorkspaceMenu(page);
-      const modes = page.getByRole('group', { name: 'Colour by', exact: true });
-      for (const radio of await modes.getByRole('radio').all()) {
-        await reachable(radio);
-        const colours = await renderedColours(radio.locator('+ span'));
-        expect(contrast(colours.foreground, colours.background)).toBeGreaterThanOrEqual(4.5);
-      }
+      const colourTrigger = page.getByRole('button', { name: /^Colour by:/ });
+      await reachable(colourTrigger);
       await screenshot('menu');
+      await colourTrigger.click();
+      const mode = page.getByRole('combobox', { name: 'Colour by', exact: true });
+      await reachable(mode);
+      const colours = await renderedColours(mode);
+      expect(contrast(colours.foreground, colours.background)).toBeGreaterThanOrEqual(4.5);
+      await mode.selectOption('assignee');
+      await reachable(page.getByLabel('Unassigned colour'));
+      await screenshot('colours');
+      await page.getByRole('button', { name: 'Close Card colours' }).click();
+      await openWorkspaceMenu(page);
       await reachable(page.getByRole('button', { name: 'Settings', exact: true }));
       await openSettings(page);
       await reachable(page.getByLabel('Theme', { exact: true }));
@@ -86,7 +92,7 @@ for (const viewport of [{ width: 1440, height: 1000, text: '100%' }, { width: 32
       expect(contrast(fieldColours.foreground, fieldColours.background)).toBeGreaterThanOrEqual(4.5);
       const panelColours = await renderedColours(page.getByRole('region', { name: 'Settings', exact: true }));
       await screenshot('settings-top');
-      await reachable(page.getByLabel('Colour category', { exact: true }));
+      await reachable(page.getByLabel('Project', { exact: true }));
       await screenshot('settings-bottom');
       await reachable(page.getByRole('button', { name: 'Close Settings', exact: true }));
       await page.getByRole('button', { name: 'Close Settings', exact: true }).click();
