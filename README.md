@@ -786,33 +786,10 @@ cookie flags, successful same-origin writes, and rejection of missing/wrong
 Origin or stale/missing CSRF through real requests before exposing the service.
 An HTTP origin on a non-loopback host is rejected, not silently upgraded.
 
-## Continuous integration and container images
+## Container images
 
-The `CI` workflow runs on pull requests and pushes to `main`. Each authentication
-mode gets an isolated runner using a pinned Playwright Ubuntu image with its
-browser, fonts and system dependencies preinstalled. Keep that image's version
-and digest aligned with `@playwright/test` when upgrading. The full `pnpm gate` uses a 900-second controlled
-session, while separate browser runs exercise short-session expiry and missing
-GitHub configuration. All builds use Node from `.node-version`, pnpm from
-`package.json`, the frozen lockfile and the committed tldraw patches. Failed
-browser runs retain traces/screenshots for seven days. No real GitHub App secrets
-are needed for tests. The locked test runner accepts Playwright filters:
-
-```sh
-CONTROLLED_SESSION_SECONDS=900 pnpm gate
-CONTROLLED_SESSION_SECONDS=10 pnpm test:e2e tests/e2e/auth.spec.ts --grep 'an expired server session'
-E2E_AUTH_MODE=unconfigured pnpm test:e2e tests/e2e/auth-unconfigured.spec.ts
-```
-
-After all checks pass, CI builds a Linux amd64 image and smoke-tests HTTP access,
-built assets, signed-out access denial, its non-root user, persisted SQLite data
-across restart and a consistent backup. On `main` only, a separate job publishes
-that exact tested image to `ghcr.io/wipash/gitbored:sha-<full-commit-sha>` and
-`:latest`. Pull requests never publish. The publisher uses the workflow's
-`GITHUB_TOKEN` with `packages: write`; no personal registry token is required.
-Actions/package policies must permit that job. Package visibility is managed in
-GitHub; publishing does not make a package public automatically. A manual run on
-`main` also tests and publishes. Pin a commit tag or digest for deployment.
+Linux amd64 images are available at `ghcr.io/wipash/gitbored:sha-<full-commit-sha>`
+and `:latest`. Pin a commit tag or digest for deployment.
 
 Build and exercise the same image locally:
 
@@ -868,7 +845,7 @@ remain deployment configuration, not part of image publication.
 
 ```sh
 pnpm exec playwright install chromium
-pnpm gate
+CONTROLLED_SESSION_SECONDS=900 pnpm gate
 ```
 
 The gate runs warning-free type-aware lint, first-party import-boundary checks,

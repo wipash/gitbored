@@ -15,4 +15,5 @@ Single-context: root `GLOSSARY.md` and `architecture/decisions/`. See `.agents/d
 ### Implementation and review
 
 Before writing or reviewing code, read `docs/CODING-CONVENTIONS.md`.
+Before opening a PR, run `CONTROLLED_SESSION_SECONDS=900 pnpm gate` and complete the applicable **Local verification before handoff** checks in `docs/CODING-CONVENTIONS.md`; report any failed or blocked checks.
 Agents and subagents implementing interface features must use the `better-interface` skill before handoff.

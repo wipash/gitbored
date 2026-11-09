@@ -2,7 +2,22 @@
 
 Apply these rules when implementing or reviewing GitBored. This is a small local-first tool, not a general application framework. Prefer platform capabilities, the selected libraries, and a complete vertical slice over speculative abstractions.
 
-**Enforcement:** `pnpm lint` includes configured oxlint rules and the import-seam check; `pnpm type-check` applies the TypeScript configs. Those files are the exact automated rule set. Rules labelled **Review** below require evidence in code review, not a claim that a tool already enforces them. `pnpm gate` combines the executable checks and production application tests. Run focused checks during development and one full gate on the final integrated candidate; documentation-only changes do not require application checks.
+**Enforcement:** `pnpm lint` includes configured oxlint rules and the import-seam check; `pnpm type-check` applies the TypeScript configs. Those files are the exact automated rule set. Rules labelled **Review** below require evidence in code review, not a claim that a tool already enforces them. `pnpm check` runs lint, type checking and focused tests; `pnpm gate` adds a production build and browser tests.
+
+## Local verification before handoff
+
+Automatic CI runs `pnpm check`; browser coverage is the implementing agent's responsibility. Run focused checks during development. Before handing off application, dependency or test-runner changes, run these commands on the final integrated candidate and report their results:
+
+```sh
+pnpm exec playwright install chromium
+CONTROLLED_SESSION_SECONDS=900 pnpm gate
+CONTROLLED_SESSION_SECONDS=10 pnpm test:e2e tests/e2e/auth.spec.ts --grep 'an expired server session'
+E2E_AUTH_MODE=unconfigured pnpm test:e2e tests/e2e/auth-unconfigured.spec.ts
+```
+
+The long-session suite skips the expiry scenario, so the short-session run is required separately. Keep the local build lock: `pnpm test:e2e` protects the production build across worktrees. Report blocked or failed checks explicitly; automatic CI passing does not establish browser correctness. Documentation-only changes do not require application checks. For workflow-only changes, validate the workflows and run any changed check commands; a browser rerun is needed if its invocation or environment changes. For Dockerfile or image smoke-test changes, also build the image locally and run `scripts/smoke-container.sh` against it.
+
+The manual **Browser checks (manual)** workflow is available when a hosted browser run is useful. It uses one runner and one build for all three authentication modes. Keep its pinned Playwright image version aligned with `@playwright/test` when upgrading. Automatic image builds, smoke tests and publication run only on `main`; documentation-only pushes to `main` skip CI. A manual `CI` run can publish a commit-tagged image from any branch. Only `main` updates `latest`.
 
 ## TypeScript and modules
 
