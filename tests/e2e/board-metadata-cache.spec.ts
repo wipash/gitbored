@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createEmptyBoardDocument, validateBoard } from '../../src/shared/boards.js';
+import { readCachedBoardMetadata } from '../../src/shared/cachedMetadata.js';
 import { readSourceItem } from '../../src/shared/sources.js';
 import { applicationOrigin, controlProvider, currentSession, providerOrigin, signIn } from './auth-support.js';
 
@@ -121,4 +122,36 @@ test('another account cannot bootstrap a private board metadata cache', async ({
     await expect(bob.locator('.workspace-card')).toHaveCount(0);
     for (const item of items) await expect(bob.locator('body')).not.toContainText(item.metadata.title);
   } finally { await other.close(); }
+});
+
+test('week-old cards return in the first board response after SSO and a new sign-in', async ({ page }) => {
+  const { board, items } = await cachedBoard(page);
+  await page.goto(`/boards/${board.id}`);
+  await expect(page.locator('.workspace-card')).toHaveCount(items.length);
+  await page.goto('/boards');
+  const session = await currentSession(page.request);
+  if (session.status !== 'signed-in') throw new Error('Expected authenticated owner');
+  const headers = { 'X-CSRF-Token': session.csrfToken };
+  await controlProvider(page.request, { sourceSsoRequired: true });
+  for (const item of items) {
+    const denied = await page.request.get(`/api/references/${item.reference.id}?refresh=1`, { headers });
+    expect(denied.status()).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: 'sso_required' });
+  }
+  expect((await page.request.post(`${providerOrigin}/__runner/age-account`)).ok()).toBe(true);
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Sign in with GitHub' }).click();
+  await controlProvider(page.request, { sourceSsoRequired: false });
+  for (const target of ['issue-detail', 'issue-detail-next']) {
+    expect((await page.request.post(`${providerOrigin}/__source-gate`, { data: { action: 'arm', target } })).ok()).toBe(true);
+  }
+  const batch = page.waitForResponse(response => new URL(response.url()).pathname === `/api/boards/${board.id}/metadata`);
+  await page.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
+  const snapshot = readCachedBoardMetadata(await (await batch).json());
+  for (const [index, item] of items.entries()) {
+    expect(snapshot.items.find(entry => entry.item.reference.id === item.reference.id)).toMatchObject({
+      stale: true, item: { metadata: { title: item.metadata.title } }, context: { projects: [{ title: 'Delivery' }] },
+    });
+    await expect(page.locator(`[data-shape-id="shape:cached-${index}"]`)).toContainText(item.metadata.title);
+  }
 });

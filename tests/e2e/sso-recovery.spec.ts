@@ -68,7 +68,7 @@ test('one SSO notice preserves editing across same-account reauthorization in an
   await page.goto(`/boards/${board.id}`);
   const notice = page.getByRole('complementary', { name: 'GitHub SSO recovery' });
   await expect(notice).toHaveCount(1);
-  await expect(page.locator('.workspace-card').filter({ hasText: 'SSO required. Reconnect your organisation.' })).toHaveCount(2);
+  await expect(page.locator('.workspace-card').filter({ hasText: 'Stale metadata' })).toHaveCount(2);
   await expect(notice.locator('details')).not.toHaveAttribute('open');
   const editor = await page.locator('.tl-container').elementHandle();
   if (!editor) throw new Error('Missing native editor');
@@ -152,17 +152,22 @@ test('project-context-only SSO recovers and ordinary access denial remains unava
   const { board, headers, items } = await seed(page, 1);
   const item = items[0];
   if (!item) throw new Error('Missing seeded issue');
-  await controlProvider(page.request, { sourceSsoRequired: true, sourceSsoPath: '/graphql' });
   await page.goto(`/boards/${board.id}`);
   const card = page.locator('[data-shape-id="shape:sso-card-0"]');
   await expect(card).toContainText(item.metadata.title);
+  await expect(card.getByRole('button', { name: '1 related items' })).toBeVisible();
+  await controlProvider(page.request, { sourceSsoRequired: true, sourceSsoPath: '/graphql' });
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   const notice = page.getByRole('complementary', { name: 'GitHub SSO recovery' });
   await expect(notice).toHaveCount(1);
+  await expect(card).toContainText('Stale metadata');
+  await expect(card.getByRole('button', { name: '1 related items' })).toBeVisible();
   await notice.locator('summary').click();
   await expect(notice.getByRole('link', { name: 'Sign in to alice SSO' })).toBeVisible();
   await controlProvider(page.request, { sourceSsoRequired: false });
   await notice.getByRole('button', { name: 'Check access' }).click();
   await expect(notice).toHaveCount(0);
+  await expect(card).not.toContainText('Stale metadata');
   await openSettings(page);
   await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Delivery' });
   await expect(page.getByLabel('Project', { exact: true }).locator('option:checked')).toHaveText('Delivery');
@@ -175,7 +180,7 @@ test('project-context-only SSO recovers and ordinary access denial remains unava
 });
 
 
-test('a direct repository SSO denial redacts matching cards while native edits still save', async ({ page }) => {
+test('a direct repository SSO denial keeps cached cards readable while native edits still save', async ({ page }) => {
   const { board, items } = await seed(page);
   await page.goto(`/boards/${board.id}`);
   for (const [index, item] of items.entries()) await expect(page.locator(`[data-shape-id="shape:sso-card-${index}"]`)).toContainText(item.metadata.title);
@@ -185,8 +190,8 @@ test('a direct repository SSO denial redacts matching cards while native edits s
   await page.getByRole('searchbox', { name: 'Search repositories' }).fill('alice/project');
   const notice = page.getByRole('complementary', { name: 'GitHub SSO recovery' });
   await expect(notice).toHaveCount(1);
-  await expect(page.locator('.workspace-card').filter({ hasText: 'SSO required. Reconnect your organisation.' })).toHaveCount(2);
-  for (const [index, item] of items.entries()) await expect(page.locator(`[data-shape-id="shape:sso-card-${index}"]`)).not.toContainText(item.metadata.title);
+  await expect(page.locator('.workspace-card').filter({ hasText: 'Stale metadata' })).toHaveCount(2);
+  for (const [index, item] of items.entries()) await expect(page.locator(`[data-shape-id="shape:sso-card-${index}"]`)).toContainText(item.metadata.title);
   expect((await currentSession(page.request)).status).toBe('signed-in');
   await page.getByRole('button', { name: 'Close repositories', exact: true }).click();
   await page.locator('[data-shape-id="shape:editable-note"]').click();
@@ -203,11 +208,16 @@ test('removing the last SSO-blocked card removes its obsolete recovery notice', 
   const { board, headers, items } = await seed(page, 1);
   const item = items[0];
   if (!item) throw new Error('Missing seeded issue');
+  await controlProvider(page.request, { sourceDenied: true });
+  expect((await page.request.get(`/api/references/${item.reference.id}?refresh=1`, { headers })).status()).toBe(403);
+  await controlProvider(page.request, { sourceDenied: false });
   await controlProvider(page.request, { sourceSsoRequired: true, sourceSsoPath: '/repos/alice/project/issues/1' });
   expect((await page.request.get(`/api/references/${item.reference.id}?refresh=1`, { headers })).status()).toBe(403);
   await page.goto(`/boards/${board.id}`);
   const notice = page.getByRole('complementary', { name: 'GitHub SSO recovery' });
   await expect(notice).toHaveCount(1);
+  await expect(page.locator('.workspace-card')).toContainText('SSO required. Reconnect your organisation.');
+  await expect(page.locator('.workspace-card')).not.toContainText(item.metadata.title);
   await page.getByRole('button', { name: /^Find/ }).click();
   await page.locator('.workspace-find-results button').click();
   await page.keyboard.press('Delete');

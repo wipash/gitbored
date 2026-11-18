@@ -5,7 +5,7 @@ import { applicationOrigin, controlProvider, currentSession } from './auth-suppo
 test.skip(process.env['E2E_AUTH_MODE'] === 'unconfigured', 'Requires controlled GitHub authorization.');
 test.beforeEach(async ({ request }) => { await controlProvider(request, { reset: true }); });
 
-test('SSO denials stay distinct across GitHub reads, identify known owners and invalidate private caches', async ({ page }) => {
+test('SSO denials stay distinct across GitHub reads, identify known owners and require live access for ordinary source reads', async ({ page }) => {
   await page.goto('/api/auth/github');
   await page.getByRole('link', { name: 'Authorize Alice', exact: true }).click();
   const session = await currentSession(page.request);
@@ -40,7 +40,7 @@ test('SSO denials stay distinct across GitHub reads, identify known owners and i
     expect(await denied.text()).not.toContain('private-sso-token');
     expect(await denied.text()).not.toContain('Controlled private');
     await controlProvider(page.request, { sourceSsoPath: '' });
-    // A denial must invalidate every cached representation, including the context.
+    // Live reads must report SSO even when the board has a saved copy.
     for (const url of [pageUrl, reference, `${reference}/context`]) {
       const response = await page.request.get(url, { headers });
       expect(response.status()).toBe(403);

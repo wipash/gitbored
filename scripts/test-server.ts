@@ -68,6 +68,15 @@ const provider = await startControlledGitHub(providerPort, (app) => {
     try { database.exec('DELETE FROM github_cache'); }
     finally { database.close(); }
   });
+  app.post('/__runner/age-account', () => {
+    const database = new DatabaseSync(join(directory, 'gitbored.sqlite'));
+    try {
+      const week = 7 * 24 * 60 * 60 * 1000;
+      database.prepare('UPDATE github_cache SET fetched_at = fetched_at - ?').run(week);
+      database.prepare('UPDATE sessions SET expires = expires - ?').run(week);
+    } finally { database.close(); }
+    return { ready: true };
+  });
   // Test-process lifecycle only: no application route, database mutation or authentication bypass.
   app.post('/__runner/restart', async (request, reply) => {
     const body = request.body;
