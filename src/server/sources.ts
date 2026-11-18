@@ -19,6 +19,7 @@ interface SourceContext { request: FastifyRequest; user: AuthenticatedUser; toke
 interface SourceReadOptions {
   page?: number;
   canonicalPaginationPath?: string;
+  contextOwner?: string;
   graphql?: { query: string; variables: { id: string } };
 }
 interface NormalizedItem {
@@ -45,7 +46,7 @@ export function initializeSources(database: DatabaseSync): void {
     );
     CREATE TABLE IF NOT EXISTS github_cache (
       user_id TEXT NOT NULL REFERENCES users(id),
-      cache_key TEXT NOT NULL, payload TEXT NOT NULL, fetched_at INTEGER NOT NULL,
+      cache_key TEXT NOT NULL, payload TEXT NOT NULL, fetched_at INTEGER NOT NULL, needs_refresh INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY(user_id, cache_key)
     );
     CREATE TABLE IF NOT EXISTS recent_repositories (
@@ -53,7 +54,9 @@ export function initializeSources(database: DatabaseSync): void {
       used_at INTEGER NOT NULL, PRIMARY KEY(user_id, repository_node_id)
     );
   `);
-  if (database.prepare('PRAGMA table_info(github_cache)').all().some((column) => column['name'] === 'credential_hash')) {
+  const columns = database.prepare('PRAGMA table_info(github_cache)').all().map(column => column['name']);
+  if (!columns.includes('needs_refresh')) database.exec('ALTER TABLE github_cache ADD COLUMN needs_refresh INTEGER NOT NULL DEFAULT 0');
+  if (columns.includes('credential_hash')) {
     database.exec('ALTER TABLE github_cache DROP COLUMN credential_hash');
   }
 }
@@ -104,7 +107,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
   const cacheLifetime = 15 * 60 * 1000;
   function cached<T>(ctx: SourceContext, key: string, validate: (value: unknown) => T): T | undefined {
     if (new URL(ctx.request.url, 'http://localhost').searchParams.get('refresh') === '1') return undefined;
-    const row = database.prepare('SELECT payload FROM github_cache WHERE user_id=? AND cache_key=? AND fetched_at>?')
+    const row = database.prepare('SELECT payload FROM github_cache WHERE user_id=? AND cache_key=? AND needs_refresh=0 AND fetched_at>?')
       .get(ctx.user.id, key, Date.now() - cacheLifetime);
     if (typeof row?.['payload'] !== 'string') return undefined;
     try { return validate(JSON.parse(row['payload'])); }
@@ -114,10 +117,10 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       return undefined;
     }
   }
-  function cache(ctx: SourceContext, key: string, value: unknown, broadcast = true): string[] {
-    if (ctx.cacheGeneration !== cacheInvalidation.generation(ctx.user.id)) return [];
+  function cache(ctx: SourceContext, owner: string, key: string, value: unknown, broadcast = true): string[] {
+    if (!cacheInvalidation.canWrite(ctx.user.id, owner, ctx.cacheGeneration)) return [];
     database.prepare(`INSERT INTO github_cache (user_id, cache_key, payload, fetched_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id, cache_key) DO UPDATE SET payload=excluded.payload, fetched_at=excluded.fetched_at`)
+      ON CONFLICT(user_id, cache_key) DO UPDATE SET payload=excluded.payload, fetched_at=excluded.fetched_at, needs_refresh=0`)
       .run(ctx.user.id, key, JSON.stringify(value), Date.now());
     const changed = sharing.cacheUpdated(ctx.user.id, key);
     if (broadcast) for (const boardId of changed) sharing.notify(boardId);
@@ -154,7 +157,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     if (!config) throw new AuthenticationError(503, 'unconfigured', 'Configure GitHub sign-in, then reload.');
     const token = await app.authentication.getAuthorizedUserToken(user.id);
     app.authentication.assertUserContext(request, user);
-    return { request, user, token, origin: config.apiOrigin, cacheGeneration: cacheInvalidation.generation(user.id) };
+    return { request, user, token, origin: config.apiOrigin, cacheGeneration: cacheInvalidation.generation() };
   }
   async function read(ctx: SourceContext, path: string, options: SourceReadOptions = {}) {
     try {
@@ -166,7 +169,9 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
       if (error instanceof AuthenticationError && error.code === 'reauthorize') {
         // A delayed rejection of a replaced token is not evidence that current access was lost.
         app.authentication.invalidateAuthorizationIfCurrent(ctx.user.id, ctx.token);
-      } else if (error instanceof AuthenticationError && ['missing_access', 'sso_required', 'unavailable'].includes(error.code)) {
+      } else if (error instanceof AuthenticationError && error.code === 'sso_required') {
+        cacheInvalidation.requireRefresh(ctx.user.id, error.ssoOrganization ?? options.contextOwner);
+      } else if (error instanceof AuthenticationError && ['missing_access', 'unavailable'].includes(error.code)) {
         cacheInvalidation.forget(ctx.user.id);
       }
       app.authentication.assertUserContext(ctx.request, ctx.user);
@@ -182,14 +187,14 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const document = validateNativeDocument(JSON.parse(board['document']));
     const incoming = validateIncoming(JSON.parse(board['incoming']));
     const references = new Set([...getDocumentReferenceIds(document), ...incoming.queue.map((candidate) => candidate.referenceId)]);
-    const lookup = database.prepare(`SELECT c.payload, c.fetched_at AS fetchedAt FROM github_cache c
+    const lookup = database.prepare(`SELECT c.payload, c.fetched_at AS fetchedAt, c.needs_refresh AS needsRefresh FROM github_cache c
       JOIN item_references r ON r.id=? AND r.user_id=c.user_id
       WHERE c.user_id=? AND c.cache_key=?`);
     const cutoff = Date.now() - cacheLifetime;
     function entry<T>(referenceId: string, key: string, validate: (value: unknown) => T): { value: T; stale: boolean } | null {
       const row = lookup.get(referenceId, user.id, key);
       if (typeof row?.['payload'] !== 'string' || typeof row['fetchedAt'] !== 'number') return null;
-      try { return { value: validate(JSON.parse(row['payload'])), stale: row['fetchedAt'] <= cutoff }; }
+      try { return { value: validate(JSON.parse(row['payload'])), stale: row['needsRefresh'] === 1 || row['fetchedAt'] <= cutoff }; }
       catch {
         // Invalid cached metadata is omitted; ordinary hydration will rebuild it.
         database.prepare('DELETE FROM github_cache WHERE user_id=? AND cache_key=?').run(user.id, key);
@@ -265,11 +270,11 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     database.exec('BEGIN IMMEDIATE');
     try {
       const items = normalized.map((item) => persistItem(ctx.user.id, repo, item));
-      const changed = new Set(items.flatMap((item) => cache(ctx, `reference:${item.reference.id}`, item, false)));
+      const changed = new Set(items.flatMap((item) => cache(ctx, repo.owner, `reference:${item.reference.id}`, item, false)));
       persistRepository(ctx.user.id, repo, result.nextPage);
       rememberRepository(ctx.user.id, repo);
       const response = { items, repository: repo, page, nextPage: result.nextPage };
-      cache(ctx, cacheKey, response);
+      cache(ctx, repo.owner, cacheKey, response);
       database.exec('COMMIT');
       for (const boardId of changed) sharing.notify(boardId);
       return response;
@@ -296,7 +301,7 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     app.authentication.assertUserContext(ctx.request, ctx.user);
     persistRepository(ctx.user.id, repo);
     const item = persistItem(ctx.user.id, repo, normalized);
-    cache(ctx, `reference:${item.reference.id}`, item);
+    cache(ctx, repo.owner, `reference:${item.reference.id}`, item);
     return item;
   }
   app.post('/api/sources/resolve', async (request) => {
@@ -308,19 +313,25 @@ export function registerSources(app: FastifyInstance, database: DatabaseSync, co
     const ctx = await context(request);
     const row = database.prepare('SELECT node_id AS nodeId, owner FROM item_references WHERE id=? AND user_id=?').get(request.params.id, ctx.user.id);
     if (!row) throw new AuthenticationError(404, 'unavailable', 'Reference unavailable. Refresh the board.');
+    const contextOwner = owner(row['owner']);
     const cacheKey = `context:${request.params.id}`;
     const previous = cached(ctx, cacheKey, readItemContext);
     if (previous) return previous;
     try {
-      const result = await read(ctx, '/graphql', { graphql: { query: itemContextQuery, variables: { id: opaque(row['nodeId']) } } });
+      const result = await read(ctx, '/graphql', { contextOwner, graphql: { query: itemContextQuery, variables: { id: opaque(row['nodeId']) } } });
       app.authentication.assertUserContext(request, ctx.user);
       const itemContext = normalizeContext(result.value);
-      cache(ctx, cacheKey, itemContext);
+      if (itemContext.status === 'unavailable' && !cacheInvalidation.canWrite(ctx.user.id, contextOwner, ctx.cacheGeneration)) {
+        // A later SSO challenge can keep old fields readable until GitHub confirms they are unavailable.
+        database.prepare('DELETE FROM github_cache WHERE user_id=? AND cache_key=? AND needs_refresh=1').run(ctx.user.id, cacheKey);
+      } else {
+        cache(ctx, contextOwner, cacheKey, itemContext);
+      }
       return itemContext;
     } catch (error) {
       if (error instanceof AuthenticationError && error.code === 'sso_required') {
         // Context reads use /graphql, so recover the owner from this user's reference.
-        throw new AuthenticationError(error.statusCode, error.code, error.message, owner(row['owner']));
+        throw new AuthenticationError(error.statusCode, error.code, error.message, contextOwner);
       }
       throw error;
     }

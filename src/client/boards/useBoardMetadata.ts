@@ -39,10 +39,11 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
   const publishMetadata = useCallback((next: WorkspaceMetadata, context: BoardAuthority | null) => { metadataRef.current = next; setMetadata({ authority: context, values: next }); }, []);
   const remember = useCallback((item: SourceItem) => {
     const scope = `${item.metadata.locator.owner}/${item.metadata.locator.repository}`.toLowerCase();
-    if (!canRead(authority) || deniedScopes.current.has(scope)) return;
+    if (!canRead(authority) || deniedScopes.current.has(scope)) return false;
     const previous = metadataRef.current.get(item.reference.id);
     const context = previous?.status === 'ready' ? previous.item.context : undefined;
     const next = new Map(metadataRef.current); next.set(item.reference.id, { status: 'ready', item: { ...item.metadata, ...(context ? { context } : {}) }, refreshing: refreshContexts.current.has(item.reference.id) }); publishMetadata(next, authority);
+    return true;
   }, [authority, canRead, publishMetadata]);
   const accessLost = useCallback((scope?: string, ssoRequired = false) => {
     if (authorityRef.current !== authority) return;
@@ -58,7 +59,14 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
     const next = new Map(metadataRef.current);
     deniedScopes.current.add(scope);
     for (const [id, state] of next) {
-      if (state.status === 'ready' && `${state.item.locator.owner}/${state.item.locator.repository}`.toLowerCase() === scope) next.set(id, { status: ssoRequired ? 'sso-required' : 'unavailable' });
+      if (state.status !== 'ready' || `${state.item.locator.owner}/${state.item.locator.repository}`.toLowerCase() !== scope) continue;
+      if (ssoRequired) {
+        refreshReferences.current.add(id);
+        refreshContexts.current.add(id);
+        next.set(id, { status: 'ready', item: { ...state.item, freshness: 'stale' }, refreshing: false });
+      } else {
+        next.set(id, { status: 'unavailable' });
+      }
     }
     publishMetadata(next, authority);
   }, [authority, publishMetadata]);
@@ -102,16 +110,13 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
       }));
     }
     function referenceFailed(id: string, denied: boolean, sso: boolean) {
-      const updated = new Map(metadataRef.current);
-      const previous = updated.get(id);
+      const previous = metadataRef.current.get(id);
       if (denied && previous?.status === 'ready') {
-        const scope = `${previous.item.locator.owner}/${previous.item.locator.repository}`.toLowerCase();
-        deniedScopes.current.add(scope);
-        for (const [key, value] of updated) if (value.status === 'ready' && `${value.item.locator.owner}/${value.item.locator.repository}`.toLowerCase() === scope) {
-          updated.set(key, { status: sso ? 'sso-required' : 'unavailable' });
-        }
+        accessLost(`${previous.item.locator.owner}/${previous.item.locator.repository}`.toLowerCase(), sso);
+        return;
       }
-      updated.set(id, !denied && previous?.status === 'ready'
+      const updated = new Map(metadataRef.current);
+      updated.set(id, previous?.status === 'ready'
         ? { status: 'ready', item: { ...previous.item, freshness: 'stale' }, refreshing: false }
         : { status: sso ? 'sso-required' : denied ? 'unavailable' : 'error' });
       publishMetadata(updated, authority);
@@ -125,8 +130,7 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
         if (!response.ok) { referenceFailed(id, response.status === 403 || response.status === 404, failure !== null); return; }
         const item = readSourceItem(await response.json());
         if (!currentRead() || item.reference.id !== id) return;
-        refreshReferences.current.delete(id);
-        remember(item);
+        if (remember(item)) refreshReferences.current.delete(id);
       } catch { if (currentRead()) referenceFailed(id, false, false); }
     }
     async function hydrateContext(id: string) {
@@ -139,11 +143,13 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
         if (!currentRead()) return;
         // Another request may revoke this scope while the response body is read.
         const latest = metadataRef.current.get(id);
-        if (latest?.status !== 'ready' || deniedScopes.current.has(`${latest.item.locator.owner}/${latest.item.locator.repository}`.toLowerCase())) return;
-        const denied = response.status === 403 || response.status === 404;
+        const denied = (response.status === 403 && !failure) || response.status === 404;
+        if (latest?.status !== 'ready') return;
+        const scopeDenied = deniedScopes.current.has(`${latest.item.locator.owner}/${latest.item.locator.repository}`.toLowerCase());
+        if (scopeDenied && !denied && fetchedContext?.status !== 'unavailable') return;
         const context = fetchedContext ?? (denied || !latest.item.context
           ? { status: 'unavailable' as const, projects: [], related: [] } : latest.item.context);
-        if (response.ok) refreshContexts.current.delete(id);
+        if (response.ok && !scopeDenied) refreshContexts.current.delete(id);
         const updated = new Map(metadataRef.current);
         updated.set(id, { status: 'ready', item: { ...latest.item, context, ...(!response.ok ? { freshness: 'stale' as const } : {}) }, refreshing: false });
         publishMetadata(updated, authority);
@@ -159,7 +165,11 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
     const hydrate = async () => {
       await pool(ids, hydrateReference);
       if (!currentRead()) return;
-      const contextIds = [...placed].filter((id) => { const value = metadataRef.current.get(id); return value?.status === 'ready' && (!value.item.context || refreshContexts.current.has(id)); });
+      const contextIds = [...placed].filter((id) => {
+        const value = metadataRef.current.get(id);
+        return value?.status === 'ready' && !deniedScopes.current.has(`${value.item.locator.owner}/${value.item.locator.repository}`.toLowerCase())
+          && (!value.item.context || refreshContexts.current.has(id));
+      });
       await pool(contextIds, hydrateContext);
       if (!currentRead()) return;
       const settled = new Map(metadataRef.current);
@@ -168,7 +178,7 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
     };
     void hydrate();
     return () => controller.abort();
-  }, [authority, batchAuthority, references, placedIds, metadataAttempt, canRead, publishMetadata, remember, reportSso]);
+  }, [authority, batchAuthority, references, placedIds, metadataAttempt, canRead, publishMetadata, remember, reportSso, accessLost]);
   useEffect(() => {
     const liveReferences = new Set(references.split(','));
     const livePlacements = new Set(placedIds.split(','));
@@ -191,6 +201,7 @@ export function useBoardMetadata({ boardId, authority, references, placedIds, so
       if (read.kind === 'context') {
         const value = next.get(read.id);
         if (value?.status === 'ready') {
+          refreshReferences.current.add(read.id);
           refreshContexts.current.add(read.id);
           next.set(read.id, { ...value, refreshing: true });
         }

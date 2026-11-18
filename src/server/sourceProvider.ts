@@ -31,7 +31,7 @@ async function repositoryDenial(response: Response, rate: boolean): Promise<Reco
   }
   const ssoRequired = response.headers.get('x-github-sso')?.startsWith('required') === true;
   const category = rate || message.includes('rate limit') ? 'rate_limited'
-    : ssoRequired || /saml|single sign.on|sso/.test(message) ? 'sso_required'
+    : ssoRequired || /\b(?:saml|sso|single[ -]sign[ -]on)\b/.test(message) ? 'sso_required'
     : /ip (allow|address)|allow list|allowlist/.test(message) ? 'ip_restricted'
     : /managed user/.test(message) ? 'managed_user_restricted'
     : /suspend/.test(message) ? 'installation_suspended'
@@ -168,6 +168,11 @@ export async function providerRead(origin: string, token: string, path: string, 
   } catch { return invalidProvider(); }
   let value: unknown;
   try { value = decode(raw); } catch { return invalidProvider(); }
+  if (graphql && isObject(value) && Array.isArray(value['errors']) && value['errors'].length > 0
+    && value['errors'].every((error: unknown) => isObject(error) && error['type'] === 'FORBIDDEN'
+      && isObject(error['extensions']) && error['extensions']['saml_failure'] === true)) {
+    throw new AuthenticationError(403, 'sso_required', 'Your organization requires GitHub SSO. Authorize access with your organization, then retry.');
+  }
   let nextPage: number | null = null;
   const link = response.headers.get('link');
   if (page !== undefined && link) {

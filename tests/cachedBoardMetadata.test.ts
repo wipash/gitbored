@@ -40,12 +40,12 @@ await test('board metadata returns scoped persisted cards immediately, marks old
     const response = await fetch(`${providerOrigin}/__control`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) });
     assert.equal(response.status, 200);
   }
-  async function sourceGate(action: 'arm' | 'release', target: 'issue-detail' | 'old-token-401') {
+  async function sourceGate(action: 'arm' | 'release', target: 'issue-detail' | 'old-token-401' | 'unavailable-context') {
     const response = await fetch(`${providerOrigin}/__source-gate`, { method: 'POST',
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, target }) });
     assert.equal(response.status, 200);
   }
-  async function waitForSource(target: 'issue-detail' | 'old-token-401') {
+  async function waitForSource(target: 'issue-detail' | 'old-token-401' | 'unavailable-context') {
     await t.waitFor(async () => {
       const value: unknown = await (await fetch(`${providerOrigin}/__source-gate?target=${target}`)).json();
       return typeof value === 'object' && value !== null && 'entered' in value && value.entered === true;
@@ -120,6 +120,24 @@ await test('board metadata returns scoped persisted cards immediately, marks old
       assert.deepEqual(await batch(), fresh, 'Only a rejection of current authorization evicts the cache.');
       await fetch(`${providerOrigin}/__source-stats/reset`, { method: 'POST' });
     });
+    await t.test('SSO for another organization leaves a concurrent successful read cached', async () => {
+      await sourceGate('arm', 'issue-detail');
+      const pending = resolve('issues/9');
+      try {
+        await waitForSource('issue-detail');
+        await control({ sourceSsoRequired: true, sourceSsoPath: '/repos/example-org/project' });
+        const denied = await fetch(`${origin}/api/sources/repositories/example-org/project/items?page=1`, { headers });
+        assert.equal(denied.status, 403);
+      } finally {
+        await sourceGate('release', 'issue-detail');
+        await control({ sourceSsoRequired: false, sourceSsoPath: '' });
+      }
+      const item = await pending;
+      await fetch(`${providerOrigin}/__source-stats/reset`, { method: 'POST' });
+      assert.deepEqual(await (await fetch(`${origin}/api/references/${item.reference.id}`, { headers })).json(), item);
+      assert.deepEqual(await batch(), fresh);
+      assert.deepEqual(await (await fetch(`${providerOrigin}/__source-stats`)).json(), { requests: [] });
+    });
     // Arrange persisted historical data without a production clock/aging endpoint.
     database.prepare('UPDATE github_cache SET fetched_at=?').run(Date.now() - 16 * 60 * 1000);
     const stale = await batch();
@@ -182,8 +200,28 @@ await test('board metadata returns scoped persisted cards immediately, marks old
     assert.equal((await fetch(`${issueUrl}?refresh=1`, { headers: rotatedHeaders })).status, 403);
     const deniedCache = await fetch(batchUrl, { headers: rotatedHeaders });
     assert.equal(deniedCache.status, 200);
-    assert.deepEqual(await deniedCache.json(), { items: [] });
+    const retained = readCachedBoardMetadata(await deniedCache.json());
+    assert.deepEqual(retained.items.map(entry => entry.item.reference), beforeSignIn.items.map(entry => entry.item.reference));
+    assert.ok(retained.items.every(entry => entry.stale && entry.contextStale));
+    assert.deepEqual(retained.items.map(entry => entry.context), beforeSignIn.items.map(entry => entry.context));
 
+    await t.test('a context denial arriving after SSO removes saved project details', async () => {
+      await control({ sourceSsoRequired: false });
+      await sourceGate('arm', 'unavailable-context');
+      const pending = fetch(`${issueUrl}/context?refresh=1`, { headers: rotatedHeaders, signal: AbortSignal.timeout(5000) });
+      try {
+        await waitForSource('unavailable-context');
+        await control({ sourceSsoRequired: true });
+        assert.equal((await fetch(`${issueUrl}?refresh=1`, { headers: rotatedHeaders })).status, 403);
+      } finally {
+        await sourceGate('release', 'unavailable-context');
+      }
+      assert.deepEqual(await (await pending).json(), { status: 'unavailable', projects: [], related: [] });
+      const snapshot = readCachedBoardMetadata(await (await fetch(batchUrl, { headers: rotatedHeaders })).json());
+      const savedIssue = snapshot.items.find(entry => entry.item.reference.id === issue.reference.id);
+      assert.equal(savedIssue?.context, null);
+      assert.equal(savedIssue.item.metadata.title, issue.metadata.title);
+    });
     await t.test('authorization loss prevents an earlier response from repopulating the cache', async () => {
       await control({ sourceSsoRequired: false });
       await sourceGate('arm', 'issue-detail');

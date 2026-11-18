@@ -13,14 +13,14 @@ export function SsoRecoveryNotice({ owners, onRetry, checking = false }: SsoReco
     <details>
       <summary><strong role="status">GitHub SSO required</strong><span>Recovery steps</span></summary>
       <div className="sso-recovery-body">
-        <p>Some GitHub content needs your organization’s single sign-on. You can keep editing this board.</p>
+        <p>You can keep editing with your saved card details. Sign in to your organization to refresh them.</p>
         <ol>
           <li>Start an SSO session on GitHub.{organizations.length > 0
             ? <ul>{organizations.map((owner) => <li key={owner}><a href={`https://github.com/orgs/${owner}/sso`} target="_blank" rel="noopener noreferrer">Sign in to <bdi>{owner}</bdi> SSO</a></li>)}</ul>
             : <p><a href="https://github.com/settings/organizations" target="_blank" rel="noopener noreferrer">Open your GitHub organizations</a> and sign in to the affected organization.</p>}
           </li>
-          <li>Open <a href="https://github.com/settings/applications" target="_blank" rel="noopener noreferrer">GitHub application settings</a>, choose <strong>Authorized GitHub Apps</strong> and revoke GitBored’s authorization. Then <a href="/api/auth/github" target="_blank" rel="noopener noreferrer">reauthorize GitBored</a> with the same account while your SSO session is active.</li>
           <li>Return here and <button type="button" disabled={checking} onClick={onRetry}>Check access</button>.</li>
+          <li>If GitHub still requires SSO, open <a href="https://github.com/settings/applications" target="_blank" rel="noopener noreferrer">GitHub application settings</a>, choose <strong>Authorized GitHub Apps</strong> and revoke GitBored’s authorization. Then <a href="/api/auth/github" target="_blank" rel="noopener noreferrer">reauthorize GitBored</a> with the same account while your SSO session is active.</li>
         </ol>
         <p className="sso-recovery-hint">Sign-in links open in a new tab. Keep this board tab open.</p>
         <p role="status">{checking ? 'Checking GitHub access…' : ''}</p>

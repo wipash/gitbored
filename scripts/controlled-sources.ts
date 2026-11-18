@@ -19,7 +19,7 @@ export interface ControlledSourceSettings {
 export function registerControlledSources(app: FastifyInstance, port: number, identity: (request: FastifyRequest) => number | null,
   settings: () => ControlledSourceSettings) {
   const requests: { user: number; path: string }[] = [];
-  type GateTarget = 'repositories-page-2' | 'items-page-2' | 'old-token-401' | 'issue-detail' | 'issue-detail-next' | 'repository-denial';
+  type GateTarget = 'repositories-page-2' | 'items-page-2' | 'old-token-401' | 'issue-detail' | 'issue-detail-next' | 'unavailable-context' | 'repository-denial';
   const gates = new Map<string, { target: GateTarget; entered: boolean; released: boolean; completed: boolean; promise: Promise<void>; release: () => void }>();
   let latestGate: string | null = null;
   app.post('/__source-gate', (request, reply) => {
@@ -35,7 +35,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
       if (body.action === 'reset' && !('target' in body)) latestGate = null;
       return { ok: true };
     }
-    if (body.action !== 'arm' || !('target' in body) || (body.target !== 'repositories-page-2' && body.target !== 'items-page-2' && body.target !== 'old-token-401' && body.target !== 'issue-detail' && body.target !== 'issue-detail-next' && body.target !== 'repository-denial')) return reply.code(400).send({ error: 'Choose a supported gate target.' });
+    if (body.action !== 'arm' || !('target' in body) || (body.target !== 'repositories-page-2' && body.target !== 'items-page-2' && body.target !== 'old-token-401' && body.target !== 'issue-detail' && body.target !== 'issue-detail-next' && body.target !== 'unavailable-context' && body.target !== 'repository-denial')) return reply.code(400).send({ error: 'Choose a supported gate target.' });
     const existing = gates.get(body.target);
     if (existing && !existing.released) return reply.code(409).send({ error: 'Release this active gate first.' });
     let release: (() => void) | undefined;
@@ -82,10 +82,14 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (!user) { void reply.code(401).send({ message: 'Controlled unauthorized' }); return null; }
     requests.push({ user, path: request.url });
     if (settings().sourceSsoRequired && (!settings().sourceSsoPath || request.url.split('?')[0] === settings().sourceSsoPath)) {
+      if (request.url === '/graphql' && settings().sourceSsoPath === '/graphql') {
+        void reply.send({ data: { node: null }, errors: [{ type: 'FORBIDDEN', extensions: { saml_failure: true } }] });
+        return null;
+      }
       void reply.header('X-GitHub-SSO', 'required; url=https://example.invalid/private-sso-token').code(403).send({ message: 'Controlled private SSO payload' });
       return null;
     }
-    if (checkDenial && settings().sourceDenied) { void reply.code(settings().sourceDenialStatus).send({ message: 'Controlled missing approval' }); return null; }
+    if (checkDenial && settings().sourceDenied) { void reply.code(settings().sourceDenialStatus).send({ message: 'Access denied for the associated installation' }); return null; }
     return user;
   }
   function next(reply: FastifyReply, request: FastifyRequest, page: number, hasNext: boolean): void {
@@ -95,8 +99,9 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     if (settings().sourceMode === 'untrusted-link') url.host = 'example.invalid';
     reply.header('Link', `<${url.href}>; rel="next"`);
   }
-  app.post('/graphql', (request, reply) => {
+  app.post('/graphql', async (request, reply) => {
     const user = authorize(request, reply); if (!user) return reply;
+    if (await hold('unavailable-context')) return { data: { node: null } };
     const body = request.body;
     if (typeof body !== 'object' || body === null || !('variables' in body) || typeof body.variables !== 'object' || body.variables === null || !('id' in body.variables) || typeof body.variables.id !== 'string') return reply.code(400).send({ errors: [{ message: 'Missing node' }] });
     const match = /^(I|PR)_([^_]+)_([^_]+)_([0-9]+)$/.exec(body.variables.id);
@@ -138,7 +143,7 @@ export function registerControlledSources(app: FastifyInstance, port: number, id
     const user = authorize(request, reply, false); if (!user) return reply;
     if (denied) {
       await hold('repository-denial');
-      return reply.code(denialStatus).send({ message: 'Controlled missing approval' });
+      return reply.code(denialStatus).send({ message: 'Access denied for the associated installation' });
     }
     const { owner, name } = request.params;
     if (owner === 'missing' || (name !== 'outside' && owner !== (user === 101 ? 'alice' : 'bob') && owner !== 'example-org')) return reply.code(404).send({ message: 'Private access denied' });
